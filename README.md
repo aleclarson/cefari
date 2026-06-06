@@ -20,7 +20,7 @@ cefari-cli
 
 ## Core architecture rule
 
-> `cefari-core` and `cefari-desktop` are runtime code. `cefari-cli` is developer/release orchestration tooling. The CLI may be distributed to developers, but it is not bundled into the shipped desktop app or required at runtime.
+> `cefari-core` and `cefari-desktop` are runtime code. `cefari-cli` is developer/release orchestration tooling. The CLI is distributed to developers, but it is not bundled into the shipped desktop app or required at runtime.
 
 ## Crate roles
 
@@ -34,8 +34,8 @@ Owns:
 paths/config
 resource resolution
 logging/error types
-update check/install helpers, if runtime updates are enabled
-service install/start/stop helpers, if Cefari manages a daemon service
+update check/install helpers
+service install/start/stop helpers
 ```
 
 Does not own:
@@ -47,16 +47,7 @@ packaging/signing/build orchestration
 frontend or daemon build steps
 ```
 
-Suggested feature gates:
-
-```toml
-[features]
-services = ["dep:service-manager"]
-updates = ["dep:cargo-packager-updater"]
-resources = ["dep:cargo-packager-resource-resolver"]
-```
-
-Typical dependencies:
+Runtime dependencies:
 
 ```toml
 serde = { version = "*", features = ["derive"] }
@@ -66,9 +57,9 @@ tracing = "*"
 anyhow = "*"
 thiserror = "*"
 
-service-manager = { version = "*", optional = true }
-cargo-packager-updater = { version = "*", optional = true }
-cargo-packager-resource-resolver = { version = "*", optional = true }
+service-manager = "*"
+cargo-packager-updater = "*"
+cargo-packager-resource-resolver = "*"
 ```
 
 ### `cefari-desktop`
@@ -83,14 +74,14 @@ CEF initialization
 single-instance lock
 runtime logging setup
 loading the UI promptly
-optional Rust-side update flow
-optional daemon service management
+Rust-side update flow
+daemon service management
 ```
 
 Uses `cefari-core` for runtime helpers:
 
 ```toml
-cefari-core = { path = "../cefari-core", features = ["updates", "resources", "services"] }
+cefari-core = { path = "../cefari-core" }
 
 tao = "*"
 cef = "*"
@@ -102,12 +93,12 @@ tracing-appender = "*"
 anyhow = "*"
 ```
 
-Optional desktop-only dependencies:
+Desktop dependencies:
 
 ```toml
-muda = "*"       # native menus only
-tray-icon = "*"  # tray/menu-bar icon only
-open = "*"       # opening external links/files from Rust only
+muda = "*"       # native menus
+tray-icon = "*"  # tray/menu-bar icon
+open = "*"       # opening external links/files from Rust
 ```
 
 ### `cefari-cli`
@@ -147,10 +138,10 @@ package via cargo-packager
 codesign/notarize via cargo-codesign
 generate update artifacts
 diagnostics and environment info
-clean/dist tasks if needed
+clean/dist tasks
 ```
 
-Typical dependencies:
+CLI dependencies:
 
 ```toml
 clap = { version = "*", features = ["derive"] }
@@ -162,7 +153,7 @@ serde = { version = "*", features = ["derive"] }
 toml = "*"
 ```
 
-`cefari-cli` may shell out to tools like `cargo-packager` and `cargo-codesign`; those tools can be installed by CI, the developer environment, or managed by the CLI if Cefari chooses to support that.
+`cefari-cli` shells out to tools like `cargo-packager` and `cargo-codesign`; those tools are provided by CI or the developer environment.
 
 ## No runtime CLI surface
 
@@ -177,9 +168,9 @@ check-update
 install-update
 ```
 
-If the functionality is needed by the shipped app at runtime, it belongs in `cefari-desktop` via `cefari-core`.
+Runtime update and service operations belong in `cefari-desktop` via `cefari-core`.
 
-If the functionality is needed for development, packaging, release, diagnostics, or CI, it belongs in `cefari-cli`.
+Development, packaging, release, diagnostics, and CI functionality belongs in `cefari-cli`.
 
 ## Tool classification
 
@@ -187,11 +178,11 @@ If the functionality is needed for development, packaging, release, diagnostics,
 | ---------------------------------- | ------------------------------------------------------------- |
 | `cargo-packager`                   | invoked by `cefari-cli` / installed by CI or developer env     |
 | `cargo-codesign`                   | invoked by `cefari-cli` / installed by CI or developer env     |
-| `cargo-packager-updater`           | optional `cefari-core` runtime dependency                     |
-| `cargo-packager-resource-resolver` | optional `cefari-core` runtime dependency, used by desktop app |
-| `service-manager`                  | optional `cefari-core` runtime dependency if Cefari manages daemon |
+| `cargo-packager-updater`           | `cefari-core` runtime dependency                              |
+| `cargo-packager-resource-resolver` | `cefari-core` runtime dependency, used by desktop app          |
+| `service-manager`                  | `cefari-core` runtime dependency                              |
 | `tao` / `cef`                      | `cefari-desktop` only                                         |
-| `muda` / `tray-icon`               | optional `cefari-desktop` dependencies                        |
+| `muda` / `tray-icon`               | `cefari-desktop` dependencies                                 |
 | `download-cef`                     | `cefari-cli`; avoid runtime and app-build network dependency   |
 | `clap`                             | `cefari-cli` only                                             |
 
@@ -202,7 +193,7 @@ If the functionality is needed for development, packaging, release, diagnostics,
 - `cefari-desktop` contains runtime app startup, windowing, CEF, and native shell logic.
 - `cefari-desktop` does not contain build, packaging, signing, or release orchestration logic.
 - `cefari-core` contains reusable runtime helpers and no Tao, CEF, or CLI parsing dependencies.
-- Runtime integrations in `cefari-core` are feature-gated where appropriate.
+- Runtime integrations for updates, resources, and service management are included in `cefari-core`.
 - Project creation, dev mode, builds, packaging, signing, notarization, CEF preparation, daemon build, frontend build, diagnostics, and update artifact generation are handled by `cefari-cli` or CI.
 - Dependency versions are pinned during implementation rather than left as `"*"`.
 
