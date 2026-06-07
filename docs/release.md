@@ -18,11 +18,11 @@ cefari package PATH
 
 When `cargo-packager` is available on `PATH`, the CLI invokes it with the generated config and writes native package output to `dist/package/output/`. When it is missing, the metadata still remains available for CI or later local packaging.
 
-CEF resources are resolved from `build/cef/resources/`, which is prepared by `cefari build` and recorded in `build/cef/manifest.json`. The current manifest still marks the source as `pending-download` until the large CEF binary download step is implemented.
+CEF resources are resolved from `build/cef/resources/`, which is populated by `cefari build` using the minimal CEF archive selected through `download-cef`. `build/cef/resources/archive.json` records the downloaded archive name and SHA1, and `build/cef/manifest.json` records the archive version, host target, cache directory, and resource directory.
 
 CI runs package assembly on macOS, Linux, and Windows. Those jobs create a sample Cefari project, run `cefari build`, run `cefari package`, verify the generated frontend, daemon, CEF preparation, package metadata, and confirm the `cefari` CLI binary is built separately from desktop package metadata.
 
-Daemon package inputs include the copied source entry and the compiled `cefari-daemon` executable produced by `deno compile`; package metadata records the executable path explicitly.
+Daemon package inputs include the copied source entry and the compiled `cefari-daemon` executable produced by `deno compile`; package metadata records the executable path explicitly. CEF package inputs include the downloaded resource directory and verified `archive.json`.
 
 Native installer validation is still separate from package assembly validation and remains blocked on downloaded CEF binaries and real package contents.
 

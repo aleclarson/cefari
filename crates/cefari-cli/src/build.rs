@@ -35,6 +35,11 @@ pub fn build_project(project_dir: &Path) -> Result<()> {
     build_daemon(project_dir, &project, &daemon_out)?;
     let cef = cef::prepare_cef(project_dir)?;
     println!("prepared CEF resources at {}", cef.resources_dir.display());
+    println!("cached CEF downloads at {}", cef.cache_dir.display());
+    println!(
+        "verified CEF archive metadata at {}",
+        cef.archive_json.display()
+    );
     build_desktop()?;
 
     println!("built Cefari project at {}", project_dir.display());

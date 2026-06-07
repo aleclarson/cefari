@@ -7,9 +7,10 @@ Current state:
 - Rust crate pin: `cef = "148.4.0"`
 - `cefari-desktop` keeps the `cef` dependency optional until initialization is implemented and verified.
 - `cefari build` prepares a CEF metadata directory at `build/cef/`.
-- `cefari build` records the pinned CEF version, host target, source state, and resource directory in `build/cef/manifest.json`.
-- `cefari build` does not perform the large CEF binary download yet; the preparation manifest records `source = "pending-download"`.
-- `cefari package` reads the prepared CEF resource directory from the build output and records it in package metadata and `dist/package/manifest.json`.
+- `cefari build` downloads the minimal CEF archive matching `148.0.10`, verifies its SHA1 through `download-cef`, extracts it into `build/cef/resources/`, and records archive metadata in `build/cef/resources/archive.json`.
+- `cefari build` keeps downloaded archives and extracted intermediates under `build/cef-cache/`.
+- `cefari build` records the pinned Rust CEF version, archive version, host target, downloaded archive name, SHA1, cache directory, and resource directory in `build/cef/manifest.json`.
+- `cefari package` reads the downloaded CEF resource directory from the build output and records both the resource directory and `archive.json` path in package metadata and `dist/package/manifest.json`.
 
 Development setup:
 
@@ -20,12 +21,12 @@ cefari build PATH
 The command creates:
 
 - `build/cef/resources/`
+- `build/cef/resources/archive.json`
+- `build/cef-cache/`
 - `build/cef/manifest.json`
 
 Packaging requires these prepared paths to exist. If they are missing, run `cefari build` before `cefari package`.
 
-Future CEF preparation should:
+For deterministic CI and tests, `CEFARI_CEF_RESOURCES_DIR` can point at a pre-populated resources directory that already contains a valid `archive.json`. Normal builds without that override download from `CEF_DOWNLOAD_URL` or the default CEF CDN.
 
-- select the CEF binary distribution compatible with the pinned `cef` crate
-- download into a cache directory ignored by git
-- make CEF initialization non-optional only after desktop startup is verified with those resources
+Future CEF work should make CEF initialization non-optional only after desktop startup is verified with those resources.

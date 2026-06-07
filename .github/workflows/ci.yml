@@ -85,8 +85,23 @@ jobs:
       - name: Create sample project
         run: cargo run -p cefari-cli -- init .ci/cefari-sample --name "CI Package Sample"
 
+      - name: Create CEF fixture
+        shell: bash
+        run: |
+          mkdir -p .ci/cef-fixture
+          cat > .ci/cef-fixture/archive.json <<'JSON'
+          {
+            "type": "minimal",
+            "name": "cef_binary_148.0.10+gfixture+chromium-148.0.0_macosarm64_minimal.tar.bz2",
+            "sha1": "fixture-sha1"
+          }
+          JSON
+          echo fixture > .ci/cef-fixture/libcef.fixture
+
       - name: Build sample project
         run: cargo run -p cefari-cli -- build .ci/cefari-sample
+        env:
+          CEFARI_CEF_RESOURCES_DIR: .ci/cef-fixture
 
       - name: Package sample project metadata
         run: cargo run -p cefari-cli -- package .ci/cefari-sample
@@ -98,6 +113,8 @@ jobs:
           test -f .ci/cefari-sample/build/daemon/main.ts
           test -f .ci/cefari-sample/build/daemon/cefari-daemon || test -f .ci/cefari-sample/build/daemon/cefari-daemon.exe
           test -d .ci/cefari-sample/build/cef/resources
+          test -f .ci/cefari-sample/build/cef/resources/archive.json
+          test -f .ci/cefari-sample/build/cef/resources/libcef.fixture
           test -f .ci/cefari-sample/build/cef/manifest.json
           test -f .ci/cefari-sample/dist/package/cargo-packager.toml
           test -f .ci/cefari-sample/dist/package/manifest.json

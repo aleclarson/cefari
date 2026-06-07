@@ -2,11 +2,9 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 13 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
+Nesting audit: 11 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
 
 - 1 under native shell implementation.
-- 1 under build orchestration.
-- 1 under package assembly.
 - 1 under CI coverage.
 - 4 under release automation.
 - 3 under desktop runtime behavior verification.
@@ -110,15 +108,15 @@ Nesting audit: 13 currently unchecked checklist items are dependent child tasks 
   - [x] Run the Deno daemon.
   - [x] Run the Rust desktop app.
   - [x] Handle process shutdown and error reporting.
-- [ ] Implement build orchestration.
+- [x] Implement build orchestration.
   - [x] Implement `cefari build`.
   - [x] Build frontend artifacts.
   - [x] Build Deno daemon artifacts.
   - [x] Compile the Deno daemon entry into a packaged daemon executable.
   - [x] Build the Rust desktop app.
   - [x] Implement CEF preparation manifest as a CLI-owned step.
-  - [ ] Implement CEF binary download/cache population as a CLI-owned step.
-- [ ] Implement packaging and release commands.
+  - [x] Implement CEF binary download/cache population as a CLI-owned step.
+- [x] Implement packaging and release commands.
   - [x] Implement `cefari package` package assembly preparation.
   - [x] Invoke `cargo-packager` from `cefari package` when available.
   - [x] Implement `cefari codesign` to invoke `cargo-codesign`.
@@ -138,12 +136,12 @@ Nesting audit: 13 currently unchecked checklist items are dependent child tasks 
 
 ## 5. Create The Packaging And Release Pipeline
 
-- [ ] Define package assembly.
+- [x] Define package assembly.
   - [x] Define package metadata consumed by `cargo-packager`.
   - [x] Define how generated frontend artifacts are copied into packaged resources.
   - [x] Define how generated Deno daemon artifacts are included in app packages.
   - [x] Define how prepared CEF resources are resolved during package creation.
-  - [ ] Define how downloaded CEF binaries are verified and included during package creation.
+  - [x] Define how downloaded CEF binaries are verified and included during package creation.
 - [ ] Add CI coverage.
   - [x] Add CI steps for formatting, linting, testing, and workspace builds.
   - [x] Add CI steps that install or provide `cargo-packager` and `cargo-codesign`.

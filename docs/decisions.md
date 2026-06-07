@@ -55,9 +55,9 @@ The workspace currently pins `cef = "148.4.0"`.
 
 The dependency is optional in `cefari-desktop` until CEF initialization is implemented and verified in the desktop process.
 
-CEF preparation is owned by `cefari-cli`. The initial download source should be selected from the CEF distribution expected by the pinned Rust `cef` crate version. Automated download and cache behavior is still tracked separately in `todo.md`.
+CEF preparation is owned by `cefari-cli`. The selected archive version is `148.0.10`, matching the pinned Rust `cef = "148.4.0"` release line. The CLI uses `download-cef` to select the target-specific minimal archive, verify SHA1, extract resources, and cache downloads.
 
-`cefari build` creates `build/cef/manifest.json` and `build/cef/resources/` so package assembly can resolve a deterministic CEF resource path. The manifest records `source = "pending-download"` until the large binary fetch/cache step is implemented.
+`cefari build` creates `build/cef/manifest.json`, `build/cef/resources/archive.json`, and `build/cef-cache/` so package assembly can resolve a deterministic CEF resource path and verify the archive used to populate it.
 
 ## Package Identifiers And Signing
 

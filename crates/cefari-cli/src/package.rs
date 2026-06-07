@@ -89,6 +89,7 @@ fn write_package_manifest(
         daemon_dir: normalize(&build_dir.join("daemon")),
         daemon_executable: normalize(&build_dir.join("daemon").join(daemon_executable_name())),
         cef_resources: normalize(cef_resources_dir),
+        cef_archive_json: normalize(&cef_resources_dir.join("archive.json")),
     };
 
     fs::write(package_dir.join("manifest.json"), manifest.to_json()).with_context(|| {
@@ -127,6 +128,7 @@ struct PackageManifest {
     daemon_dir: String,
     daemon_executable: String,
     cef_resources: String,
+    cef_archive_json: String,
 }
 
 impl PackageManifest {
@@ -139,7 +141,8 @@ impl PackageManifest {
   "frontend_dir": "{}",
   "daemon_dir": "{}",
   "daemon_executable": "{}",
-  "cef_resources": "{}"
+  "cef_resources": "{}",
+  "cef_archive_json": "{}"
 }}
 "#,
             self.product_name,
@@ -148,7 +151,8 @@ impl PackageManifest {
             self.frontend_dir,
             self.daemon_dir,
             self.daemon_executable,
-            self.cef_resources
+            self.cef_resources,
+            self.cef_archive_json
         )
     }
 }

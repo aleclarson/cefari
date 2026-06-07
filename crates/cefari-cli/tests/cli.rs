@@ -83,7 +83,8 @@ fn build_creates_project_artifacts() {
         .expect("cefari init should run");
     assert_success(&init_output);
 
-    let output = cefari()
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let output = with_fake_cef_resources(cefari(), &cef_fixture)
         .arg("build")
         .arg(&root)
         .output()
@@ -116,7 +117,8 @@ fn package_creates_assembly_manifest_after_build() {
         .expect("cefari init should run");
     assert_success(&init_output);
 
-    let build_output = cefari()
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
         .arg("build")
         .arg(&root)
         .output()
@@ -139,7 +141,9 @@ fn package_creates_assembly_manifest_after_build() {
     assert!(manifest.contains(r#""daemon_executable": ""#));
     assert!(manifest.contains(daemon_executable_name()));
     assert!(manifest.contains(r#""cef_resources": ""#));
+    assert!(manifest.contains(r#""cef_archive_json": ""#));
     assert!(manifest.contains("build/cef/resources"));
+    assert!(manifest.contains("build/cef/resources/archive.json"));
 
     let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
         .expect("package metadata should exist");
@@ -168,7 +172,8 @@ fn package_invokes_cargo_packager_when_available() {
         .expect("cefari init should run");
     assert_success(&init_output);
 
-    let build_output = cefari()
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
         .arg("build")
         .arg(&root)
         .output()
@@ -227,7 +232,8 @@ fn clean_removes_generated_artifacts() {
         .expect("cefari init should run");
     assert_success(&init_output);
 
-    let build_output = cefari()
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
         .arg("build")
         .arg(&root)
         .output()
@@ -477,6 +483,26 @@ fn with_fake_tools(mut command: Command, tools_dir: &Path, log: &Path) -> Comman
     command.env("PATH", path);
     command.env("CEFARI_TOOL_LOG", log);
     command
+}
+
+fn with_fake_cef_resources(mut command: Command, fixture: &Path) -> Command {
+    command.env("CEFARI_CEF_RESOURCES_DIR", fixture);
+    command
+}
+
+fn create_fake_cef_resources(path: &Path) -> PathBuf {
+    fs::create_dir_all(path).expect("CEF fixture dir should be created");
+    fs::write(
+        path.join("archive.json"),
+        r#"{
+  "type": "minimal",
+  "name": "cef_binary_148.0.10+gfixture+chromium-148.0.0_macosarm64_minimal.tar.bz2",
+  "sha1": "fixture-sha1"
+}"#,
+    )
+    .expect("CEF archive metadata should be written");
+    fs::write(path.join("libcef.fixture"), "fixture").expect("CEF fixture file should be written");
+    path.to_path_buf()
 }
 
 fn create_fake_tool(tools_dir: &Path, name: &str, body: &str) -> PathBuf {
