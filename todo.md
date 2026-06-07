@@ -196,7 +196,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
 - [ ] Decide the final Deno daemon build output contract for packaged releases.
 - [x] Decide the initial Deno daemon project shape.
 - [x] Decide CEF version pinning.
-- [ ] Decide CEF download source.
+- [x] Decide CEF download source.
 - [x] Decide when to make the `cef` dependency non-optional in `cefari-desktop`.
 - [x] Decide package identifiers, signing identities, and notarization requirements.
 - [x] Decide update server/artifact hosting expectations.

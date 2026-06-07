@@ -37,6 +37,8 @@ The workspace currently pins `cef = "148.4.0"`.
 
 The dependency is optional in `cefari-desktop` until CEF initialization is implemented and verified in the desktop process.
 
+CEF preparation is owned by `cefari-cli`. The initial download source should be selected from the CEF distribution expected by the pinned Rust `cef` crate version. Automated download and cache behavior is still tracked separately in `todo.md`.
+
 ## Package Identifiers And Signing
 
 Generated projects use the app identifier from `cefari.toml` as the package identifier. `cefari init` currently derives that identifier from the display name, using the `dev.cefari.<slug>` shape.
