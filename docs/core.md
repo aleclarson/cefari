@@ -45,6 +45,8 @@
 
 The service helpers wrap install, uninstall, start, stop, restart, and status operations through `service-manager`.
 
+Core tests verify that those helpers dispatch the expected service operations and service label through a fake `ServiceManager`. Real service-manager behavior still needs platform smoke tests on macOS, Linux, and Windows before service operations can be treated as fully verified.
+
 ## Non-Goals
 
 `cefari-core` does not own:
@@ -55,4 +57,3 @@ The service helpers wrap install, uninstall, start, stop, restart, and status op
 - CLI command parsing
 - project scaffolding
 - development, packaging, signing, notarization, or release orchestration
-

@@ -213,11 +213,17 @@ pub fn program_exists(path: impl AsRef<Path>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::{ffi::OsString, path::PathBuf};
+    use std::{cell::RefCell, ffi::OsString, io, path::PathBuf};
 
-    use service_manager::ServiceLevel;
+    use service_manager::{
+        ServiceInstallCtx, ServiceLevel, ServiceManager, ServiceStartCtx, ServiceStatus,
+        ServiceStatusCtx, ServiceStopCtx, ServiceUninstallCtx,
+    };
 
-    use super::{CefariServiceSpec, ServiceOperation, program_exists};
+    use super::{
+        CefariServiceSpec, ServiceOperation, install_service, program_exists, restart_service,
+        service_status, start_service, stop_service, uninstall_service,
+    };
 
     #[test]
     fn builds_daemon_install_context() {
@@ -259,5 +265,86 @@ mod tests {
     fn checks_program_paths_without_side_effects() {
         assert!(program_exists("/bin/sh"));
         assert!(!program_exists("/definitely/not/a/cefari-daemon"));
+    }
+
+    #[test]
+    fn service_helpers_dispatch_expected_manager_operations() {
+        let manager = RecordingServiceManager::default();
+        let spec = CefariServiceSpec::daemon("/usr/local/bin/cefari-daemon");
+
+        install_service(&manager, &spec).expect("install should dispatch");
+        start_service(&manager, &spec).expect("start should dispatch");
+        assert_eq!(
+            service_status(&manager, &spec).expect("status should dispatch"),
+            ServiceStatus::Running
+        );
+        stop_service(&manager, &spec).expect("stop should dispatch");
+        restart_service(&manager, &spec).expect("restart should dispatch");
+        uninstall_service(&manager, &spec).expect("uninstall should dispatch");
+
+        assert_eq!(
+            manager.operations.borrow().as_slice(),
+            [
+                "install:dev.cefari.daemon",
+                "start:dev.cefari.daemon",
+                "status:dev.cefari.daemon",
+                "stop:dev.cefari.daemon",
+                "stop:dev.cefari.daemon",
+                "start:dev.cefari.daemon",
+                "uninstall:dev.cefari.daemon",
+            ]
+        );
+    }
+
+    #[derive(Default)]
+    struct RecordingServiceManager {
+        operations: RefCell<Vec<String>>,
+    }
+
+    impl RecordingServiceManager {
+        fn record(&self, operation: &str, label: &service_manager::ServiceLabel) {
+            self.operations
+                .borrow_mut()
+                .push(format!("{operation}:{}", label.to_qualified_name()));
+        }
+    }
+
+    impl ServiceManager for RecordingServiceManager {
+        fn available(&self) -> io::Result<bool> {
+            Ok(true)
+        }
+
+        fn install(&self, ctx: ServiceInstallCtx) -> io::Result<()> {
+            self.record("install", &ctx.label);
+            Ok(())
+        }
+
+        fn uninstall(&self, ctx: ServiceUninstallCtx) -> io::Result<()> {
+            self.record("uninstall", &ctx.label);
+            Ok(())
+        }
+
+        fn start(&self, ctx: ServiceStartCtx) -> io::Result<()> {
+            self.record("start", &ctx.label);
+            Ok(())
+        }
+
+        fn stop(&self, ctx: ServiceStopCtx) -> io::Result<()> {
+            self.record("stop", &ctx.label);
+            Ok(())
+        }
+
+        fn level(&self) -> ServiceLevel {
+            ServiceLevel::User
+        }
+
+        fn set_level(&mut self, _level: ServiceLevel) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn status(&self, ctx: ServiceStatusCtx) -> io::Result<ServiceStatus> {
+            self.record("status", &ctx.label);
+            Ok(ServiceStatus::Running)
+        }
     }
 }

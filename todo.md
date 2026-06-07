@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 134 of the 181 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 135 of the 182 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
 - 1 under release automation.
 - 1 under desktop runtime behavior verification.
@@ -195,6 +195,7 @@ Nesting audit: 134 of the 181 checklist entries are already nested child tasks u
   - [x] `cargo run -p cefari-desktop` starts a window and initializes runtime logging.
   - [x] `cargo run -p cefari-desktop` initializes runtime logging and the single-instance lock.
   - [x] A development app can load UI resources through the desktop shell.
+  - [x] Service operation wrappers dispatch install, start, status, stop, restart, and uninstall through `service-manager`.
   - [ ] Service management operations are verified on each supported platform.
 - [x] Verify package and update behavior.
   - [x] A packaged app contains the expected runtime, CEF, UI, and daemon artifacts.
