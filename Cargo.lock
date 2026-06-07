@@ -352,6 +352,7 @@ dependencies = [
  "raw-window-handle",
  "single-instance",
  "tao",
+ "tracing",
  "tracing-appender",
  "tracing-subscriber",
  "tray-icon",

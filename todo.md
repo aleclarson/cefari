@@ -60,8 +60,8 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Add a path dependency on `cefari-core`.
   - [x] Pin and add desktop dependencies: `tao`, optional `cef`, `raw-window-handle`, `single-instance`, `tracing-subscriber`, `tracing-appender`, `anyhow`, `muda`, `tray-icon`, and `open`.
 - [ ] Implement desktop startup.
-  - [ ] Initialize runtime logging through `cefari-core`.
-  - [ ] Implement single-instance locking.
+  - [x] Initialize runtime logging through `cefari-core`.
+  - [x] Implement single-instance locking.
   - [ ] Define startup error reporting behavior before the UI is available.
 - [ ] Implement the native shell.
   - [ ] Create the Tao event loop.
@@ -175,6 +175,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] `cargo run -p cefari-cli -- doctor` reports required tool availability.
 - [ ] Verify desktop runtime behavior.
   - [ ] `cargo run -p cefari-desktop` starts a window and initializes runtime logging.
+  - [x] `cargo run -p cefari-desktop` initializes runtime logging and the single-instance lock.
   - [ ] A development app can load UI resources through the desktop shell.
   - [ ] Service management operations are verified on each supported platform.
 - [ ] Verify package and update behavior.

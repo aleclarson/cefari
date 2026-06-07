@@ -88,6 +88,7 @@ cef = "148.4.0"
 raw-window-handle = "0.6.2"
 
 single-instance = "0.3.3"
+tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 tracing-appender = "0.2.5"
 anyhow = "1.0.102"
