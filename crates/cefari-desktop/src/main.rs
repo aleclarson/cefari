@@ -1,12 +1,22 @@
-use std::fs;
+use std::{fs, process::ExitCode};
 
 use anyhow::{Context, Result};
 use cefari_core::{AppIdentity, RuntimeLogConfig, RuntimePaths};
 use single_instance::SingleInstance;
-use tracing::info;
+use tracing::{error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 
-fn main() -> Result<()> {
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            report_startup_error(&error);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<()> {
     let paths = RuntimePaths::resolve(&AppIdentity::cefari())?;
     let _instance = acquire_single_instance(&paths)?;
     let _log_guard = init_logging(&paths)?;
@@ -14,6 +24,15 @@ fn main() -> Result<()> {
     info!(config = %paths.config_file.display(), "cefari desktop startup");
 
     Ok(())
+}
+
+fn report_startup_error(error: &anyhow::Error) {
+    error!(error = %error, "cefari desktop startup failed");
+    eprintln!("{}", startup_error_message(error));
+}
+
+fn startup_error_message(error: &anyhow::Error) -> String {
+    format!("Cefari failed to start before the UI was available: {error}")
 }
 
 fn acquire_single_instance(paths: &RuntimePaths) -> Result<SingleInstance> {
@@ -59,4 +78,17 @@ fn init_logging(paths: &RuntimePaths) -> Result<WorkerGuard> {
         .map_err(|error| anyhow::anyhow!("failed to initialize tracing subscriber: {error}"))?;
 
     Ok(guard)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::startup_error_message;
+
+    #[test]
+    fn startup_error_message_names_pre_ui_failure() {
+        let message = startup_error_message(&anyhow::anyhow!("missing resources"));
+
+        assert!(message.contains("before the UI was available"));
+        assert!(message.contains("missing resources"));
+    }
 }

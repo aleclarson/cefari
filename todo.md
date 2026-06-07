@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 32 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
+Nesting audit: 31 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
 
 ## 1. Establish The Workspace
 
@@ -62,10 +62,10 @@ Nesting audit: 32 currently unchecked checklist items are dependent child tasks 
   - [x] Create `crates/cefari-desktop`.
   - [x] Add a path dependency on `cefari-core`.
   - [x] Pin and add desktop dependencies: `tao`, optional `cef`, `raw-window-handle`, `single-instance`, `tracing-subscriber`, `tracing-appender`, `anyhow`, `muda`, `tray-icon`, and `open`.
-- [ ] Implement desktop startup.
+- [x] Implement desktop startup.
   - [x] Initialize runtime logging through `cefari-core`.
   - [x] Implement single-instance locking.
-  - [ ] Define startup error reporting behavior before the UI is available.
+  - [x] Define startup error reporting behavior before the UI is available.
 - [ ] Implement the native shell.
   - [ ] Create the Tao event loop.
   - [ ] Create the main application window.
