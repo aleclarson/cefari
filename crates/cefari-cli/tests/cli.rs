@@ -176,9 +176,54 @@ fn package_creates_assembly_manifest_after_build() {
     let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
         .expect("package metadata should exist");
     assert!(metadata.contains(r#"name = "dev.cefari.package-app""#));
+    assert!(metadata.contains("target/debug"));
     assert!(metadata.contains("build/cef/resources"));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
+}
+
+#[test]
+fn package_release_metadata_uses_release_desktop_binary() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "cargo-packager",
+        r#"echo "cargo-packager $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Release Package App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
+        .arg("build")
+        .arg(&root)
+        .output()
+        .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("package")
+        .arg(&root)
+        .arg("--release")
+        .output()
+        .expect("cefari package should run");
+    assert_success(&output);
+
+    let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
+        .expect("package metadata should exist");
+    assert!(metadata.contains("target/release"));
+    assert!(metadata.contains(r#"path = "cefari-desktop""#));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
 }
 
 #[test]

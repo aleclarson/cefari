@@ -53,12 +53,20 @@ pub enum Command {
         /// Project directory to build. Defaults to the current directory.
         #[arg(default_value = ".")]
         path: PathBuf,
+
+        /// Build the desktop runtime with Cargo's release profile.
+        #[arg(long)]
+        release: bool,
     },
     /// Package a built Cefari app.
     Package {
         /// Project directory to package. Defaults to the current directory.
         #[arg(default_value = ".")]
         path: PathBuf,
+
+        /// Package the desktop runtime from Cargo's release profile.
+        #[arg(long)]
+        release: bool,
     },
     /// Code sign a packaged app.
     Codesign {
@@ -143,8 +151,8 @@ pub fn run_command(command: Command) -> Result<()> {
             path,
             frontend_port,
         } => dev::dev_project(&path, frontend_port),
-        Command::Build { path } => build::build_project(&path),
-        Command::Package { path } => package::package_project(&path),
+        Command::Build { path, release } => build::build_project(&path, release),
+        Command::Package { path, release } => package::package_project(&path, release),
         Command::Codesign {
             artifact,
             platform,
@@ -391,10 +399,22 @@ mod tests {
             Command::Build { .. }
         ));
         assert!(matches!(
+            Cli::try_parse_from(["cefari", "build", "sample", "--release"])
+                .expect("release build should parse")
+                .command,
+            Command::Build { release: true, .. }
+        ));
+        assert!(matches!(
             Cli::try_parse_from(["cefari", "package", "sample"])
                 .expect("package should parse")
                 .command,
             Command::Package { .. }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["cefari", "package", "sample", "--release"])
+                .expect("release package should parse")
+                .command,
+            Command::Package { release: true, .. }
         ));
         assert!(matches!(
             Cli::try_parse_from(["cefari", "clean", "sample"])

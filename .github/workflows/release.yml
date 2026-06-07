@@ -80,10 +80,10 @@ jobs:
         run: cargo run -p cefari-cli -- init .release/cefari-sample --name "Cefari Release Sample"
 
       - name: Build release sample project
-        run: cargo run -p cefari-cli -- build .release/cefari-sample
+        run: cargo run -p cefari-cli -- build .release/cefari-sample --release
 
       - name: Package release sample project
-        run: cargo run -p cefari-cli -- package .release/cefari-sample
+        run: cargo run -p cefari-cli -- package .release/cefari-sample --release
 
       - name: Verify release package artifacts
         shell: bash
@@ -113,6 +113,66 @@ jobs:
 
           abort "missing package input files: #{missing_files.join(", ")}" unless missing_files.empty?
           abort "missing package input dirs: #{missing_dirs.join(", ")}" unless missing_dirs.empty?
+          RUBY
+
+      - name: Verify native package payload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cargo tree -p cefari-desktop -i cefari-core | grep '^cefari-core'
+
+          output_dir=".release/cefari-sample/dist/package/output"
+          inspect_dir=".release/package-inspect"
+          rm -rf "$inspect_dir"
+          mkdir -p "$inspect_dir"
+
+          case "$RUNNER_OS" in
+            macOS)
+              app="$(find "$output_dir" -maxdepth 1 -name '*.app' -type d | head -n 1)"
+              test -n "$app"
+              cp -R "$app" "$inspect_dir/app"
+              find "$output_dir" -maxdepth 1 -name '*.dmg' -type f -print -quit | grep -q .
+              ;;
+            Linux)
+              deb="$(find "$output_dir" -maxdepth 1 -name '*.deb' -type f | head -n 1 || true)"
+              appimage="$(find "$output_dir" -maxdepth 1 -name '*.AppImage' -type f | head -n 1 || true)"
+              if [[ -n "$deb" ]]; then
+                dpkg-deb -x "$deb" "$inspect_dir"
+              elif [[ -n "$appimage" ]]; then
+                chmod +x "$appimage"
+                (cd "$inspect_dir" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract)
+              else
+                cp -R "$output_dir"/. "$inspect_dir"
+              fi
+              ;;
+            Windows)
+              artifact="$(find "$output_dir" -maxdepth 1 \( -name '*.exe' -o -name '*.msi' \) -type f | head -n 1 || true)"
+              test -n "$artifact"
+              7z x -y -o"$inspect_dir" "$artifact" >/dev/null
+              ;;
+          esac
+
+          ruby <<'RUBY'
+          root = ".release/package-inspect"
+          files = Dir.glob("#{root}/**/*", File::FNM_DOTMATCH)
+            .select { |path| File.file?(path) }
+            .map { |path| path.tr("\\", "/") }
+
+          def require_match(files, description, pattern)
+            return if files.any? { |path| path.match?(pattern) }
+
+            warn "inspected files:"
+            files.each { |path| warn "  #{path}" }
+            abort "native package payload is missing #{description}"
+          end
+
+          windows = ENV.fetch("RUNNER_OS") == "Windows"
+          require_match(files, "cefari-desktop", windows ? /cefari-desktop\.exe$/ : /cefari-desktop$/)
+          require_match(files, "generated frontend", %r{/frontend/index\.html$})
+          require_match(files, "generated daemon", windows ? /cefari-daemon\.exe$/ : /cefari-daemon$/)
+          require_match(files, "CEF archive metadata", %r{/cef/archive\.json$})
+          require_match(files, "CEF payload resources", %r{/cef/(?!archive\.json$).+})
           RUBY
 
       - name: Sign package artifacts

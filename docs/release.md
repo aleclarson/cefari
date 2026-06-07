@@ -11,6 +11,13 @@ cefari build PATH
 cefari package PATH
 ```
 
+For release artifacts, use the Cargo release profile:
+
+```bash
+cefari build PATH --release
+cefari package PATH --release
+```
+
 `cefari package` writes package assembly metadata to `dist/package/`:
 
 - `cargo-packager.toml`
@@ -26,9 +33,9 @@ Daemon package inputs include the copied source entry and the compiled `cefari-d
 
 The package assembly jobs build the `cefari` CLI in release mode, verify `cefari --version`, and copy the binary into a separate CI distribution directory. Package manifest checks assert that desktop app metadata names `cefari-desktop` and does not include the CLI distribution path.
 
-Native installer validation is still separate from package assembly validation and remains blocked on downloaded CEF binaries and real package contents.
+Native installer validation is separate from package assembly validation. Release jobs extract or inspect platform package outputs before upload and require the packaged payload to contain `cefari-desktop`, generated frontend files, generated daemon output, CEF archive metadata, and CEF payload resources.
 
-Release tags and manual dispatches run `.github/workflows/release.yml`. That workflow builds native packages on macOS, Linux, and Windows using real `cefari build` CEF preparation, invokes `cefari package`, and uploads each platform's package output as a workflow artifact. Signing runs when `CEFARI_ENABLE_SIGNING` is set to `true` in repository secrets. macOS notarization runs when `CEFARI_ENABLE_NOTARIZATION` is set to `true`.
+Release tags and manual dispatches run `.github/workflows/release.yml`. That workflow builds native packages on macOS, Linux, and Windows using real `cefari build --release` CEF preparation, invokes `cefari package --release`, and uploads each platform's package output as a workflow artifact. Signing runs when `CEFARI_ENABLE_SIGNING` is set to `true` in repository secrets. macOS notarization runs when `CEFARI_ENABLE_NOTARIZATION` is set to `true`.
 
 Before upload, the release workflow verifies that native package output exists and that package metadata points at existing frontend, daemon executable, CEF resource directory, and CEF archive metadata inputs.
 

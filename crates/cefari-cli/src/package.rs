@@ -14,7 +14,7 @@ use crate::{
     run_process, tool_available,
 };
 
-pub fn package_project(project_dir: &Path) -> Result<()> {
+pub fn package_project(project_dir: &Path, release: bool) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
     let build_dir = ProjectConfig::build_dir(project_dir);
     let package_dir = ProjectConfig::dist_dir(project_dir).join("package");
@@ -28,7 +28,13 @@ pub fn package_project(project_dir: &Path) -> Result<()> {
         )
     })?;
 
-    write_package_metadata(&package_dir, &project, &build_dir, &cef_resources_dir)?;
+    write_package_metadata(
+        &package_dir,
+        &project,
+        &build_dir,
+        &cef_resources_dir,
+        release,
+    )?;
     write_package_manifest(&package_dir, &project, &build_dir, &cef_resources_dir)?;
 
     println!("prepared package assembly at {}", package_dir.display());
@@ -60,13 +66,14 @@ fn write_package_metadata(
     project: &ProjectConfig,
     build_dir: &Path,
     cef_resources_dir: &Path,
+    release: bool,
 ) -> Result<()> {
     let metadata = CargoPackagerConfig {
         name: project.app.identifier.clone(),
         product_name: project.package.product_name.clone(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
         identifier: Some(project.app.identifier.clone()),
-        binaries_dir: Some(workspace_target_dir()),
+        binaries_dir: Some(workspace_target_dir(release)),
         binaries: vec![CargoPackagerBinary {
             path: desktop_binary_name().into(),
             main: true,
@@ -206,11 +213,15 @@ fn normalize(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-fn workspace_target_dir() -> PathBuf {
+fn workspace_target_dir(release: bool) -> PathBuf {
     workspace_manifest()
         .parent()
         .expect("workspace manifest should have a parent")
-        .join("target/debug")
+        .join(if release {
+            "target/release"
+        } else {
+            "target/debug"
+        })
 }
 
 fn desktop_binary_name() -> &'static str {

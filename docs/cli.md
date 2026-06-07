@@ -39,7 +39,7 @@ Missing tools are reported as `missing`; the command does not install them.
 
 Prints the CLI version, target OS, target architecture, and project details when run from a directory containing `cefari.toml`.
 
-### `cefari build [PATH]`
+### `cefari build [PATH] [--release]`
 
 Builds the Cefari project at `PATH`. If `PATH` is omitted, the CLI builds the current directory.
 
@@ -53,6 +53,7 @@ Current build behavior:
 - caches CEF downloads and extracted intermediates under `build/cef-cache/`
 - writes CEF metadata to `build/cef/manifest.json` and `build/cef/resources/archive.json`
 - runs `cargo build -p cefari-desktop` through the Cefari workspace manifest
+- passes `--release` to Cargo for the desktop runtime when `cefari build --release` is used
 
 Package metadata records the compiled daemon executable and verified CEF archive metadata explicitly.
 
@@ -69,7 +70,7 @@ Current dev behavior:
 
 Use `--frontend-port 0` to bind the frontend server to any available local port.
 
-### `cefari package [PATH]`
+### `cefari package [PATH] [--release]`
 
 Prepares package assembly metadata for the Cefari project at `PATH`. If `PATH` is omitted, the CLI uses the current directory.
 
@@ -81,6 +82,8 @@ Current output:
 - `dist/package/manifest.json`
 
 If `cargo-packager` is available on `PATH`, `cefari package` invokes it with the generated config and writes native package output under `dist/package/output`. If the tool is missing, the command leaves the assembly metadata in place and reports that the native package step was skipped.
+
+Use `cefari package --release` after `cefari build --release` so `cargo-packager` reads `cefari-desktop` from Cargo's `target/release` directory instead of `target/debug`.
 
 ### `cefari codesign ARTIFACT [--platform PLATFORM] [--config PATH]`
 

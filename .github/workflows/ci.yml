@@ -62,6 +62,27 @@ jobs:
           cargo packager --help
           cargo codesign --help
 
+  service-platform:
+    name: Service Helpers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test service helper dispatch
+        run: cargo test -p cefari-core services::tests -- --nocapture
+
   package-assembly:
     name: Package Assembly (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

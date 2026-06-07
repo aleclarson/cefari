@@ -12,7 +12,7 @@ pub(crate) fn daemon_executable_name() -> &'static str {
     }
 }
 
-pub fn build_project(project_dir: &Path) -> Result<()> {
+pub fn build_project(project_dir: &Path, release: bool) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
     let build_dir = ProjectConfig::build_dir(project_dir);
     let frontend_out = build_dir.join("frontend");
@@ -40,7 +40,7 @@ pub fn build_project(project_dir: &Path) -> Result<()> {
         "verified CEF archive metadata at {}",
         cef.archive_json.display()
     );
-    build_desktop()?;
+    build_desktop(release)?;
 
     println!("built Cefari project at {}", project_dir.display());
     Ok(())
@@ -103,13 +103,19 @@ fn build_daemon(project_dir: &Path, project: &ProjectConfig, output_dir: &Path) 
     Ok(())
 }
 
-fn build_desktop() -> Result<()> {
-    let status = Command::new("cargo")
+fn build_desktop(release: bool) -> Result<()> {
+    let mut command = Command::new("cargo");
+    command
         .arg("build")
         .arg("--manifest-path")
         .arg(workspace_manifest())
         .arg("-p")
-        .arg("cefari-desktop")
+        .arg("cefari-desktop");
+    if release {
+        command.arg("--release");
+    }
+
+    let status = command
         .status()
         .context("failed to run cargo build for cefari-desktop")?;
 
