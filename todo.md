@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 140 of the 187 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 141 of the 188 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
 - 1 under release automation.
 - 1 under desktop runtime behavior verification.
@@ -201,6 +201,7 @@ Nesting audit: 140 of the 187 checklist entries are already nested child tasks u
   - [x] A development app can load UI resources through the desktop shell.
   - [x] Service operation wrappers dispatch install, start, status, stop, restart, and uninstall through `service-manager`.
   - [x] Add macOS, Linux, and Windows CI coverage for service helper dispatch tests.
+  - [x] Select a platform-supported default service manager level, including system services on Windows.
   - [ ] Service management operations are verified on each supported platform.
 - [x] Verify package and update behavior.
   - [x] A packaged app contains the expected runtime, CEF, UI, and daemon artifacts.

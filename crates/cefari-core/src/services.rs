@@ -33,7 +33,7 @@ impl CefariServiceSpec {
             working_directory: None,
             environment: Vec::new(),
             autostart: true,
-            level: ServiceLevel::User,
+            level: default_service_level(),
             restart_policy: RestartPolicy::default(),
         }
     }
@@ -145,12 +145,21 @@ pub fn service_manager(
             source,
         })?;
     manager
-        .set_level(ServiceLevel::User)
+        .set_level(default_service_level())
         .map_err(|source| Error::ServiceManager {
             operation: "set-level",
             source,
         })?;
     Ok(manager)
+}
+
+#[must_use]
+pub fn default_service_level() -> ServiceLevel {
+    if cfg!(target_os = "windows") {
+        ServiceLevel::System
+    } else {
+        ServiceLevel::User
+    }
 }
 
 pub fn install_service(manager: &dyn ServiceManager, spec: &CefariServiceSpec) -> Result<()> {
@@ -221,8 +230,9 @@ mod tests {
     };
 
     use super::{
-        CefariServiceSpec, ServiceOperation, install_service, program_exists, restart_service,
-        service_status, start_service, stop_service, uninstall_service,
+        CefariServiceSpec, ServiceOperation, default_service_level, install_service,
+        program_exists, restart_service, service_manager, service_status, start_service,
+        stop_service, uninstall_service,
     };
 
     #[test]
@@ -249,10 +259,26 @@ mod tests {
     }
 
     #[test]
-    fn defaults_to_user_level_services() {
+    fn defaults_to_platform_service_level() {
         let spec = CefariServiceSpec::daemon("/usr/local/bin/cefari-daemon");
 
-        assert_eq!(spec.level, ServiceLevel::User);
+        assert_eq!(spec.level, default_service_level());
+    }
+
+    #[test]
+    fn default_manager_level_matches_platform_support() {
+        if cfg!(target_os = "windows") {
+            assert_eq!(default_service_level(), ServiceLevel::System);
+        } else {
+            assert_eq!(default_service_level(), ServiceLevel::User);
+        }
+    }
+
+    #[test]
+    fn native_service_manager_uses_supported_default_level() {
+        let manager = service_manager(None).expect("native service manager should be selectable");
+
+        assert_eq!(manager.level(), default_service_level());
     }
 
     #[test]

@@ -43,9 +43,11 @@
 
 `CefariServiceSpec` builds service-manager contexts for daemon services.
 
+`default_service_level` chooses the platform-supported manager level used by daemon specs and native manager selection: user services on macOS and Linux, and system services on Windows where user-level services are not supported by the Windows service managers.
+
 The service helpers wrap install, uninstall, start, stop, restart, and status operations through `service-manager`.
 
-Core tests verify that those helpers dispatch the expected service operations and service label through a fake `ServiceManager`. Real service-manager behavior still needs platform smoke tests on macOS, Linux, and Windows before service operations can be treated as fully verified.
+Core tests verify that those helpers dispatch the expected service operations and service label through a fake `ServiceManager`. CI also verifies native service manager selection and the supported default manager level on macOS, Linux, and Windows. Real install/start/status/stop/uninstall service-manager behavior still needs platform smoke tests before service operations can be treated as fully verified.
 
 ## Non-Goals
 
