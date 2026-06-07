@@ -1,4 +1,5 @@
 [app]
+project_name = "vite-react-basic"
 name = "Vite React Basic"
 identifier = "dev.cefari.vite-react-basic"
 

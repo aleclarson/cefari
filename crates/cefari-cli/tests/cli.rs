@@ -53,6 +53,7 @@ fn init_creates_project_scaffold() {
     assert!(root.join("README.md").exists());
 
     let manifest = fs::read_to_string(root.join("cefari.toml")).expect("manifest should exist");
+    assert!(manifest.contains(r#"project_name = "example-app""#));
     assert!(manifest.contains(r#"name = "Example App""#));
     assert!(manifest.contains(r#"identifier = "dev.cefari.example-app""#));
 

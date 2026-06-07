@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
@@ -49,6 +49,8 @@ impl ProjectConfig {
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectApp {
+    #[serde(deserialize_with = "deserialize_project_name")]
+    pub project_name: String,
     pub name: String,
     pub identifier: String,
 }
@@ -81,6 +83,28 @@ fn default_frontend_dev_port() -> u16 {
     5173
 }
 
+fn deserialize_project_name<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+
+    if is_valid_project_name(&value) {
+        Ok(value)
+    } else {
+        Err(de::Error::custom(
+            "project_name must match ^[a-z0-9-]+$ and cannot be empty",
+        ))
+    }
+}
+
+fn is_valid_project_name(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
 #[derive(Debug, Error)]
 pub enum LoadProjectError {
     #[error("project manifest not found at {path}")]
@@ -104,6 +128,7 @@ mod tests {
     fn parses_project_manifest() {
         let project: ProjectConfig = toml::from_str(
             r#"[app]
+project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
 
@@ -120,6 +145,7 @@ product_name = "Example App"
         )
         .expect("manifest should parse");
 
+        assert_eq!(project.app.project_name, "example-app");
         assert_eq!(project.app.name, "Example App");
         assert_eq!(project.package.product_name, "Example App");
         assert_eq!(project.frontend.dev_port, 5173);
@@ -131,6 +157,7 @@ product_name = "Example App"
     fn parses_project_frontend_commands() {
         let project: ProjectConfig = toml::from_str(
             r#"[app]
+project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
 
@@ -165,9 +192,68 @@ product_name = "Example App"
     }
 
     #[test]
+    fn rejects_missing_project_name() {
+        let error = toml::from_str::<ProjectConfig>(
+            r#"[app]
+name = "Example App"
+identifier = "dev.cefari.example-app"
+
+[frontend]
+dist = "frontend/dist"
+
+[daemon]
+entry = "daemon/main.ts"
+
+[package]
+product_name = "Example App"
+"#,
+        )
+        .expect_err("manifest without project_name should fail");
+
+        assert!(error.to_string().contains("missing field `project_name`"));
+    }
+
+    #[test]
+    fn rejects_invalid_project_names() {
+        for project_name in [
+            "",
+            "Example-App",
+            "example_app",
+            "example app",
+            "example.app",
+            "example/app",
+        ] {
+            let error = toml::from_str::<ProjectConfig>(&format!(
+                r#"[app]
+project_name = "{project_name}"
+name = "Example App"
+identifier = "dev.cefari.example-app"
+
+[frontend]
+dist = "frontend/dist"
+
+[daemon]
+entry = "daemon/main.ts"
+
+[package]
+product_name = "Example App"
+"#
+            ))
+            .expect_err("manifest with invalid project_name should fail");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("project_name must match ^[a-z0-9-]+$")
+            );
+        }
+    }
+
+    #[test]
     fn rejects_unknown_project_manifest_fields() {
         let error = toml::from_str::<ProjectConfig>(
             r#"[app]
+project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
 extra = true

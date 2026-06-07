@@ -194,7 +194,8 @@ pub fn init_project(path: &Path, name: Option<&str>) -> Result<()> {
     }
 
     let display_name = name.map_or_else(|| default_display_name(path), str::to_owned);
-    let identifier = format!("dev.cefari.{}", identifier_slug(&display_name));
+    let project_name = project_name_slug(&display_name);
+    let identifier = format!("dev.cefari.{project_name}");
 
     fs::create_dir_all(path.join("frontend"))
         .with_context(|| format!("failed to create frontend directory at {}", path.display()))?;
@@ -205,6 +206,7 @@ pub fn init_project(path: &Path, name: Option<&str>) -> Result<()> {
         &path.join("cefari.toml"),
         &format!(
             r#"[app]
+project_name = "{project_name}"
 name = "{display_name}"
 identifier = "{identifier}"
 
@@ -325,6 +327,16 @@ fn identifier_slug(value: &str) -> String {
     slug.trim_matches('-').to_owned()
 }
 
+fn project_name_slug(value: &str) -> String {
+    let slug = identifier_slug(value);
+
+    if slug.is_empty() {
+        "cefari-app".to_owned()
+    } else {
+        slug
+    }
+}
+
 const FRONTEND_TEMPLATE: &str = r#"<!doctype html>
 <html lang="en">
   <head>
@@ -345,7 +357,7 @@ const DAEMON_TEMPLATE: &str = r#"console.log("cefari daemon starting");
 mod tests {
     use clap::Parser;
 
-    use super::{Cli, Command, identifier_slug};
+    use super::{Cli, Command, identifier_slug, project_name_slug};
 
     #[test]
     fn parses_planned_commands() {
@@ -429,5 +441,11 @@ mod tests {
     fn creates_identifier_slug() {
         assert_eq!(identifier_slug("Example App"), "example-app");
         assert_eq!(identifier_slug("  CEFARI__Desktop!! "), "cefari-desktop");
+    }
+
+    #[test]
+    fn creates_project_name_slug() {
+        assert_eq!(project_name_slug("Example App"), "example-app");
+        assert_eq!(project_name_slug("!!!"), "cefari-app");
     }
 }

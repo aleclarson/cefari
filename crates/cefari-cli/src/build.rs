@@ -262,6 +262,7 @@ mod tests {
 
         let project: ProjectConfig = toml::from_str(
             r#"[app]
+project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
 
