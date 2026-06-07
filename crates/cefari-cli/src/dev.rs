@@ -332,8 +332,7 @@ mod tests {
 
     #[test]
     fn serves_frontend_index() {
-        let root =
-            std::env::temp_dir().join(format!("cefari-dev-server-test-{}", std::process::id()));
+        let root = temp_dir("frontend-index");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("frontend dir should be created");
         std::fs::write(root.join("index.html"), "hello cefari").expect("index should be written");
@@ -354,5 +353,13 @@ mod tests {
 
         server.shutdown();
         std::fs::remove_dir_all(root).expect("frontend dir should be removable");
+    }
+
+    fn temp_dir(label: &str) -> std::path::PathBuf {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("cefari-dev-server-test-{label}-{suffix}"))
     }
 }

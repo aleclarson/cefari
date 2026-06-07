@@ -1,14 +1,30 @@
-use std::{fs, path::Path, process::Command};
+use std::{fs, path::Path, path::PathBuf, process::Command};
 
 use anyhow::{Context, Result};
 
 use crate::{cef, project::ProjectConfig};
 
-pub(crate) fn daemon_executable_name() -> &'static str {
+pub(crate) fn daemon_executable_name(project: &ProjectConfig) -> String {
+    platform_executable_name(&format!("{}-daemon", project.app.project_name))
+}
+
+pub(crate) fn desktop_executable_name(project: &ProjectConfig) -> String {
+    platform_executable_name(&project.app.project_name)
+}
+
+fn desktop_crate_binary_name() -> &'static str {
     if cfg!(windows) {
-        "cefari-daemon.exe"
+        "cefari-desktop.exe"
     } else {
-        "cefari-daemon"
+        "cefari-desktop"
+    }
+}
+
+fn platform_executable_name(stem: &str) -> String {
+    if cfg!(windows) {
+        format!("{stem}.exe")
+    } else {
+        stem.to_owned()
     }
 }
 
@@ -17,6 +33,7 @@ pub fn build_project(project_dir: &Path, release: bool) -> Result<()> {
     let build_dir = ProjectConfig::build_dir(project_dir);
     let frontend_out = build_dir.join("frontend");
     let daemon_out = build_dir.join("daemon");
+    let desktop_out = build_dir.join("desktop");
 
     fs::create_dir_all(&frontend_out).with_context(|| {
         format!(
@@ -30,6 +47,12 @@ pub fn build_project(project_dir: &Path, release: bool) -> Result<()> {
             daemon_out.display()
         )
     })?;
+    fs::create_dir_all(&desktop_out).with_context(|| {
+        format!(
+            "failed to create desktop build directory at {}",
+            desktop_out.display()
+        )
+    })?;
 
     build_frontend(project_dir, &project, &frontend_out)?;
     build_daemon(project_dir, &project, &daemon_out)?;
@@ -40,7 +63,7 @@ pub fn build_project(project_dir: &Path, release: bool) -> Result<()> {
         "verified CEF archive metadata at {}",
         cef.archive_json.display()
     );
-    build_desktop(release)?;
+    build_desktop(&project, &desktop_out, release)?;
 
     println!("built Cefari project at {}", project_dir.display());
     Ok(())
@@ -174,7 +197,7 @@ fn build_daemon(project_dir: &Path, project: &ProjectConfig, output_dir: &Path) 
         )
     })?;
 
-    let executable = output_dir.join(daemon_executable_name());
+    let executable = output_dir.join(daemon_executable_name(project));
     let status = Command::new("deno")
         .arg("compile")
         .arg("--allow-read")
@@ -192,7 +215,7 @@ fn build_daemon(project_dir: &Path, project: &ProjectConfig, output_dir: &Path) 
     Ok(())
 }
 
-fn build_desktop(release: bool) -> Result<()> {
+fn build_desktop(project: &ProjectConfig, output_dir: &Path, release: bool) -> Result<()> {
     let mut command = Command::new("cargo");
     command
         .arg("build")
@@ -208,11 +231,21 @@ fn build_desktop(release: bool) -> Result<()> {
         .status()
         .context("failed to run cargo build for cefari-desktop")?;
 
-    if status.success() {
-        Ok(())
-    } else {
+    if !status.success() {
         anyhow::bail!("cargo build -p cefari-desktop failed with status {status}");
     }
+
+    let source = workspace_target_dir(release).join(desktop_crate_binary_name());
+    let destination = output_dir.join(desktop_executable_name(project));
+    fs::copy(&source, &destination).with_context(|| {
+        format!(
+            "failed to copy desktop executable from {} to {}",
+            source.display(),
+            destination.display()
+        )
+    })?;
+
+    Ok(())
 }
 
 pub(crate) fn workspace_manifest() -> std::path::PathBuf {
@@ -223,20 +256,46 @@ pub(crate) fn workspace_manifest() -> std::path::PathBuf {
         .join("Cargo.toml")
 }
 
+pub(crate) fn workspace_target_dir(release: bool) -> PathBuf {
+    workspace_manifest()
+        .parent()
+        .expect("workspace manifest should have a parent")
+        .join(if release {
+            "target/release"
+        } else {
+            "target/debug"
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
 
     use crate::project::ProjectConfig;
 
-    use super::{copy_frontend_dist, daemon_executable_name, workspace_manifest};
+    use super::{
+        copy_frontend_dist, daemon_executable_name, desktop_executable_name, workspace_manifest,
+    };
 
     #[test]
     fn daemon_executable_name_matches_host_platform() {
+        let project = project_config();
+
         if cfg!(windows) {
-            assert_eq!(daemon_executable_name(), "cefari-daemon.exe");
+            assert_eq!(daemon_executable_name(&project), "example-app-daemon.exe");
         } else {
-            assert_eq!(daemon_executable_name(), "cefari-daemon");
+            assert_eq!(daemon_executable_name(&project), "example-app-daemon");
+        }
+    }
+
+    #[test]
+    fn desktop_executable_name_matches_host_platform() {
+        let project = project_config();
+
+        if cfg!(windows) {
+            assert_eq!(desktop_executable_name(&project), "example-app.exe");
+        } else {
+            assert_eq!(desktop_executable_name(&project), "example-app");
         }
     }
 
@@ -260,7 +319,19 @@ mod tests {
         )
         .expect("asset should be written");
 
-        let project: ProjectConfig = toml::from_str(
+        let project = project_config();
+        let output = root.join("build/frontend");
+
+        copy_frontend_dist(&root, &project, &output).expect("dist should copy");
+
+        assert!(output.join("index.html").exists());
+        assert!(output.join("assets/app.js").exists());
+
+        fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    fn project_config() -> ProjectConfig {
+        toml::from_str(
             r#"[app]
 project_name = "example-app"
 name = "Example App"
@@ -276,14 +347,6 @@ entry = "daemon/main.ts"
 product_name = "Example App"
 "#,
         )
-        .expect("project should parse");
-        let output = root.join("build/frontend");
-
-        copy_frontend_dist(&root, &project, &output).expect("dist should copy");
-
-        assert!(output.join("index.html").exists());
-        assert!(output.join("assets/app.js").exists());
-
-        fs::remove_dir_all(root).expect("temp dir should be removable");
+        .expect("project should parse")
     }
 }

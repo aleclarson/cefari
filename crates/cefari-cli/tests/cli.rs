@@ -110,7 +110,12 @@ fn build_creates_project_artifacts() {
     assert!(root.join("build/daemon/main.ts").exists());
     assert!(
         root.join("build/daemon")
-            .join(daemon_executable_name())
+            .join(daemon_executable_name("build-app"))
+            .exists()
+    );
+    assert!(
+        root.join("build/desktop")
+            .join(desktop_executable_name("build-app"))
             .exists()
     );
     assert!(root.join("build/cef/resources").exists());
@@ -123,6 +128,14 @@ fn build_creates_project_artifacts() {
 #[test]
 fn package_creates_assembly_manifest_after_build() {
     let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "cargo-packager",
+        r#"echo "cargo-packager $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+
     let init_output = cefari()
         .arg("init")
         .arg(&root)
@@ -140,7 +153,7 @@ fn package_creates_assembly_manifest_after_build() {
         .expect("cefari build should run");
     assert_success(&build_output);
 
-    let output = cefari()
+    let output = with_fake_tools(cefari(), &tools, &log)
         .arg("package")
         .arg(&root)
         .output()
@@ -155,9 +168,12 @@ fn package_creates_assembly_manifest_after_build() {
         fs::read_to_string(root.join("dist/package/manifest.json")).expect("manifest should exist");
     let manifest_json: serde_json::Value =
         serde_json::from_str(&manifest).expect("manifest should be valid JSON");
-    assert!(manifest.contains(r#""desktop_binary": "cefari-desktop""#));
+    assert!(manifest.contains(&format!(
+        r#""desktop_binary": "{}""#,
+        desktop_executable_name("package-app")
+    )));
     assert!(manifest.contains(r#""daemon_executable": ""#));
-    assert!(manifest.contains(daemon_executable_name()));
+    assert!(manifest.contains(&daemon_executable_name("package-app")));
     assert!(manifest.contains(r#""cef_resources": ""#));
     assert!(manifest.contains(r#""cef_archive_json": ""#));
     assert!(manifest.contains("build/cef/resources"));
@@ -179,10 +195,15 @@ fn package_creates_assembly_manifest_after_build() {
         .expect("package metadata should exist");
     assert!(metadata.contains(r#"name = "dev.cefari.package-app""#));
     assert!(metadata.contains("dist/package/icons/cefari.png"));
-    assert!(metadata.contains("target/debug"));
+    assert!(metadata.contains("build/desktop"));
     assert!(metadata.contains("build/cef/resources"));
+    assert!(metadata.contains(&format!(
+        r#"path = "{}""#,
+        desktop_executable_name("package-app")
+    )));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
 }
 
 #[test]
@@ -222,8 +243,11 @@ fn package_release_metadata_uses_release_desktop_binary() {
 
     let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
         .expect("package metadata should exist");
-    assert!(metadata.contains("target/release"));
-    assert!(metadata.contains(r#"path = "cefari-desktop""#));
+    assert!(metadata.contains("build/desktop"));
+    assert!(metadata.contains(&format!(
+        r#"path = "{}""#,
+        desktop_executable_name("release-package-app")
+    )));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
     fs::remove_dir_all(tools).expect("temp tools should be removable");
@@ -340,6 +364,14 @@ fn package_requires_build_artifacts() {
 #[test]
 fn clean_removes_generated_artifacts() {
     let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "cargo-packager",
+        r#"echo "cargo-packager $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+
     let init_output = cefari()
         .arg("init")
         .arg(&root)
@@ -357,7 +389,7 @@ fn clean_removes_generated_artifacts() {
         .expect("cefari build should run");
     assert_success(&build_output);
 
-    let package_output = cefari()
+    let package_output = with_fake_tools(cefari(), &tools, &log)
         .arg("package")
         .arg(&root)
         .output()
@@ -378,6 +410,7 @@ fn clean_removes_generated_artifacts() {
     assert!(!root.join("dist").exists());
 
     fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
 }
 
 #[test]
@@ -604,11 +637,19 @@ fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
-fn daemon_executable_name() -> &'static str {
+fn daemon_executable_name(project_name: &str) -> String {
     if cfg!(windows) {
-        "cefari-daemon.exe"
+        format!("{project_name}-daemon.exe")
     } else {
-        "cefari-daemon"
+        format!("{project_name}-daemon")
+    }
+}
+
+fn desktop_executable_name(project_name: &str) -> String {
+    if cfg!(windows) {
+        format!("{project_name}.exe")
+    } else {
+        project_name.to_owned()
     }
 }
 

@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 
 use crate::{
-    build::{daemon_executable_name, workspace_manifest},
+    build::{daemon_executable_name, desktop_executable_name},
     cef,
     project::ProjectConfig,
     run_process, tool_available,
@@ -19,7 +19,7 @@ pub fn package_project(project_dir: &Path, release: bool) -> Result<()> {
     let build_dir = ProjectConfig::build_dir(project_dir);
     let package_dir = ProjectConfig::dist_dir(project_dir).join("package");
 
-    ensure_build_artifacts(&build_dir)?;
+    ensure_build_artifacts(&build_dir, &project)?;
     let cef_resources_dir = cef::prepared_resources_dir(project_dir)?;
     fs::create_dir_all(&package_dir).with_context(|| {
         format!(
@@ -42,11 +42,16 @@ pub fn package_project(project_dir: &Path, release: bool) -> Result<()> {
     Ok(())
 }
 
-fn ensure_build_artifacts(build_dir: &Path) -> Result<()> {
+fn ensure_build_artifacts(build_dir: &Path, project: &ProjectConfig) -> Result<()> {
     let required = [
         build_dir.join("frontend/index.html"),
         build_dir.join("daemon/main.ts"),
-        build_dir.join("daemon").join(daemon_executable_name()),
+        build_dir
+            .join("daemon")
+            .join(daemon_executable_name(project)),
+        build_dir
+            .join("desktop")
+            .join(desktop_executable_name(project)),
     ];
 
     for artifact in required {
@@ -66,7 +71,7 @@ fn write_package_metadata(
     project: &ProjectConfig,
     build_dir: &Path,
     cef_resources_dir: &Path,
-    release: bool,
+    _release: bool,
 ) -> Result<()> {
     let icon_path = write_default_package_icon(package_dir)?;
     let frontend_dir = build_dir.join("frontend").canonicalize().with_context(|| {
@@ -81,6 +86,12 @@ fn write_package_metadata(
             build_dir.join("daemon").display()
         )
     })?;
+    let desktop_dir = build_dir.join("desktop").canonicalize().with_context(|| {
+        format!(
+            "failed to resolve desktop binary resources at {}",
+            build_dir.join("desktop").display()
+        )
+    })?;
     let cef_resources_dir = cef_resources_dir.canonicalize().with_context(|| {
         format!(
             "failed to resolve CEF resources at {}",
@@ -92,10 +103,10 @@ fn write_package_metadata(
         product_name: project.package.product_name.clone(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
         identifier: Some(project.app.identifier.clone()),
-        binaries_dir: Some(workspace_target_dir(release)),
+        binaries_dir: Some(desktop_dir),
         icons: vec![normalize(&icon_path)],
         binaries: vec![CargoPackagerBinary {
-            path: desktop_binary_name().into(),
+            path: desktop_executable_name(project).into(),
             main: true,
         }],
         resources: vec![
@@ -197,10 +208,14 @@ fn write_package_manifest(
     let manifest = PackageManifest {
         product_name: project.package.product_name.clone(),
         identifier: project.app.identifier.clone(),
-        desktop_binary: "cefari-desktop".to_owned(),
+        desktop_binary: desktop_executable_name(project),
         frontend_dir: normalize(&build_dir.join("frontend")),
         daemon_dir: normalize(&build_dir.join("daemon")),
-        daemon_executable: normalize(&build_dir.join("daemon").join(daemon_executable_name())),
+        daemon_executable: normalize(
+            &build_dir
+                .join("daemon")
+                .join(daemon_executable_name(project)),
+        ),
         cef_resources: normalize(cef_resources_dir),
         cef_archive_json: normalize(&cef_resources_dir.join("archive.json")),
     };
@@ -286,23 +301,4 @@ impl PackageManifest {
 
 fn normalize(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
-}
-
-fn workspace_target_dir(release: bool) -> PathBuf {
-    workspace_manifest()
-        .parent()
-        .expect("workspace manifest should have a parent")
-        .join(if release {
-            "target/release"
-        } else {
-            "target/debug"
-        })
-}
-
-fn desktop_binary_name() -> &'static str {
-    if cfg!(windows) {
-        "cefari-desktop.exe"
-    } else {
-        "cefari-desktop"
-    }
 }

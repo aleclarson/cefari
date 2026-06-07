@@ -176,6 +176,8 @@ Runtime update and service operations are implemented in `cefari-desktop` via `c
 
 Development, packaging, release, diagnostics, and CI functionality is implemented in `cefari-cli`.
 
+Project packages use the app's machine-readable `project_name` from `cefari.toml` for shipped executable names. The desktop runtime is built from the internal `cefari-desktop` crate, then copied into the project build output as `<project_name>` or `<project_name>.exe`; the daemon is compiled as `<project_name>-daemon` or `<project_name>-daemon.exe`.
+
 ## Tool classification
 
 | Item                               | Belongs in                                                    |
@@ -192,7 +194,7 @@ Development, packaging, release, diagnostics, and CI functionality is implemente
 
 ## Acceptance criteria
 
-- Released Cefari desktop app packages contain `cefari-desktop`, the runtime code from `cefari-core`, CEF resources, and generated app artifacts.
+- Released Cefari desktop app packages contain the white-label desktop executable built from `cefari-desktop`, the runtime code from `cefari-core`, CEF resources, and generated app artifacts.
 - `cefari-cli` is published/distributed separately as the developer-facing tool.
 - `cefari-desktop` contains runtime app startup, windowing, CEF, and native shell logic.
 - Build, packaging, signing, and release orchestration live in `cefari-cli` or CI.
