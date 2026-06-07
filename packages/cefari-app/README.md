@@ -3,6 +3,9 @@
 `@cefari/app` provides ergonomic TypeScript wrappers over Cefari's typed
 `window.cefari` bridge.
 
+For task-oriented frontend usage, see the
+[TypeScript App Guide](../../docs/guides/typescript.md).
+
 The package re-exports the Specta-generated IPC types from Rust and layers
 promise-based namespaces on top:
 

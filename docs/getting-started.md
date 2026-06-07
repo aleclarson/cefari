@@ -61,6 +61,9 @@ Cefari starts the frontend, Deno daemon, and Rust desktop app together. Use
 For Vite and custom frontend commands, see
 [Develop Locally](guides/development.md).
 
+For frontend TypeScript code that calls native Cefari actions, see
+[TypeScript App Guide](guides/typescript.md).
+
 ## Build And Package
 
 Build local app artifacts:
@@ -91,6 +94,8 @@ see [Automated Deployment](guides/deployment.md).
 
 - [Cefari CSS Contract](css-contract.md): opt-in drag-region utility classes.
 - [Cefari IPC Protocol](ipc.md): typed Rust-to-CEF native action protocol.
+- [TypeScript App Guide](guides/typescript.md): task-oriented `@cefari/app`
+  usage from frontend code.
 - [Desktop Notifications](notifications.md): runtime-owned OS notification
   boundary.
 - [Architecture Boundary](architecture.md): crate responsibilities and
