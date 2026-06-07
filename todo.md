@@ -146,11 +146,11 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Replace every README placeholder dependency version with a real version.
   - [x] Use workspace dependency declarations where it improves consistency.
   - [x] Decide whether shared versions should be centralized in workspace dependencies.
-- [ ] Audit crate boundaries.
+- [x] Audit crate boundaries.
   - [x] Confirm runtime crates do not depend on developer orchestration crates.
   - [x] Confirm CLI-only crates do not pull in Tao or CEF.
-  - [ ] Add dependency review notes for native and packaging crates.
-  - [ ] Keep new dependencies out unless they directly serve the README architecture.
+  - [x] Add dependency review notes for native and packaging crates.
+  - [x] Keep new dependencies out unless they directly serve the README architecture.
 
 ## 7. Maintain Documentation
 
