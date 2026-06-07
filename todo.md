@@ -131,7 +131,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [ ] Define how generated Deno daemon artifacts are included in app packages.
   - [ ] Define how CEF binaries and resources are resolved during package creation.
 - [ ] Add CI coverage.
-  - [ ] Add CI steps for formatting, linting, testing, and workspace builds.
+  - [x] Add CI steps for formatting, linting, testing, and workspace builds.
   - [ ] Add CI steps that install or provide `cargo-packager` and `cargo-codesign`.
   - [ ] Add platform-specific packaging jobs.
 - [ ] Add release automation.
