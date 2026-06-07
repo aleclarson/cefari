@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { invokeCefari } from "./cefari.ts";
+import { cefari, isCefariError } from "@cefari/app";
 
 export default function App() {
   const [bridgeState, setBridgeState] = useState("checking");
@@ -8,15 +8,15 @@ export default function App() {
   useEffect(() => {
     let active = true;
 
-    invokeCefari({ command: "updateState" }).then((response) => {
-      if (!active) return;
-
-      if (response.outcome.status === "ok") {
-        setBridgeState(response.outcome.payload.result);
-      } else {
-        setBridgeState(response.outcome.payload.code);
-      }
-    });
+    cefari.updates.state()
+      .then((state) => {
+        if (active) setBridgeState(state.state);
+      })
+      .catch((error) => {
+        if (active) {
+          setBridgeState(isCefariError(error) ? error.code : "error");
+        }
+      });
 
     return () => {
       active = false;

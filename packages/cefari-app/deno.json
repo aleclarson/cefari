@@ -1,0 +1,13 @@
+{
+  "name": "@cefari/app",
+  "version": "0.1.0",
+  "license": "MIT OR Apache-2.0",
+  "exports": {
+    ".": "./src/mod.ts",
+    "./ipc": "./src/ipc.ts"
+  },
+  "tasks": {
+    "check": "deno check src/mod.ts tests/cefari_app_test.ts",
+    "test": "deno test tests"
+  }
+}

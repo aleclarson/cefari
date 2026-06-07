@@ -20,7 +20,8 @@ When one child process exits or fails, Cefari stops the remaining processes.
 
 ## Frontend Dev Server
 
-Without a configured frontend dev command, Cefari serves `frontend/index.html` with a built-in local static server.
+Without a configured frontend dev command, Cefari serves `frontend/index.html`
+with a built-in local static server.
 
 Projects can configure a tool-managed frontend dev server:
 
@@ -37,11 +38,13 @@ dev_port = 5173
 cargo run -p cefari-cli -- dev PATH --frontend-port 5273
 ```
 
-Use `--frontend-port 0` only with the built-in static server, where Cefari can bind an available local port itself.
+Use `--frontend-port 0` only with the built-in static server, where Cefari can
+bind an available local port itself.
 
 ## Vite React Template
 
-The checked-in Vite React template lives at `templates/vite-react-basic/`.
+The checked-in Vite React template lives at `templates/vite-react-basic/`. It
+uses `@cefari/app` for typed frontend access to native Cefari actions.
 
 Install workspace dependencies:
 
@@ -55,8 +58,11 @@ Run it with the local Cefari build:
 cargo run -p cefari-cli -- dev templates/vite-react-basic
 ```
 
-The template is a Deno workspace with `frontend/` and `daemon/` members. Its Cefari manifest uses `deno task` commands so the template can run from the repository-local Cefari build.
+The template is a Deno workspace with `frontend/` and `daemon/` members. Its
+Cefari manifest uses `deno task` commands so the template can run from the
+repository-local Cefari build.
 
 ## Built-In CSS For Custom Titlebars
 
-Cefari injects opt-in drag-region utility classes into trusted main-frame pages. See [Cefari CSS Contract](../css-contract.md).
+Cefari injects opt-in drag-region utility classes into trusted main-frame pages.
+See [Cefari CSS Contract](../css-contract.md).

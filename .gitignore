@@ -1,6 +1,8 @@
 /target/
 /dist/
-/packages/
+/packages/*
+!/packages/cefari-app/
+!/packages/cefari-app/**
 /cef/
 /cef-cache/
 /logs/
@@ -10,4 +12,3 @@
 *.log
 *.tmp
 *.dSYM/
-
