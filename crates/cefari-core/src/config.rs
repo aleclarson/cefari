@@ -1,0 +1,125 @@
+use std::{fs, path::Path};
+
+use serde::{Deserialize, Serialize};
+
+use crate::{Error, Result};
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CefariConfig {
+    pub app: AppConfig,
+    pub updates: UpdateConfig,
+    pub service: ServiceConfig,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AppConfig {
+    pub identifier: String,
+    pub display_name: String,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            identifier: "dev.cefari.app".to_owned(),
+            display_name: "Cefari".to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct UpdateConfig {
+    pub endpoint: Option<String>,
+    pub public_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ServiceConfig {
+    pub name: String,
+    pub display_name: String,
+}
+
+impl Default for ServiceConfig {
+    fn default() -> Self {
+        Self {
+            name: "cefari-daemon".to_owned(),
+            display_name: "Cefari Daemon".to_owned(),
+        }
+    }
+}
+
+pub fn load_config(path: impl AsRef<Path>) -> Result<CefariConfig> {
+    let path = path.as_ref();
+    let contents = fs::read_to_string(path).map_err(|source| Error::ReadConfig {
+        path: path.to_owned(),
+        source,
+    })?;
+
+    serde_json::from_str(&contents).map_err(|source| Error::ParseConfig {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+pub fn save_config(path: impl AsRef<Path>, config: &CefariConfig) -> Result<()> {
+    let path = path.as_ref();
+    let contents = serde_json::to_string_pretty(config)?;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| Error::CreateConfigDirectory {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+
+    fs::write(path, contents).map_err(|source| Error::WriteConfig {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppConfig, CefariConfig, ServiceConfig};
+
+    #[test]
+    fn parses_defaultable_config() {
+        let config: CefariConfig = serde_json::from_str(
+            r#"{
+              "app": {
+                "identifier": "dev.cefari.test",
+                "display_name": "Test Cefari"
+              }
+            }"#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(
+            config.app,
+            AppConfig {
+                identifier: "dev.cefari.test".to_owned(),
+                display_name: "Test Cefari".to_owned(),
+            }
+        );
+        assert_eq!(config.service, ServiceConfig::default());
+    }
+
+    #[test]
+    fn rejects_unknown_fields() {
+        let error = serde_json::from_str::<CefariConfig>(
+            r#"{
+              "app": {
+                "identifier": "dev.cefari.test",
+                "display_name": "Test Cefari",
+                "unexpected": true
+              }
+            }"#,
+        )
+        .expect_err("unknown fields should be rejected");
+
+        assert!(error.to_string().contains("unknown field"));
+    }
+}

@@ -1,0 +1,23 @@
+[package]
+name = "cefari-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+cargo-packager-resource-resolver.workspace = true
+cargo-packager-updater.workspace = true
+directories.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+service-manager.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
+

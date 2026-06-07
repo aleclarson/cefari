@@ -1,0 +1,29 @@
+[package]
+name = "cefari-desktop"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+cef = { workspace = true, optional = true }
+cefari-core = { path = "../cefari-core" }
+muda.workspace = true
+open.workspace = true
+raw-window-handle.workspace = true
+single-instance.workspace = true
+tao.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+tray-icon.workspace = true
+
+[features]
+default = []
+cef = ["dep:cef"]
+
+[lints]
+workspace = true
+

@@ -50,16 +50,16 @@ frontend and daemon build steps live in cefari-cli or CI
 Runtime dependencies:
 
 ```toml
-serde = { version = "*", features = ["derive"] }
-serde_json = "*"
-directories = "*"
-tracing = "*"
-anyhow = "*"
-thiserror = "*"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+directories = "6.0.0"
+tracing = "0.1.44"
+anyhow = "1.0.102"
+thiserror = "2.0.18"
 
-service-manager = "*"
-cargo-packager-updater = "*"
-cargo-packager-resource-resolver = "*"
+service-manager = "0.11.0"
+cargo-packager-updater = "0.2.3"
+cargo-packager-resource-resolver = "0.1.2"
 ```
 
 ### `cefari-desktop`
@@ -83,22 +83,22 @@ Uses `cefari-core` for runtime helpers:
 ```toml
 cefari-core = { path = "../cefari-core" }
 
-tao = "*"
-cef = "*"
-raw-window-handle = "*"
+tao = "0.35.3"
+cef = "148.4.0"
+raw-window-handle = "0.6.2"
 
-single-instance = "*"
-tracing-subscriber = "*"
-tracing-appender = "*"
-anyhow = "*"
+single-instance = "0.3.3"
+tracing-subscriber = "0.3.23"
+tracing-appender = "0.2.5"
+anyhow = "1.0.102"
 ```
 
 Desktop dependencies:
 
 ```toml
-muda = "*"       # native menus
-tray-icon = "*"  # tray/menu-bar icon
-open = "*"       # opening external links/files from Rust
+muda = "0.19.2"       # native menus
+tray-icon = "0.24.0"  # tray/menu-bar icon
+open = "5.3.5"        # opening external links/files from Rust
 ```
 
 ### `cefari-cli`
@@ -144,13 +144,13 @@ clean/dist tasks
 CLI dependencies:
 
 ```toml
-clap = { version = "*", features = ["derive"] }
-anyhow = "*"
-xshell = "*"
-duct = "*"
-camino = "*"
-serde = { version = "*", features = ["derive"] }
-toml = "*"
+clap = { version = "4.6.1", features = ["derive"] }
+anyhow = "1.0.102"
+xshell = "0.3.0-pre.2"
+duct = "1.1.1"
+camino = "1.2.2"
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.1.2"
 ```
 
 `cefari-cli` shells out to tools like `cargo-packager` and `cargo-codesign`; those tools are provided by CI or the developer environment.
@@ -185,6 +185,15 @@ Development, packaging, release, diagnostics, and CI functionality is implemente
 - Tao and CEF dependencies are declared by `cefari-desktop`; CLI parsing dependencies are declared by `cefari-cli`.
 - Project creation, dev mode, builds, packaging, signing, notarization, CEF preparation, daemon build, frontend build, diagnostics, and update artifact generation are handled by `cefari-cli` or CI.
 - Dependency versions are pinned during implementation rather than left as `"*"`.
+
+## Current workspace commands
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo run -p cefari-cli -- --help
+```
 
 ## Minimal architecture sentence
 
