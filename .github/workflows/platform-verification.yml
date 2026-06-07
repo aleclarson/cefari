@@ -159,3 +159,23 @@ jobs:
           else
             cargo test -p cefari-core --test service_lifecycle -- --ignored --nocapture
           fi
+
+      - name: Print Windows service fixture logs
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CEFARI_SERVICE_SMOKE_APPLICATION: service-smoke-${{ github.run_id }}-${{ matrix.target.name }}
+        run: |
+          $serviceName = "dev.cefari.$env:CEFARI_SERVICE_SMOKE_APPLICATION"
+          $serviceDir = Join-Path $env:ProgramData "service-manager\$serviceName"
+          if (Test-Path $serviceDir) {
+            Get-ChildItem -Force $serviceDir | Format-List FullName,Length,LastWriteTime
+            Get-ChildItem -Force $serviceDir -File |
+              ForEach-Object {
+                Write-Host "::group::$($_.Name)"
+                Get-Content -Raw $_.FullName -ErrorAction Continue
+                Write-Host "::endgroup::"
+              }
+          } else {
+            Write-Host "No service directory found at $serviceDir"
+          }
