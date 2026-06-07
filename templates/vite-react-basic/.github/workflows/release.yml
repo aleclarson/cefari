@@ -1,0 +1,35 @@
+name: Production Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version.
+        required: true
+
+jobs:
+  release:
+    name: Production release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cefari-release
+        with:
+          project-path: templates/vite-react-basic
+          mode: release
+          release-version: ${{ inputs.version || github.ref_name }}
+          release-tag: ${{ github.ref_name }}
+          targets: macos-aarch64
+          create-github-release: "true"
+          upload-artifacts: "true"
+          update-url-base: ${{ vars.CEFARI_UPDATE_URL_BASE }}
+          update-key-env: UPDATE_SIGNING_KEY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
