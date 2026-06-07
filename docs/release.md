@@ -30,6 +30,8 @@ Native installer validation is still separate from package assembly validation a
 
 Release tags and manual dispatches run `.github/workflows/release.yml`. That workflow builds native packages on macOS, Linux, and Windows using real `cefari build` CEF preparation, invokes `cefari package`, and uploads each platform's package output as a workflow artifact. Signing runs when `CEFARI_ENABLE_SIGNING` is set to `true` in repository secrets. macOS notarization runs when `CEFARI_ENABLE_NOTARIZATION` is set to `true`.
 
+Before upload, the release workflow verifies that native package output exists and that package metadata points at existing frontend, daemon executable, CEF resource directory, and CEF archive metadata inputs.
+
 ## Signing
 
 Sign a packaged artifact with:

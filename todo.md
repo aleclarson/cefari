@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 135 of the 182 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 136 of the 183 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
 - 1 under release automation.
 - 1 under desktop runtime behavior verification.
@@ -149,6 +149,7 @@ Nesting audit: 135 of the 182 checklist entries are already nested child tasks u
   - [x] Add signing and notarization jobs for supported platforms.
   - [x] Add update artifact generation and publishing jobs.
   - [x] Verify package assembly contains generated UI, daemon, CEF preparation metadata, and separate CLI output in CI.
+  - [x] Verify release workflow package outputs exist and metadata points at runtime, CEF, UI, and daemon inputs before upload.
   - [ ] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.
   - [x] Verify `cefari-cli` is built, versioned, and distributed separately from desktop app packages.
 

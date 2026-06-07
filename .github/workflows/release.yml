@@ -85,6 +85,36 @@ jobs:
       - name: Package release sample project
         run: cargo run -p cefari-cli -- package .release/cefari-sample
 
+      - name: Verify release package artifacts
+        shell: bash
+        run: |
+          test -d .release/cefari-sample/dist/package/output
+          find .release/cefari-sample/dist/package/output -mindepth 1 -maxdepth 1 -print -quit | grep -q .
+          ruby <<'RUBY'
+          require "json"
+
+          manifest = JSON.parse(File.read(".release/cefari-sample/dist/package/manifest.json"))
+          required_files = [
+            manifest.fetch("frontend_dir") + "/index.html",
+            manifest.fetch("daemon_executable"),
+            manifest.fetch("cef_archive_json")
+          ]
+          required_dirs = [
+            manifest.fetch("daemon_dir"),
+            manifest.fetch("cef_resources")
+          ]
+
+          unless manifest.fetch("desktop_binary") == "cefari-desktop"
+            abort "package manifest does not target cefari-desktop"
+          end
+
+          missing_files = required_files.reject { |path| File.file?(path) }
+          missing_dirs = required_dirs.reject { |path| Dir.exist?(path) }
+
+          abort "missing package input files: #{missing_files.join(", ")}" unless missing_files.empty?
+          abort "missing package input dirs: #{missing_dirs.join(", ")}" unless missing_dirs.empty?
+          RUBY
+
       - name: Sign package artifacts
         if: env.CEFARI_ENABLE_SIGNING == 'true'
         shell: bash
