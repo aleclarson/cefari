@@ -89,7 +89,7 @@ fn build_desktop() -> Result<()> {
     }
 }
 
-fn workspace_manifest() -> std::path::PathBuf {
+pub(crate) fn workspace_manifest() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
         .nth(2)

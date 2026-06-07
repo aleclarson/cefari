@@ -26,6 +26,8 @@ Windows and Linux remain target platforms, but packaging, service operations, an
 
 No JavaScript framework is selected yet. A richer template should be introduced only when `cefari dev` and `cefari build` define how frontend commands are run.
 
+`cefari dev` currently serves this static frontend with a built-in local HTTP server instead of assuming a Node-based frontend toolchain. A future template that selects a JavaScript framework should replace or extend this with project-configured frontend commands.
+
 ## Deno Daemon Shape
 
 `cefari init` currently generates:
@@ -34,6 +36,8 @@ No JavaScript framework is selected yet. A richer template should be introduced 
 - configured daemon entry: `daemon/main.ts`
 
 `cefari build` currently copies the daemon entry to `build/daemon/main.ts`.
+
+`cefari dev` runs the daemon entry with `deno run --watch --allow-read --allow-net`.
 
 The final packaged daemon output contract is not final. Packaging work should define whether the daemon remains TypeScript, is bundled, or is compiled before distribution.
 

@@ -9,6 +9,7 @@ use clap::{Parser, Subcommand};
 
 mod build;
 mod clean;
+mod dev;
 mod package;
 pub mod project;
 mod release;
@@ -36,7 +37,15 @@ pub enum Command {
         name: Option<String>,
     },
     /// Run the local development environment.
-    Dev,
+    Dev {
+        /// Project directory to run. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Port for the built-in static frontend dev server. Use 0 to request any free port.
+        #[arg(long, default_value_t = 5173)]
+        frontend_port: u16,
+    },
     /// Build frontend, daemon, and desktop artifacts.
     Build {
         /// Project directory to build. Defaults to the current directory.
@@ -124,7 +133,10 @@ where
 pub fn run_command(command: Command) -> Result<()> {
     match command {
         Command::Init { path, name } => init_project(&path, name.as_deref()),
-        Command::Dev => todo_command("dev"),
+        Command::Dev {
+            path,
+            frontend_port,
+        } => dev::dev_project(&path, frontend_port),
         Command::Build { path } => build::build_project(&path),
         Command::Package { path } => package::package_project(&path),
         Command::Codesign {
@@ -151,10 +163,6 @@ pub fn run_command(command: Command) -> Result<()> {
             Ok(())
         }
     }
-}
-
-fn todo_command(name: &str) -> Result<()> {
-    anyhow::bail!("cefari {name} is not implemented yet")
 }
 
 pub fn init_project(path: &Path, name: Option<&str>) -> Result<()> {
@@ -322,6 +330,12 @@ mod tests {
                 .expect("init should parse")
                 .command,
             Command::Init { .. }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["cefari", "dev", "sample", "--frontend-port", "0"])
+                .expect("dev should parse")
+                .command,
+            Command::Dev { .. }
         ));
         assert!(matches!(
             Cli::try_parse_from(["cefari", "doctor"])

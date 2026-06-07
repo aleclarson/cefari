@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 26 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
+Nesting audit: 20 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
 
 ## 1. Establish The Workspace
 
@@ -96,12 +96,12 @@ Nesting audit: 26 currently unchecked checklist items are dependent child tasks 
   - [x] Add typed parsing for generated `cefari.toml` manifests.
   - [x] Add template files for frontend, daemon, desktop config, and package metadata.
   - [x] Add fixture-based tests for generated project scaffolds.
-- [ ] Implement development orchestration.
-  - [ ] Implement `cefari dev`.
-  - [ ] Run the frontend dev server.
-  - [ ] Run the Deno daemon.
-  - [ ] Run the Rust desktop app.
-  - [ ] Handle process shutdown and error reporting.
+- [x] Implement development orchestration.
+  - [x] Implement `cefari dev`.
+  - [x] Run the frontend dev server.
+  - [x] Run the Deno daemon.
+  - [x] Run the Rust desktop app.
+  - [x] Handle process shutdown and error reporting.
 - [ ] Implement build orchestration.
   - [x] Implement `cefari build`.
   - [x] Build frontend artifacts.
@@ -162,7 +162,7 @@ Nesting audit: 26 currently unchecked checklist items are dependent child tasks 
   - [x] Document runtime versus CLI responsibility boundaries in contributor-facing docs.
 - [ ] Document developer workflows.
   - [x] Add CLI usage documentation for each implemented `cefari` command.
-  - [ ] Add CLI usage documentation for `dev` once implemented.
+  - [x] Add CLI usage documentation for `dev` once implemented.
   - [x] Add CLI usage documentation for signing, notarization, and update commands.
   - [ ] Add development setup documentation for CEF preparation.
   - [x] Add troubleshooting documentation for common `cefari doctor` failures.

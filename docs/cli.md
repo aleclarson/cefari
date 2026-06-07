@@ -52,6 +52,19 @@ Current build behavior:
 
 The final daemon output contract and packaging layout are still evolving.
 
+### `cefari dev [PATH] [--frontend-port PORT]`
+
+Runs the local Cefari development environment for the project at `PATH`. If `PATH` is omitted, the CLI uses the current directory.
+
+Current dev behavior:
+
+- starts a built-in static frontend dev server for `frontend/index.html`
+- runs `deno run --watch --allow-read --allow-net` for the configured daemon entry
+- runs `cargo run -p cefari-desktop` through the Cefari workspace manifest
+- stops the remaining processes when one child process exits or fails
+
+Use `--frontend-port 0` to bind the frontend server to any available local port.
+
 ### `cefari package [PATH]`
 
 Prepares package assembly metadata for the Cefari project at `PATH`. If `PATH` is omitted, the CLI uses the current directory.
@@ -93,12 +106,6 @@ Current output:
 
 - `<ARCHIVE file name>.sig`
 - `update.json`
-
-### Planned Commands
-
-These commands are present in the parser but intentionally fail until their orchestration work is implemented:
-
-- `cefari dev`
 
 ### `cefari clean [PATH]`
 

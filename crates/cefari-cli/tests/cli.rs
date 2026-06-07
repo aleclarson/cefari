@@ -372,12 +372,50 @@ exit 1"#,
 }
 
 #[test]
-fn unimplemented_command_fails_clearly() {
-    let output = cefari().arg("dev").output().expect("cefari dev should run");
+fn dev_orchestrates_frontend_daemon_and_desktop() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "deno",
+        r#"echo "deno $@" >> "$CEFARI_TOOL_LOG"
+exit 0"#,
+    );
+    create_fake_tool(
+        &tools,
+        "cargo",
+        r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
+sleep 5"#,
+    );
 
-    assert!(!output.status.success());
-    let stderr = stderr(&output);
-    assert!(stderr.contains("cefari dev is not implemented yet"));
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Dev App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("dev")
+        .arg(&root)
+        .arg("--frontend-port")
+        .arg("0")
+        .output()
+        .expect("cefari dev should run");
+
+    assert_success(&output);
+    let stdout = stdout(&output);
+    assert!(stdout.contains("frontend dev server: http://"));
+    let tool_log = fs::read_to_string(&log).expect("tool log should exist");
+    assert!(tool_log.contains("deno run --watch --allow-read --allow-net daemon/main.ts"));
+    assert!(tool_log.contains("cargo run --manifest-path"));
+    assert!(tool_log.contains("cefari-desktop"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
 }
 
 fn assert_success(output: &Output) {
