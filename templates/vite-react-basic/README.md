@@ -4,6 +4,8 @@ This is a minimal Cefari project template that uses a Deno workspace with Vite a
 
 The frontend includes a typed `invokeCefari` wrapper over `window.cefari.invoke`. In ordinary browser preview it returns a typed `unsupported` response; inside trusted Cefari pages it uses the native bridge.
 
+For custom titlebars, apply `cefari-drag` only to regions that should move the window. Use `cefari-no-drag` on interactive descendants that must keep normal pointer behavior.
+
 Run it from the repository root with the local Cefari build:
 
 ```bash

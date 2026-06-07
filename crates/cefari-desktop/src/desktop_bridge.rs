@@ -5,9 +5,51 @@ use serde_json::Value;
 
 use crate::desktop_ipc::{DesktopIpcDispatcher, NativeShellContext};
 
+pub const CEFARI_DEFAULT_STYLES: &str = r".cefari-drag {
+  -webkit-app-region: drag;
+}
+
+.cefari-no-drag,
+.cefari-drag button,
+.cefari-drag input,
+.cefari-drag textarea,
+.cefari-drag select,
+.cefari-drag a {
+  -webkit-app-region: no-drag;
+}
+";
+
 pub const CEFARI_BRIDGE_SCRIPT: &str = r#"
 (() => {
   if (window.cefari) return;
+
+  const defaultStyles = `.cefari-drag {
+  -webkit-app-region: drag;
+}
+
+.cefari-no-drag,
+.cefari-drag button,
+.cefari-drag input,
+.cefari-drag textarea,
+.cefari-drag select,
+.cefari-drag a {
+  -webkit-app-region: no-drag;
+}
+`;
+
+  const installDefaultStyles = () => {
+    if (document.getElementById("cefari-default-styles")) return;
+
+    const style = document.createElement("style");
+    style.id = "cefari-default-styles";
+    style.dataset.cefariDefaultStyles = "true";
+    style.textContent = defaultStyles;
+
+    const target = document.head || document.documentElement;
+    target.prepend(style);
+  };
+
+  installDefaultStyles();
 
   let nextId = 1;
   const listeners = new Set();
@@ -195,7 +237,7 @@ mod tests {
         TrayResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult, WindowState,
     };
 
-    use super::{BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CefariBridge};
+    use super::{BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CEFARI_DEFAULT_STYLES, CefariBridge};
     use crate::desktop_ipc::NativeShellContext;
 
     #[derive(Debug, Default)]
@@ -289,6 +331,18 @@ mod tests {
             None
         );
         assert!(CEFARI_BRIDGE_SCRIPT.contains("window.cefari"));
+    }
+
+    #[test]
+    fn bridge_script_injects_default_drag_region_styles() {
+        assert!(CEFARI_DEFAULT_STYLES.contains(".cefari-drag"));
+        assert!(CEFARI_DEFAULT_STYLES.contains(".cefari-no-drag"));
+        assert!(CEFARI_BRIDGE_SCRIPT.contains("cefari-default-styles"));
+        assert!(CEFARI_BRIDGE_SCRIPT.contains("-webkit-app-region: drag"));
+        assert!(CEFARI_BRIDGE_SCRIPT.contains("-webkit-app-region: no-drag"));
+        assert!(CEFARI_BRIDGE_SCRIPT.contains(".cefari-drag button"));
+        assert!(!CEFARI_BRIDGE_SCRIPT.contains("header {"));
+        assert!(!CEFARI_BRIDGE_SCRIPT.contains("nav {"));
     }
 
     #[test]
