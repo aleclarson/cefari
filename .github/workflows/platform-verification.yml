@@ -115,6 +115,16 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install WinSW on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .verify | Out-Null
+          Invoke-WebRequest `
+            -Uri https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe `
+            -OutFile .verify/winsw.exe
+          "WINSW_PATH=$((Resolve-Path .verify/winsw.exe).Path)" >> $env:GITHUB_ENV
+
       - name: Run native service lifecycle smoke
         shell: bash
         env:
@@ -122,8 +132,8 @@ jobs:
           CEFARI_SERVICE_SMOKE_ARGS: ${{ runner.os == 'Windows' && inputs.windows_service_smoke_args || '' }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" && -z "${CEFARI_SERVICE_SMOKE_PROGRAM:-}" ]]; then
-            echo "skipping Windows service lifecycle smoke; provide windows_service_smoke_program"
-            exit 0
+            export CEFARI_SERVICE_SMOKE_PROGRAM="${SYSTEMROOT}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+            export CEFARI_SERVICE_SMOKE_ARGS='["-NoProfile","-ExecutionPolicy","Bypass","-Command","for (;;) { Start-Sleep -Seconds 60 }"]'
           fi
 
           cargo test -p cefari-core --test service_lifecycle -- --ignored --nocapture
