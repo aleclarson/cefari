@@ -47,7 +47,15 @@
 
 The service helpers wrap install, uninstall, start, stop, restart, and status operations through `service-manager`.
 
-Core tests verify that those helpers dispatch the expected service operations and service label through a fake `ServiceManager`. CI also verifies native service manager selection and the supported default manager level on macOS, Linux, and Windows. Real install/start/status/stop/uninstall service-manager behavior still needs platform smoke tests before service operations can be treated as fully verified.
+Core tests verify that those helpers dispatch the expected service operations and service label through a fake `ServiceManager`. CI also verifies native service manager selection and the supported default manager level on macOS, Linux, and Windows.
+
+Run native lifecycle verification on a disposable host with:
+
+```bash
+cargo test -p cefari-core --test service_lifecycle -- --ignored --nocapture
+```
+
+That ignored test installs, starts, checks, stops, and uninstalls a uniquely named test service using a shell-loop fixture suitable for macOS and Linux service managers. Windows lifecycle verification still needs a Windows-service-aware fixture binary or WinSW. Real install/start/status/stop/uninstall behavior still needs passing lifecycle smoke results on every supported platform before service operations can be treated as fully verified.
 
 ## Non-Goals
 
