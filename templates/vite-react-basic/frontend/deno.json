@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@deno/vite-plugin": "npm:@deno/vite-plugin@2.0.2",
     "@vitejs/plugin-react": "npm:@vitejs/plugin-react@6.0.2",
     "@cefari/app": "../../../packages/cefari-app/src/mod.ts",
     "vite": "npm:vite@8.0.16",
