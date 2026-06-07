@@ -2,8 +2,8 @@ use anyhow::Result;
 use cefari_core::{
     CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
     CefariIpcResult, ExternalUrlResult, FileResult, FilesCommand, NotificationCommand,
-    ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateCheckState, UpdateStateKind,
-    UpdateStateResult, WindowState,
+    ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult, UpdateCheckState,
+    UpdateStateKind, UpdateStateResult, WindowState,
 };
 
 #[derive(Debug, Default)]
@@ -19,6 +19,8 @@ pub trait NativeShellContext {
     fn open_external_url(&mut self, url: &str) -> Result<()>;
     fn update_state(&mut self) -> Result<UpdateStateResult>;
     fn update_check(&mut self) -> Result<UpdateCheckResult>;
+    fn update_apply(&mut self, update_id: Option<&str>) -> Result<UpdateApplyResult>;
+    fn update_restart(&mut self) -> Result<()>;
     fn service_status(&mut self) -> Result<ServiceStatusResult>;
     fn tray_restore_window(&mut self) -> Result<TrayResult>;
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult>;
@@ -90,6 +92,14 @@ fn dispatch_command(
             .update_check()
             .map(CefariIpcResult::UpdateCheck)
             .map_err(|error| unsupported_command(&error, "updateCheck")),
+        CefariIpcCommand::UpdateApply(request) => context
+            .update_apply(request.update_id.as_deref())
+            .map(CefariIpcResult::UpdateApply)
+            .map_err(|error| unsupported_command(&error, "updateApply")),
+        CefariIpcCommand::UpdateRestart => context
+            .update_restart()
+            .map(|()| CefariIpcResult::Empty)
+            .map_err(|error| unsupported_command(&error, "updateRestart")),
         CefariIpcCommand::ServiceStatus => context
             .service_status()
             .map(CefariIpcResult::ServiceStatus)
@@ -121,17 +131,34 @@ pub fn update_check_result(state: &UpdateCheckState) -> UpdateCheckResult {
     UpdateCheckResult {
         state: update_state_kind(state),
         version,
+        update_id: update_id_for_state(state),
+    }
+}
+
+pub fn update_apply_result(version: &str) -> UpdateApplyResult {
+    UpdateApplyResult {
+        state: UpdateStateKind::ReadyToRestart,
+        version: Some(version.to_owned()),
+        restart_required: true,
     }
 }
 
 fn update_state_kind(state: &UpdateCheckState) -> UpdateStateKind {
     match state {
         UpdateCheckState::NotConfigured => UpdateStateKind::NotConfigured,
-        UpdateCheckState::Ready | UpdateCheckState::Checking | UpdateCheckState::NoUpdate => {
-            UpdateStateKind::Current
-        }
+        UpdateCheckState::Ready | UpdateCheckState::NoUpdate => UpdateStateKind::Current,
+        UpdateCheckState::Checking => UpdateStateKind::Checking,
         UpdateCheckState::UpdateAvailable { .. } => UpdateStateKind::Available,
+        UpdateCheckState::Applying => UpdateStateKind::Applying,
+        UpdateCheckState::ReadyToRestart => UpdateStateKind::ReadyToRestart,
         UpdateCheckState::Failed { .. } => UpdateStateKind::Error,
+    }
+}
+
+fn update_id_for_state(state: &UpdateCheckState) -> Option<String> {
+    match state {
+        UpdateCheckState::UpdateAvailable { version } => Some(version.clone()),
+        _ => None,
     }
 }
 
@@ -170,8 +197,8 @@ mod tests {
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
         FileResult, FilesCommand, NotificationCommand, OpenExternalUrlRequest, ServiceStatusResult,
-        TrayResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult, WindowSetTitleRequest,
-        WindowState,
+        TrayResult, UpdateApplyRequest, UpdateApplyResult, UpdateCheckResult, UpdateStateKind,
+        UpdateStateResult, WindowSetTitleRequest, WindowState,
     };
 
     use super::{DesktopIpcDispatcher, NativeShellContext};
@@ -240,7 +267,22 @@ mod tests {
             Ok(UpdateCheckResult {
                 state: UpdateStateKind::Available,
                 version: Some("1.2.3".to_owned()),
+                update_id: Some("1.2.3".to_owned()),
             })
+        }
+
+        fn update_apply(&mut self, _update_id: Option<&str>) -> Result<UpdateApplyResult> {
+            self.calls.push("update_apply");
+            Ok(UpdateApplyResult {
+                state: UpdateStateKind::ReadyToRestart,
+                version: Some("1.2.3".to_owned()),
+                restart_required: true,
+            })
+        }
+
+        fn update_restart(&mut self) -> Result<()> {
+            self.calls.push("update_restart");
+            Ok(())
         }
 
         fn service_status(&mut self) -> Result<ServiceStatusResult> {
@@ -296,6 +338,10 @@ mod tests {
             }),
             CefariIpcCommand::UpdateState,
             CefariIpcCommand::UpdateCheck,
+            CefariIpcCommand::UpdateApply(UpdateApplyRequest {
+                update_id: Some("1.2.3".to_owned()),
+            }),
+            CefariIpcCommand::UpdateRestart,
             CefariIpcCommand::ServiceStatus,
             CefariIpcCommand::TrayRestoreWindow,
             CefariIpcCommand::Files(FilesCommand::AppDataDir),
@@ -324,6 +370,8 @@ mod tests {
                 "open_external_url",
                 "update_state",
                 "update_check",
+                "update_apply",
+                "update_restart",
                 "service_status",
                 "tray_restore_window",
                 "files_app_data_dir",

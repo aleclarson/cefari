@@ -7,6 +7,7 @@ import type {
   NotificationResult,
   ServiceStatusResult,
   TrayResult,
+  UpdateApplyResult,
   UpdateCheckResult,
   UpdateStateResult,
   WindowState,
@@ -81,6 +82,12 @@ export async function invokeUpdateCheck(
   command: CefariIpcCommand,
 ): Promise<UpdateCheckResult> {
   return (await invokeResult(command, "updateCheck")).payload;
+}
+
+export async function invokeUpdateApply(
+  command: CefariIpcCommand,
+): Promise<UpdateApplyResult> {
+  return (await invokeResult(command, "updateApply")).payload;
 }
 
 export async function invokeServiceStatus(

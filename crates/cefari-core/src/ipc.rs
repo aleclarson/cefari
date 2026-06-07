@@ -35,6 +35,8 @@ pub enum CefariIpcCommand {
     OpenExternalUrl(OpenExternalUrlRequest),
     UpdateState,
     UpdateCheck,
+    UpdateApply(UpdateApplyRequest),
+    UpdateRestart,
     ServiceStatus,
     TrayRestoreWindow,
     Notification(NotificationCommand),
@@ -50,6 +52,7 @@ pub enum CefariIpcResult {
     ExternalUrl(ExternalUrlResult),
     UpdateState(UpdateStateResult),
     UpdateCheck(UpdateCheckResult),
+    UpdateApply(UpdateApplyResult),
     ServiceStatus(ServiceStatusResult),
     Tray(TrayResult),
     Notification(NotificationResult),
@@ -105,6 +108,21 @@ pub struct UpdateStateResult {
 pub struct UpdateCheckResult {
     pub state: UpdateStateKind,
     pub version: Option<String>,
+    pub update_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateApplyRequest {
+    pub update_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateApplyResult {
+    pub state: UpdateStateKind,
+    pub version: Option<String>,
+    pub restart_required: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -112,7 +130,10 @@ pub struct UpdateCheckResult {
 pub enum UpdateStateKind {
     NotConfigured,
     Current,
+    Checking,
     Available,
+    Applying,
+    ReadyToRestart,
     Error,
 }
 

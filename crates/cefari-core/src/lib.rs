@@ -29,6 +29,6 @@ pub use services::{
     uninstall_service,
 };
 pub use updates::{
-    AvailableUpdate, PreparedUpdateCheck, UpdateCheckConfig, UpdateCheckState, check_for_update,
-    install_update,
+    AvailableUpdate, PendingUpdate, PreparedUpdateCheck, UpdateCheckConfig, UpdateCheckState,
+    check_for_update, install_update, update_id,
 };

@@ -9,13 +9,17 @@ The initial command surface reserves typed payloads for:
 - open logs
 - reload UI
 - validated external URL opening
-- update state and update check
+- update state, update check, update apply, and update restart
 - daemon service status
 - tray restore-window
 - notification permission/send commands
 - sandboxed app-data file commands
 
-Notification commands are protocol-reserved until the dispatcher exposes notification behavior. They may return an `unsupported` error while the transport and dispatcher are being wired.
+Update apply commands install the native update cached by the most recent
+successful update check. Frontend code does not pass update URLs, signatures, or
+installer paths through IPC. Notification commands are protocol-reserved until
+the dispatcher exposes notification behavior. They may return an `unsupported`
+error while the transport and dispatcher are being wired.
 
 File commands are rooted in Cefari's managed app-data directory. They support
 text and base64 reads/writes, directory listing, directory creation, removal,

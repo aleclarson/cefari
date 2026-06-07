@@ -39,6 +39,10 @@ cargo test -p cefari-cli
 cargo test -p cefari-desktop desktop_notifications
 deno task --cwd templates/vite-react-basic/frontend check
 actionlint docs/examples/cefari-release-workflow.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml
+cargo test -p cefari-core ipc::tests::generated_typescript_bindings_are_current
+cargo test -p cefari-desktop
+deno task --cwd packages/cefari-app check
+deno task --cwd packages/cefari-app test
 ```
 
 The docs intentionally avoid listing dependency versions, exhaustive internal

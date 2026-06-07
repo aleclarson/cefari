@@ -18,7 +18,7 @@ export type { WindowApi } from "./window.ts";
 export { windowControls as window } from "./window.ts";
 export type { ShellApi } from "./shell.ts";
 export { shell } from "./shell.ts";
-export type { UpdatesApi } from "./updates.ts";
+export type { UpdateApplyOptions, UpdatesApi } from "./updates.ts";
 export { updates } from "./updates.ts";
 export type { ServiceApi } from "./service.ts";
 export { service } from "./service.ts";

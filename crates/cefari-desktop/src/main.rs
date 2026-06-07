@@ -1,4 +1,7 @@
-use std::{fs, process::ExitCode};
+use std::{
+    fs,
+    process::{Command, ExitCode},
+};
 
 use anyhow::{Context, Result};
 use cefari_core::{
@@ -345,8 +348,21 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
 
     fn update_check(&mut self) -> Result<UpdateCheckResult> {
         self.runtime_operations
-            .update_state()
+            .update_check()
             .map(|state| desktop_ipc::update_check_result(&state))
+    }
+
+    fn update_apply(&mut self, update_id: Option<&str>) -> Result<cefari_core::UpdateApplyResult> {
+        self.runtime_operations
+            .apply_update(update_id)
+            .map(|update| desktop_ipc::update_apply_result(&update.version))
+    }
+
+    fn update_restart(&mut self) -> Result<()> {
+        restart_current_executable()?;
+        *self.window = None;
+        self.should_exit = true;
+        Ok(())
     }
 
     fn service_status(&mut self) -> Result<ServiceStatusResult> {
@@ -363,6 +379,15 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
         desktop_files::AppDataFs::open(self.paths)?.dispatch(command)
     }
+}
+
+fn restart_current_executable() -> Result<()> {
+    let current_exe =
+        std::env::current_exe().context("failed to resolve current executable for restart")?;
+    Command::new(current_exe)
+        .spawn()
+        .context("failed to spawn replacement Cefari process")?;
+    Ok(())
 }
 
 impl DesktopShellContext<'_> {

@@ -62,6 +62,8 @@ The generated command union currently includes:
 - `openExternalUrl`
 - `updateState`
 - `updateCheck`
+- `updateApply`
+- `updateRestart`
 - `serviceStatus`
 - `trayRestoreWindow`
 - `notification`
@@ -73,8 +75,11 @@ dispatcher supports them. At the moment:
 - `reloadUi` is typed and wrapped, but the dispatcher returns `unsupported`.
 - `notification` commands are typed and wrapped, but the dispatcher returns
   `unsupported`.
-- There is no generated command for applying an update, restarting the app, or
-  applying an update and restarting.
+
+`updateApply` applies the native update cached by `updateCheck`. It accepts an
+optional `updateId` returned by `updateCheck`; the desktop runtime rejects a
+mismatched id. `updateRestart` spawns the current executable and exits the
+current runtime process.
 
 The `files` command is typed and dispatched. It is rooted in Cefari's managed
 app-data directory and rejects absolute paths and parent traversal before

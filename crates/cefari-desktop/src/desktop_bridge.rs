@@ -234,8 +234,8 @@ mod tests {
     use anyhow::Result;
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
-        FileResult, FilesCommand, ServiceStatusResult, TrayResult, UpdateCheckResult,
-        UpdateStateKind, UpdateStateResult, WindowState,
+        FileResult, FilesCommand, ServiceStatusResult, TrayResult, UpdateApplyResult,
+        UpdateCheckResult, UpdateStateKind, UpdateStateResult, WindowState,
     };
 
     use super::{BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CEFARI_DEFAULT_STYLES, CefariBridge};
@@ -286,7 +286,20 @@ mod tests {
             Ok(UpdateCheckResult {
                 state: UpdateStateKind::Current,
                 version: None,
+                update_id: None,
             })
+        }
+
+        fn update_apply(&mut self, _update_id: Option<&str>) -> Result<UpdateApplyResult> {
+            Ok(UpdateApplyResult {
+                state: UpdateStateKind::ReadyToRestart,
+                version: Some("1.2.3".to_owned()),
+                restart_required: true,
+            })
+        }
+
+        fn update_restart(&mut self) -> Result<()> {
+            Ok(())
         }
 
         fn service_status(&mut self) -> Result<ServiceStatusResult> {

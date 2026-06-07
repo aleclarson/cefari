@@ -18,6 +18,16 @@ await cefari.shell.openExternalUrl("https://example.com");
 await cefari.files.writeJson("state.json", { ready: true });
 ```
 
+Apply a checked update from an explicit user action:
+
+```ts
+const update = await cefari.updates.check();
+
+if (update.state === "available") {
+  await cefari.updates.applyAndRestart({ updateId: update.updateId });
+}
+```
+
 ## API Shape
 
 - `cefari.isAvailable()` reports whether the native bridge exists.

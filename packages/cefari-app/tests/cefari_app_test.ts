@@ -56,7 +56,15 @@ Deno.test("wraps typed namespace commands", async () => {
   assertEquals(await cefari.updates.check(), {
     state: "available",
     version: "1.2.3",
+    updateId: "1.2.3",
   });
+  assertEquals(await cefari.updates.apply({ updateId: "1.2.3" }), {
+    state: "readyToRestart",
+    version: "1.2.3",
+    restartRequired: true,
+  });
+  await cefari.updates.restart();
+  await cefari.updates.applyAndRestart();
   assertEquals(await cefari.service.status(), { status: "running" });
   assertEquals(await cefari.tray.restoreWindow(), { restored: true });
   assertEquals(await cefari.notifications.permissionState(), { allowed: true });
@@ -91,6 +99,10 @@ Deno.test("wraps typed namespace commands", async () => {
     },
     { command: "updateState" },
     { command: "updateCheck" },
+    { command: "updateApply", payload: { updateId: "1.2.3" } },
+    { command: "updateRestart" },
+    { command: "updateApply", payload: { updateId: null } },
+    { command: "updateRestart" },
     { command: "serviceStatus" },
     { command: "trayRestoreWindow" },
     {
@@ -264,8 +276,19 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
     case "updateCheck":
       return ok({
         result: "updateCheck",
-        payload: { state: "available", version: "1.2.3" },
+        payload: { state: "available", version: "1.2.3", updateId: "1.2.3" },
       });
+    case "updateApply":
+      return ok({
+        result: "updateApply",
+        payload: {
+          state: "readyToRestart",
+          version: "1.2.3",
+          restartRequired: true,
+        },
+      });
+    case "updateRestart":
+      return ok({ result: "empty" });
     case "serviceStatus":
       return ok({
         result: "serviceStatus",

@@ -2,6 +2,8 @@ use cargo_packager_updater::{Config, Update, check_update, semver::Version};
 
 use crate::{Error, Result};
 
+pub type PendingUpdate = Update;
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UpdateCheckConfig {
     pub current_version: String,
@@ -60,11 +62,14 @@ pub enum UpdateCheckState {
     Checking,
     NoUpdate,
     UpdateAvailable { version: String },
+    Applying,
+    ReadyToRestart,
     Failed { message: String },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AvailableUpdate {
+    pub id: String,
     pub version: String,
     pub current_version: String,
     pub target: String,
@@ -75,6 +80,7 @@ pub struct AvailableUpdate {
 impl From<&Update> for AvailableUpdate {
     fn from(update: &Update) -> Self {
         Self {
+            id: update_id(update),
             version: update.version.clone(),
             current_version: update.current_version.clone(),
             target: update.target.clone(),
@@ -115,6 +121,11 @@ pub fn install_update(update: &Update) -> Result<()> {
             operation: "download-and-install",
             source,
         })
+}
+
+#[must_use]
+pub fn update_id(update: &Update) -> String {
+    update.version.clone()
 }
 
 #[cfg(test)]
