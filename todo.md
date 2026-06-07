@@ -2,11 +2,10 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 133 of the 180 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 11 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 5 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 134 of the 181 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 9 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 4 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
-- 1 under native shell implementation.
 - 1 under CI coverage.
-- 4 under release automation.
+- 3 under release automation.
 - 3 under desktop runtime behavior verification.
 - 2 under package and update behavior verification.
 
@@ -72,10 +71,11 @@ Nesting audit: 133 of the 180 checklist entries are already nested child tasks u
   - [x] Initialize runtime logging through `cefari-core`.
   - [x] Implement single-instance locking.
   - [x] Define startup error reporting behavior before the UI is available.
-- [ ] Implement the native shell.
+- [x] Implement the native shell.
   - [x] Create the Tao event loop.
   - [x] Create the main application window.
-  - [ ] Initialize CEF in the desktop process.
+  - [x] Initialize CEF in the desktop process.
+  - [x] Provision CMake for local and CI `cefari-desktop --features cef` builds.
   - [x] Load packaged UI resources promptly at startup.
   - [x] Add a fallback or diagnostic view for missing UI resources.
 - [x] Implement desktop integration.
@@ -152,7 +152,7 @@ Nesting audit: 133 of the 180 checklist entries are already nested child tasks u
   - [ ] Add update artifact generation and publishing jobs.
   - [x] Verify package assembly contains generated UI, daemon, CEF preparation metadata, and separate CLI output in CI.
   - [ ] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.
-  - [ ] Verify `cefari-cli` is built, versioned, and distributed separately from desktop app packages.
+  - [x] Verify `cefari-cli` is built, versioned, and distributed separately from desktop app packages.
 
 ## 6. Keep Dependencies Honest
 

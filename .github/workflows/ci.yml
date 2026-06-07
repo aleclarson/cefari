@@ -25,11 +25,17 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Install CEF build tools
+        run: brew install cmake ninja
+
       - name: Check formatting
         run: cargo fmt --all --check
 
       - name: Check workspace
         run: cargo check --workspace
+
+      - name: Check desktop CEF feature
+        run: cargo check -p cefari-desktop --features cef
 
       - name: Test workspace
         run: cargo test --workspace
@@ -80,7 +86,21 @@ jobs:
           deno-version: v2.x
 
       - name: Build cefari CLI
-        run: cargo build -p cefari-cli
+        run: cargo build -p cefari-cli --release
+
+      - name: Assemble CLI distribution
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            cli_binary="target/release/cefari.exe"
+          else
+            cli_binary="target/release/cefari"
+          fi
+
+          test -f "$cli_binary"
+          "$cli_binary" --version | grep -E '^cefari [0-9]+\.[0-9]+\.[0-9]+'
+          mkdir -p .ci/cefari-cli-dist
+          cp "$cli_binary" .ci/cefari-cli-dist/
 
       - name: Create sample project
         run: cargo run -p cefari-cli -- init .ci/cefari-sample --name "CI Package Sample"
@@ -123,4 +143,7 @@ jobs:
       - name: Verify CLI is distributed separately
         shell: bash
         run: |
-          test -f target/debug/cefari || test -f target/debug/cefari.exe
+          test -f .ci/cefari-cli-dist/cefari || test -f .ci/cefari-cli-dist/cefari.exe
+          grep -q '"desktop_binary": "cefari-desktop"' .ci/cefari-sample/dist/package/manifest.json
+          ! grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json
+          ! grep -q 'cefari-cli-dist' .ci/cefari-sample/dist/package/manifest.json

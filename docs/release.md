@@ -24,6 +24,8 @@ CI runs package assembly on macOS, Linux, and Windows. Those jobs create a sampl
 
 Daemon package inputs include the copied source entry and the compiled `cefari-daemon` executable produced by `deno compile`; package metadata records the executable path explicitly. CEF package inputs include the downloaded resource directory and verified `archive.json`.
 
+The package assembly jobs build the `cefari` CLI in release mode, verify `cefari --version`, and copy the binary into a separate CI distribution directory. Package manifest checks assert that desktop app metadata names `cefari-desktop` and does not include the CLI distribution path.
+
 Native installer validation is still separate from package assembly validation and remains blocked on downloaded CEF binaries and real package contents.
 
 ## Signing

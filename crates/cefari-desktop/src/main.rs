@@ -12,6 +12,7 @@ use tao::{
 use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 
+mod desktop_cef;
 mod desktop_menu;
 mod desktop_tray;
 mod desktop_ui;
@@ -36,9 +37,19 @@ fn main() -> ExitCode {
 
 fn run() -> Result<()> {
     let paths = RuntimePaths::resolve(&AppIdentity::cefari())?;
+    let instance = acquire_single_instance(&paths)?;
+    let log_guard = init_logging(&paths)?;
+
+    #[cfg(feature = "cef")]
+    let cef_runtime = desktop_cef::initialize()?;
+
+    #[cfg(not(feature = "cef"))]
+    let cef_runtime = desktop_cef::initialize();
+
     let guards = RuntimeGuards {
-        _instance: acquire_single_instance(&paths)?,
-        _log_guard: init_logging(&paths)?,
+        _instance: instance,
+        _log_guard: log_guard,
+        cef_runtime,
     };
     let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
     let update_state = runtime_operations.update_check_config();
@@ -58,6 +69,7 @@ fn run() -> Result<()> {
 struct RuntimeGuards {
     _instance: SingleInstance,
     _log_guard: WorkerGuard,
+    cef_runtime: desktop_cef::CefRuntime,
 }
 
 #[derive(Debug)]
@@ -171,6 +183,8 @@ fn run_event_loop(
                 *control_flow = ControlFlow::Exit;
             }
             Event::MainEventsCleared => {
+                guards.cef_runtime.pump_message_loop();
+
                 if let Some(window) = &window {
                     window.request_redraw();
                 }

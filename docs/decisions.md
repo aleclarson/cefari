@@ -11,7 +11,7 @@ Cefari currently verifies the workspace on macOS first. The desktop startup path
 
 Before the UI is available, desktop startup failures are reported to stderr with a stable `Cefari failed to start before the UI was available` prefix and, when tracing has already initialized, to the runtime log.
 
-The desktop process now resolves `frontend/index.html` from platform-appropriate package resource directories or the runtime resource directory before the main window is created. If the UI entry is missing, startup writes a cache-backed diagnostic HTML file and marks the window title as `Cefari - Missing UI Resources`. CEF initialization is still a separate native shell task.
+The desktop process now resolves `frontend/index.html` from platform-appropriate package resource directories or the runtime resource directory before the main window is created. If the UI entry is missing, startup writes a cache-backed diagnostic HTML file and marks the window title as `Cefari - Missing UI Resources`. When built with the `cef` feature, desktop startup also dispatches CEF subprocesses, initializes CEF with an external message pump, pumps CEF work from the Tao event loop, and shuts CEF down when the native loop exits.
 
 External URL and file open requests are routed through the desktop-only `open` dependency. URL helpers currently allow `http`, `https`, and `mailto` schemes; file helpers validate local path existence before launching the platform opener.
 
@@ -53,7 +53,7 @@ Final packaged releases should not rely on a developer Deno installation or trea
 
 The workspace currently pins `cef = "148.4.0"`.
 
-The dependency is optional in `cefari-desktop` until CEF initialization is implemented and verified in the desktop process.
+The dependency is optional in `cefari-desktop` until desktop startup and browser loading are verified with packaged resources.
 
 CEF preparation is owned by `cefari-cli`. The selected archive version is `148.0.10`, matching the pinned Rust `cef = "148.4.0"` release line. The CLI uses `download-cef` to select the target-specific minimal archive, verify SHA1, extract resources, and cache downloads.
 

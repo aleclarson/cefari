@@ -19,6 +19,7 @@ use project::ProjectConfig;
 
 #[derive(Debug, Parser)]
 #[command(name = "cefari")]
+#[command(version)]
 #[command(about = "Create, develop, build, package, sign, and release Cefari apps.")]
 pub struct Cli {
     #[command(subcommand)]

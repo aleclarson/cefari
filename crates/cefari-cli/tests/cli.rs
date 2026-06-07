@@ -22,6 +22,20 @@ fn help_shows_planned_commands() {
 }
 
 #[test]
+fn version_reports_package_version() {
+    let output = cefari()
+        .arg("--version")
+        .output()
+        .expect("cefari should run");
+
+    assert_success(&output);
+    assert_eq!(
+        stdout(&output).trim(),
+        format!("cefari {}", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
 fn init_creates_project_scaffold() {
     let root = temp_project_path();
     let output = cefari()
