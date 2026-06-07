@@ -224,6 +224,7 @@ product_name = "{display_name}"
     )?;
     write_file(&path.join("frontend/index.html"), FRONTEND_TEMPLATE)?;
     write_file(&path.join("daemon/main.ts"), DAEMON_TEMPLATE)?;
+    write_cefari_skill(path)?;
     write_file(
         &path.join("README.md"),
         &format!(
@@ -299,7 +300,25 @@ pub(crate) fn run_process(command: &mut ProcessCommand, description: &str) -> Re
 }
 
 fn write_file(path: &Path, contents: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory at {}", parent.display()))?;
+    }
+
     fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
+}
+
+fn write_cefari_skill(project_dir: &Path) -> Result<()> {
+    for (relative_path, contents) in CEFARI_SKILL_FILES {
+        write_file(
+            &project_dir
+                .join(".agents/skills/cefari")
+                .join(relative_path),
+            contents,
+        )?;
+    }
+
+    Ok(())
 }
 
 fn default_display_name(path: &Path) -> String {
@@ -352,6 +371,38 @@ const FRONTEND_TEMPLATE: &str = r#"<!doctype html>
 
 const DAEMON_TEMPLATE: &str = r#"console.log("cefari daemon starting");
 "#;
+
+const CEFARI_SKILL_FILES: &[(&str, &str)] = &[
+    ("SKILL.md", include_str!("../../../skills/cefari/SKILL.md")),
+    (
+        "agents/openai.yaml",
+        include_str!("../../../skills/cefari/agents/openai.yaml"),
+    ),
+    (
+        "references/project-creation.md",
+        include_str!("../../../skills/cefari/references/project-creation.md"),
+    ),
+    (
+        "references/template-authoring.md",
+        include_str!("../../../skills/cefari/references/template-authoring.md"),
+    ),
+    (
+        "references/release-workflows.md",
+        include_str!("../../../skills/cefari/references/release-workflows.md"),
+    ),
+    (
+        "references/packaging.md",
+        include_str!("../../../skills/cefari/references/packaging.md"),
+    ),
+    (
+        "references/daemon-behavior.md",
+        include_str!("../../../skills/cefari/references/daemon-behavior.md"),
+    ),
+    (
+        "references/troubleshooting.md",
+        include_str!("../../../skills/cefari/references/troubleshooting.md"),
+    ),
+];
 
 #[cfg(test)]
 mod tests {

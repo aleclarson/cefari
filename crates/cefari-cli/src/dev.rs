@@ -300,7 +300,7 @@ fn write_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<(
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Write};
+    use std::io::{ErrorKind, Read, Write};
 
     use super::{StaticDevServer, request_path, static_file_path, substitute_frontend_port};
 
@@ -344,10 +344,7 @@ mod tests {
             .write_all(b"GET / HTTP/1.1\r\nhost: localhost\r\n\r\n")
             .expect("request should be sent");
 
-        let mut response = String::new();
-        stream
-            .read_to_string(&mut response)
-            .expect("response should be readable");
+        let response = read_response(&mut stream);
         assert!(response.contains("200 OK"));
         assert!(response.contains("hello cefari"));
 
@@ -361,5 +358,25 @@ mod tests {
             .expect("system time should be after epoch")
             .as_nanos();
         std::env::temp_dir().join(format!("cefari-dev-server-test-{label}-{suffix}"))
+    }
+
+    fn read_response(stream: &mut std::net::TcpStream) -> String {
+        let mut response = Vec::new();
+        let mut buffer = [0; 1024];
+
+        loop {
+            match stream.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(bytes) => response.extend_from_slice(&buffer[..bytes]),
+                Err(error)
+                    if error.kind() == ErrorKind::ConnectionReset && !response.is_empty() =>
+                {
+                    break;
+                }
+                Err(error) => panic!("response should be readable: {error}"),
+            }
+        }
+
+        String::from_utf8(response).expect("response should be utf-8")
     }
 }

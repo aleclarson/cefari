@@ -51,6 +51,11 @@ fn init_creates_project_scaffold() {
     assert!(root.join("frontend/index.html").exists());
     assert!(root.join("daemon/main.ts").exists());
     assert!(root.join("README.md").exists());
+    assert!(root.join(".agents/skills/cefari/SKILL.md").exists());
+    assert!(
+        root.join(".agents/skills/cefari/references/project-creation.md")
+            .exists()
+    );
 
     let manifest = fs::read_to_string(root.join("cefari.toml")).expect("manifest should exist");
     assert!(manifest.contains(r#"project_name = "example-app""#));
