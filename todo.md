@@ -158,9 +158,10 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Update `README.md` to reflect actual commands and crate paths.
   - [x] Document runtime versus CLI responsibility boundaries in contributor-facing docs.
 - [ ] Document developer workflows.
-  - [ ] Add CLI usage documentation for each `cefari` command.
+  - [x] Add CLI usage documentation for each implemented `cefari` command.
+  - [ ] Add CLI usage documentation for `dev`, `build`, package, signing, notarization, and update commands once implemented.
   - [ ] Add development setup documentation for CEF preparation.
-  - [ ] Add troubleshooting documentation for common `cefari doctor` failures.
+  - [x] Add troubleshooting documentation for common `cefari doctor` failures.
 - [ ] Document release workflows.
   - [ ] Add packaging documentation.
   - [ ] Add signing and notarization documentation.
