@@ -175,6 +175,7 @@ fn package_creates_assembly_manifest_after_build() {
 
     let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
         .expect("package metadata should exist");
+    assert!(metadata.contains(r#"name = "dev.cefari.package-app""#));
     assert!(metadata.contains("build/cef/resources"));
 
     fs::remove_dir_all(root).expect("temp project should be removable");

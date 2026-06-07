@@ -1,9 +1,17 @@
-use std::{fs, path::Path, process::Command};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::{Context, Result};
+use serde::Serialize;
 
 use crate::{
-    build::daemon_executable_name, cef, project::ProjectConfig, run_process, tool_available,
+    build::{daemon_executable_name, workspace_manifest},
+    cef,
+    project::ProjectConfig,
+    run_process, tool_available,
 };
 
 pub fn package_project(project_dir: &Path) -> Result<()> {
@@ -20,7 +28,7 @@ pub fn package_project(project_dir: &Path) -> Result<()> {
         )
     })?;
 
-    write_package_metadata(&package_dir, &project, &cef_resources_dir)?;
+    write_package_metadata(&package_dir, &project, &build_dir, &cef_resources_dir)?;
     write_package_manifest(&package_dir, &project, &build_dir, &cef_resources_dir)?;
 
     println!("prepared package assembly at {}", package_dir.display());
@@ -50,22 +58,36 @@ fn ensure_build_artifacts(build_dir: &Path) -> Result<()> {
 fn write_package_metadata(
     package_dir: &Path,
     project: &ProjectConfig,
+    build_dir: &Path,
     cef_resources_dir: &Path,
 ) -> Result<()> {
-    let metadata = format!(
-        r#"[package]
-product_name = "{}"
-identifier = "{}"
-
-[resources]
-frontend = "build/frontend"
-daemon = "build/daemon"
-cef = "{}"
-"#,
-        project.package.product_name,
-        project.app.identifier,
-        normalize(cef_resources_dir)
-    );
+    let metadata = CargoPackagerConfig {
+        name: project.app.identifier.clone(),
+        product_name: project.package.product_name.clone(),
+        version: env!("CARGO_PKG_VERSION").to_owned(),
+        identifier: Some(project.app.identifier.clone()),
+        binaries_dir: Some(workspace_target_dir()),
+        binaries: vec![CargoPackagerBinary {
+            path: desktop_binary_name().into(),
+            main: true,
+        }],
+        resources: vec![
+            CargoPackagerResource {
+                src: build_dir.join("frontend"),
+                target: "frontend".into(),
+            },
+            CargoPackagerResource {
+                src: build_dir.join("daemon"),
+                target: "daemon".into(),
+            },
+            CargoPackagerResource {
+                src: cef_resources_dir.to_path_buf(),
+                target: "cef".into(),
+            },
+        ],
+    };
+    let metadata =
+        toml::to_string_pretty(&metadata).context("failed to encode package metadata")?;
 
     fs::write(package_dir.join("cargo-packager.toml"), metadata).with_context(|| {
         format!(
@@ -73,6 +95,29 @@ cef = "{}"
             package_dir.join("cargo-packager.toml").display()
         )
     })
+}
+
+#[derive(Debug, Serialize)]
+struct CargoPackagerConfig {
+    name: String,
+    product_name: String,
+    version: String,
+    identifier: Option<String>,
+    binaries_dir: Option<PathBuf>,
+    binaries: Vec<CargoPackagerBinary>,
+    resources: Vec<CargoPackagerResource>,
+}
+
+#[derive(Debug, Serialize)]
+struct CargoPackagerBinary {
+    path: PathBuf,
+    main: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct CargoPackagerResource {
+    src: PathBuf,
+    target: PathBuf,
 }
 
 fn write_package_manifest(
@@ -159,4 +204,19 @@ impl PackageManifest {
 
 fn normalize(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn workspace_target_dir() -> PathBuf {
+    workspace_manifest()
+        .parent()
+        .expect("workspace manifest should have a parent")
+        .join("target/debug")
+}
+
+fn desktop_binary_name() -> &'static str {
+    if cfg!(windows) {
+        "cefari-desktop.exe"
+    } else {
+        "cefari-desktop"
+    }
 }
