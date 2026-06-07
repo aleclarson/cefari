@@ -62,7 +62,34 @@ Clarification note: the tasks below turn the requested outcomes into implementat
   - [ ] Document platform-specific permissions, fallbacks, and unsupported notification behavior.
   - [ ] Add tests or platform smoke checks for notification request construction and graceful failure paths.
 
-## 6. Verification
+## 6. CEF-To-Rust IPC Bridge
+
+- [ ] Add a minimal typed CEF-to-Rust IPC bridge using `specta`.
+  - [ ] Define one authoritative Rust command protocol for native app capabilities.
+  - [ ] Derive `serde` and `specta::Type` for IPC commands, responses, events, and errors.
+  - [ ] Export generated TypeScript definitions for templates and app frontends.
+  - [ ] Add a small typed frontend wrapper around `window.cefari.invoke` and `window.cefari.on`.
+  - [ ] Keep generated TypeScript types as the frontend contract instead of hand-written command strings.
+- [ ] Route Rust-side and CEF-side native actions through one dispatcher.
+  - [ ] Add a dispatcher that accepts typed IPC commands and operates on the native shell context.
+  - [ ] Move menu, tray, window, update, service, logs, external-open, and notification-capable actions behind the dispatcher as they become available.
+  - [ ] Ensure Rust-originated menu/tray actions call the same dispatcher as CEF-originated IPC requests.
+  - [ ] Add checks or tests so no supported native shell action exists only as a Rust-only code path.
+- [ ] Define the initial native command surface.
+  - [ ] Include app quit, window show/focus/close/set-title, open logs, open validated external URL, update state/check, service status, and tray restore-window commands.
+  - [ ] Model unsupported platform behavior as typed errors rather than silent no-ops.
+  - [ ] Reserve notification commands for the `user-notify` integration without requiring notification support in the first IPC slice.
+- [ ] Add IPC security and validation rules.
+  - [ ] Inject the Cefari bridge only into trusted packaged app origins and explicitly allowed dev origins.
+  - [ ] Validate all command arguments on the Rust side.
+  - [ ] Avoid raw shell, arbitrary filesystem, process, or OS-handle access through IPC.
+  - [ ] Keep external URL opening limited to approved schemes such as `http`, `https`, and `mailto`.
+- [ ] Verify the IPC protocol.
+  - [ ] Add serde round-trip tests for request, response, event, and error payloads.
+  - [ ] Verify generated `specta` TypeScript definitions compile in the Vite React template.
+  - [ ] Verify unknown, unsupported, denied, and invalid commands return typed errors.
+
+## 7. Verification
 
 - [ ] Verify a freshly generated project uses white-label executable names end to end.
 - [ ] Verify `templates/vite-react-basic/` remains runnable with the local Cefari build after the release workflow and skill-copy changes.
