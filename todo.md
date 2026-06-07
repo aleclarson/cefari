@@ -2,10 +2,10 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 13 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
+Nesting audit: 14 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
 
 - 1 under native shell implementation.
-- 1 under build orchestration.
+- 2 under build orchestration.
 - 1 under package assembly.
 - 1 under CI coverage.
 - 4 under release automation.
@@ -114,6 +114,7 @@ Nesting audit: 13 currently unchecked checklist items are dependent child tasks 
   - [x] Implement `cefari build`.
   - [x] Build frontend artifacts.
   - [x] Build Deno daemon artifacts.
+  - [ ] Compile the Deno daemon entry into a packaged daemon executable.
   - [x] Build the Rust desktop app.
   - [x] Implement CEF preparation manifest as a CLI-owned step.
   - [ ] Implement CEF binary download/cache population as a CLI-owned step.
@@ -208,12 +209,12 @@ Nesting audit: 13 currently unchecked checklist items are dependent child tasks 
 - [x] Decide supported operating systems and platform priority.
 - [x] Decide the frontend stack expected by `cefari init`.
 - [x] Decide the initial Deno daemon build output contract.
-- [ ] Decide the final Deno daemon build output contract for packaged releases.
+- [x] Decide the final Deno daemon build output contract for packaged releases.
 - [x] Decide the initial Deno daemon project shape.
 - [x] Decide CEF version pinning.
 - [x] Decide CEF download source.
 - [x] Decide when to make the `cef` dependency non-optional in `cefari-desktop`.
 - [x] Decide package identifiers, signing identities, and notarization requirements.
 - [x] Decide update server/artifact hosting expectations.
-- [ ] Decide whether `cefari-cli` should support plugins or project hooks.
+- [x] Decide whether `cefari-cli` should support plugins or project hooks.
 - [x] Decide compatibility promises for generated project templates.
