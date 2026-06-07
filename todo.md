@@ -53,7 +53,16 @@ Clarification note: the tasks below turn the requested outcomes into implementat
   - [ ] Add tests that generated projects contain `.agents/skills/cefari/SKILL.md`.
   - [ ] Ensure template projects also include or receive the Cefari skill copy path.
 
-## 5. Verification
+## 5. Advanced OS Notifications
+
+- [ ] Add `user-notify` for advanced OS notification support.
+  - [ ] Add `user-notify` to the appropriate runtime or desktop crate without pulling it into CLI-only code.
+  - [ ] Define a small Cefari notification abstraction for user-visible desktop notifications.
+  - [ ] Wire notification support into desktop runtime flows that need OS-level user feedback.
+  - [ ] Document platform-specific permissions, fallbacks, and unsupported notification behavior.
+  - [ ] Add tests or platform smoke checks for notification request construction and graceful failure paths.
+
+## 6. Verification
 
 - [ ] Verify a freshly generated project uses white-label executable names end to end.
 - [ ] Verify `templates/vite-react-basic/` remains runnable with the local Cefari build after the release workflow and skill-copy changes.
