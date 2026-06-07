@@ -15,11 +15,14 @@ directories.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 service-manager.workspace = true
+specta = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 service-manager.workspace = true
+specta-serde.workspace = true
+specta-typescript.workspace = true
 
 [lints]
 workspace = true

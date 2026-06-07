@@ -60,6 +60,7 @@ thiserror = "2.0.18"
 service-manager = "0.11.0"
 cargo-packager-updater = "0.2.3"
 cargo-packager-resource-resolver = "0.1.2"
+specta = "2.0.0-rc.25"
 ```
 
 ### `cefari-desktop`
@@ -188,6 +189,7 @@ Project packages use the app's machine-readable `project_name` from `cefari.toml
 | `cargo-packager-updater`           | `cefari-core` runtime dependency                              |
 | `cargo-packager-resource-resolver` | `cefari-core` runtime dependency, used by desktop app          |
 | `service-manager`                  | `cefari-core` runtime dependency                              |
+| `specta`                           | `cefari-core`; Rust-to-TypeScript IPC contract types           |
 | `tao` / `cef`                      | `cefari-desktop` only                                         |
 | `muda` / `tray-icon`               | `cefari-desktop` dependencies                                 |
 | `user-notify`                      | `cefari-desktop`; Cefari-owned notification abstraction        |

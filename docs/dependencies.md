@@ -15,8 +15,11 @@ Allowed current runtime dependencies:
 - `cargo-packager-resource-resolver`
 - `cargo-packager-updater`
 - `service-manager`
+- `specta`
 
 `cefari-core` must not depend on CLI orchestration crates such as `clap`, `xshell`, `duct`, `camino`, or `toml`. It must not depend on desktop windowing or browser crates such as `tao` or `cef`.
+
+`specta` is allowed in `cefari-core` because the Rust IPC contract is a runtime-safe shared type boundary. `specta-serde` and `specta-typescript` are dev-only export dependencies used to verify the checked-in TypeScript bindings.
 
 ## Desktop App
 

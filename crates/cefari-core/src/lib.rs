@@ -5,6 +5,7 @@
 //! initialization, and developer orchestration stay outside this crate.
 
 pub mod config;
+pub mod ipc;
 pub mod logging;
 pub mod paths;
 pub mod resources;
