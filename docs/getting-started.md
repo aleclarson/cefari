@@ -100,7 +100,7 @@ see [Automated Deployment](guides/deployment.md).
 - [Cefari IPC Protocol](ipc.md): typed Rust-to-CEF native action protocol.
 - [TypeScript App Guide](typescript/index.md): task-oriented `@cefari/app`
   usage from frontend code.
-- [Desktop Notifications](notifications.md): runtime-owned OS notification
+- [Notification Behavior](notifications.md): runtime-owned OS notification
   boundary.
 
 ## Claim Verification

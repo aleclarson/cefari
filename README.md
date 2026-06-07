@@ -50,8 +50,8 @@ The repository is split into:
   dependency boundaries.
 - [Cefari IPC Protocol](docs/ipc.md): Specta-generated Rust-to-TypeScript native
   action contract.
-- [Desktop Notifications](docs/notifications.md): OS notification ownership and
-  runtime behavior.
+- [Runtime Notifications](docs/runtime/notifications.md): notification ownership
+  and runtime contributor boundaries.
 - [Documentation Verification](docs/verification.md): evidence used to keep the
   docs aligned with the current repository.
 

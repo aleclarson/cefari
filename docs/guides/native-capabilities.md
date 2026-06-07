@@ -16,9 +16,6 @@ The desktop runtime owns:
 - daemon service status and lifecycle helpers
 - OS notification setup
 
-Shared runtime helpers live in `cefari-core`; native shell wiring lives in
-`cefari-desktop`.
-
 ## IPC Contract
 
 Cefari's typed IPC payloads are defined in Rust and exported to TypeScript with
@@ -29,9 +26,9 @@ generated TypeScript types instead of inventing stringly typed native commands.
 
 ## Notifications
 
-Notification delivery is owned by `cefari-desktop`. Startup registers the
-notification manager but does not send notifications or request permission. See
-[Desktop Notifications](../notifications.md).
+Notification delivery is owned by the desktop runtime. Startup prepares
+notification support but does not send notifications or request permission. See
+[Notification Behavior](../notifications.md).
 
 ## Custom Titlebars
 

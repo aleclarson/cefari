@@ -36,6 +36,7 @@ PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari info
 PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari doctor
 cargo run -q -p cefari-cli -- --help
 cargo test -p cefari-cli
+cargo test -p cefari-desktop desktop_notifications
 deno task --cwd templates/vite-react-basic/frontend check
 actionlint docs/examples/cefari-release-workflow.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml
 ```
