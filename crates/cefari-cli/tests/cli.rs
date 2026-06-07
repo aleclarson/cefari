@@ -158,6 +158,48 @@ fn package_requires_build_artifacts() {
 }
 
 #[test]
+fn clean_removes_generated_artifacts() {
+    let root = temp_project_path();
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Clean App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let build_output = cefari()
+        .arg("build")
+        .arg(&root)
+        .output()
+        .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let package_output = cefari()
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+    assert_success(&package_output);
+
+    assert!(root.join("build").exists());
+    assert!(root.join("dist").exists());
+
+    let clean_output = cefari()
+        .arg("clean")
+        .arg(&root)
+        .output()
+        .expect("cefari clean should run");
+    assert_success(&clean_output);
+
+    assert!(!root.join("build").exists());
+    assert!(!root.join("dist").exists());
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+}
+
+#[test]
 fn doctor_reports_tool_statuses() {
     let output = cefari()
         .arg("doctor")

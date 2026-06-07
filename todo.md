@@ -112,7 +112,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [ ] Implement `cefari codesign` to invoke `cargo-codesign`.
   - [ ] Implement `cefari notarize` for platform notarization flow.
   - [ ] Implement `cefari make-update` to generate update artifacts.
-  - [ ] Add clean and dist task support if needed by build/package workflows.
+  - [x] Add clean and dist task support if needed by build/package workflows.
 - [x] Implement diagnostics.
   - [x] Implement `cefari doctor`.
   - [x] Implement `cefari info`.
@@ -160,7 +160,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Document runtime versus CLI responsibility boundaries in contributor-facing docs.
 - [ ] Document developer workflows.
   - [x] Add CLI usage documentation for each implemented `cefari` command.
-  - [ ] Add CLI usage documentation for `dev`, package, signing, notarization, and update commands once implemented.
+  - [ ] Add CLI usage documentation for `dev`, signing, notarization, and update commands once implemented.
   - [ ] Add development setup documentation for CEF preparation.
   - [x] Add troubleshooting documentation for common `cefari doctor` failures.
 - [ ] Document release workflows.

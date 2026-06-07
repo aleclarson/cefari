@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 mod build;
+mod clean;
 mod package;
 pub mod project;
 
@@ -53,6 +54,12 @@ pub enum Command {
     Notarize,
     /// Generate update artifacts.
     MakeUpdate,
+    /// Remove generated build and dist artifacts.
+    Clean {
+        /// Project directory to clean. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
     /// Check local tool and project health.
     Doctor,
     /// Print environment and project information.
@@ -81,6 +88,7 @@ pub fn run_command(command: Command) -> Result<()> {
         Command::Codesign => todo_command("codesign"),
         Command::Notarize => todo_command("notarize"),
         Command::MakeUpdate => todo_command("make-update"),
+        Command::Clean { path } => clean::clean_project(&path),
         Command::Doctor => {
             doctor();
             Ok(())
@@ -273,6 +281,12 @@ mod tests {
                 .expect("package should parse")
                 .command,
             Command::Package { .. }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["cefari", "clean", "sample"])
+                .expect("clean should parse")
+                .command,
+            Command::Clean { .. }
         ));
     }
 

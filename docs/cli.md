@@ -74,6 +74,15 @@ Current output:
 
 The native installer invocation through `cargo-packager` is still planned.
 
+### `cefari clean [PATH]`
+
+Removes generated build artifacts for the Cefari project at `PATH`. If `PATH` is omitted, the CLI uses the current directory.
+
+Current cleanup behavior:
+
+- removes `build/`
+- removes `dist/`
+
 ## Troubleshooting `cefari doctor`
 
 - `cargo: missing` means Rust or Cargo is not on `PATH`.
