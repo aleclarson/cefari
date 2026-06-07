@@ -289,7 +289,8 @@ mod tests {
 
     #[test]
     fn checks_program_paths_without_side_effects() {
-        assert!(program_exists("/bin/sh"));
+        let current_exe = std::env::current_exe().expect("current test executable should resolve");
+        assert!(program_exists(current_exe));
         assert!(!program_exists("/definitely/not/a/cefari-daemon"));
     }
 
