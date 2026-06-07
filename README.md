@@ -20,7 +20,7 @@ cefari-cli
 
 ## Core architecture rule
 
-> `cefari-core` and `cefari-desktop` are runtime code. `cefari-cli` is developer/release orchestration tooling. The CLI is distributed to developers, but it is not bundled into the shipped desktop app or required at runtime.
+> `cefari-core` and `cefari-desktop` are runtime code. `cefari-cli` is distributed separately as developer/release orchestration tooling.
 
 ## Crate roles
 
@@ -38,13 +38,13 @@ update check/install helpers
 service install/start/stop helpers
 ```
 
-Does not own:
+Runtime boundaries:
 
 ```text
-Tao/CEF windowing
-CLI command parsing
-packaging/signing/build orchestration
-frontend or daemon build steps
+Tao/CEF windowing lives in cefari-desktop
+CLI command parsing lives in cefari-cli
+packaging/signing/build orchestration lives in cefari-cli
+frontend and daemon build steps live in cefari-cli or CI
 ```
 
 Runtime dependencies:
@@ -109,7 +109,7 @@ Public developer-facing CLI. Binary name:
 cefari
 ```
 
-It plays the same role as Tauri's CLI: a project orchestration tool used during development and release, not a runtime component of the shipped desktop app.
+It plays the same role as Tauri's CLI: a project orchestration tool used during development and release, distributed separately from the shipped desktop app.
 
 Example commands:
 
@@ -155,22 +155,11 @@ toml = "*"
 
 `cefari-cli` shells out to tools like `cargo-packager` and `cargo-codesign`; those tools are provided by CI or the developer environment.
 
-## No runtime CLI surface
+## Runtime and developer responsibilities
 
-Cefari should not rely on CLI commands for end-user runtime behavior such as:
+Runtime update and service operations are implemented in `cefari-desktop` via `cefari-core`.
 
-```text
-install-service
-uninstall-service
-start-service
-stop-service
-check-update
-install-update
-```
-
-Runtime update and service operations belong in `cefari-desktop` via `cefari-core`.
-
-Development, packaging, release, diagnostics, and CI functionality belongs in `cefari-cli`.
+Development, packaging, release, diagnostics, and CI functionality is implemented in `cefari-cli`.
 
 ## Tool classification
 
@@ -183,17 +172,17 @@ Development, packaging, release, diagnostics, and CI functionality belongs in `c
 | `service-manager`                  | `cefari-core` runtime dependency                              |
 | `tao` / `cef`                      | `cefari-desktop` only                                         |
 | `muda` / `tray-icon`               | `cefari-desktop` dependencies                                 |
-| `download-cef`                     | `cefari-cli`; avoid runtime and app-build network dependency   |
+| `download-cef`                     | `cefari-cli`; prepares CEF before build/package steps          |
 | `clap`                             | `cefari-cli` only                                             |
 
 ## Acceptance criteria
 
-- Released Cefari desktop app packages do not include or require the `cefari` CLI.
-- `cefari-cli` can be published/distributed separately as the developer-facing tool.
+- Released Cefari desktop app packages contain `cefari-desktop`, the runtime code from `cefari-core`, CEF resources, and generated app artifacts.
+- `cefari-cli` is published/distributed separately as the developer-facing tool.
 - `cefari-desktop` contains runtime app startup, windowing, CEF, and native shell logic.
-- `cefari-desktop` does not contain build, packaging, signing, or release orchestration logic.
-- `cefari-core` contains reusable runtime helpers and no Tao, CEF, or CLI parsing dependencies.
-- Runtime integrations for updates, resources, and service management are included in `cefari-core`.
+- Build, packaging, signing, and release orchestration live in `cefari-cli` or CI.
+- `cefari-core` contains reusable runtime helpers for paths/config, resources, logging/errors, updates, and service management.
+- Tao and CEF dependencies are declared by `cefari-desktop`; CLI parsing dependencies are declared by `cefari-cli`.
 - Project creation, dev mode, builds, packaging, signing, notarization, CEF preparation, daemon build, frontend build, diagnostics, and update artifact generation are handled by `cefari-cli` or CI.
 - Dependency versions are pinned during implementation rather than left as `"*"`.
 
