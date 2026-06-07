@@ -88,10 +88,10 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Pin and add CLI dependencies: `clap`, `anyhow`, `xshell`, `duct`, `camino`, `serde`, and `toml`.
   - [x] Define the top-level CLI parser and command enum.
 - [ ] Implement project creation.
-  - [ ] Implement `cefari init`.
-  - [ ] Define the generated Cefari project layout.
-  - [ ] Add template files for frontend, daemon, desktop config, and package metadata.
-  - [ ] Add fixture-based tests for generated project scaffolds.
+  - [x] Implement `cefari init`.
+  - [x] Define the generated Cefari project layout.
+  - [x] Add template files for frontend, daemon, desktop config, and package metadata.
+  - [x] Add fixture-based tests for generated project scaffolds.
 - [ ] Implement development orchestration.
   - [ ] Implement `cefari dev`.
   - [ ] Run the frontend dev server.
@@ -111,12 +111,13 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [ ] Implement `cefari make-update` to generate update artifacts.
   - [ ] Add clean and dist task support if needed by build/package workflows.
 - [ ] Implement diagnostics.
-  - [ ] Implement `cefari doctor`.
-  - [ ] Implement `cefari info`.
-  - [ ] Provide clear errors when external tools such as `cargo-packager` or `cargo-codesign` are missing.
+  - [x] Implement `cefari doctor`.
+  - [x] Implement `cefari info`.
+  - [x] Report when external tools such as `cargo-packager` or `cargo-codesign` are missing.
 - [ ] Test CLI behavior.
-  - [ ] Add integration tests for argument parsing.
+  - [x] Add parser tests for planned commands.
   - [ ] Add integration tests for command dispatch.
+  - [ ] Promote scaffold tests into integration tests once CLI code is split out of `main.rs`.
   - [ ] Confirm `clap` and CLI-only orchestration dependencies are not introduced into runtime crates.
 
 ## 5. Create The Packaging And Release Pipeline
@@ -170,8 +171,8 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] `cargo test --workspace` passes.
 - [ ] Verify CLI workflows.
   - [x] `cargo run -p cefari-cli -- --help` shows all planned commands.
-  - [ ] `cargo run -p cefari-cli -- init` creates a valid sample app.
-  - [ ] `cargo run -p cefari-cli -- doctor` reports required tool availability.
+  - [x] `cargo run -p cefari-cli -- init` creates a valid sample app.
+  - [x] `cargo run -p cefari-cli -- doctor` reports required tool availability.
 - [ ] Verify desktop runtime behavior.
   - [ ] `cargo run -p cefari-desktop` starts a window and initializes runtime logging.
   - [ ] A development app can load UI resources through the desktop shell.
