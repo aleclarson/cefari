@@ -18,6 +18,7 @@ Common optional inputs:
 - `release-tag`: Git tag used for GitHub release assets.
 - `create-github-release`: whether to create or update a GitHub release.
 - `upload-artifacts`: whether to upload packaged files to GitHub Actions artifacts.
+- `dry-run`: validate inputs and print planned commands without running build, package, signing, release, or upload commands.
 
 Signing and notarization inputs:
 
@@ -34,7 +35,7 @@ Update inputs:
 
 ## Secret-Dependent Behavior
 
-Implementation should skip signing, notarization, and update signing when the required secrets or config are absent and the corresponding behavior was not explicitly requested. If a caller explicitly requests one of those steps, missing credentials should fail with a clear message.
+The implementation skips signing when no signing platform or signing config is provided, skips notarization unless `notarize` is `true`, and skips update metadata unless `update-url-base` is provided. If update metadata is requested but the env var named by `update-key-env` is absent, update generation is skipped with a clear log message. GitHub release creation requires `gh` when `create-github-release` is `true`.
 
 Expected secret families:
 
@@ -52,4 +53,4 @@ Expected secret families:
 
 ## Implementation Boundary
 
-The first implementation should delegate build, package, signing, notarization, and update generation to `cefari-cli` commands instead of duplicating release logic in workflow YAML.
+The implementation delegates build, package, signing, notarization, and update generation to `cefari-cli` commands instead of duplicating release logic in workflow YAML.

@@ -33,6 +33,10 @@ inputs:
     description: Whether packaged release assets should be uploaded to GitHub Actions artifacts.
     required: false
     default: "true"
+  dry-run:
+    description: Print the release plan and validate inputs without running build, package, signing, release, or upload commands.
+    required: false
+    default: "false"
   artifact-name:
     description: GitHub Actions artifact name prefix.
     required: false
@@ -85,10 +89,30 @@ runs:
   steps:
     - id: release
       shell: bash
+      env:
+        CEFARI_PROJECT_PATH: ${{ inputs.project-path }}
+        CEFARI_RELEASE_MODE: ${{ inputs.mode }}
+        CEFARI_TARGETS: ${{ inputs.targets }}
+        CEFARI_RELEASE_VERSION: ${{ inputs.release-version }}
+        CEFARI_RELEASE_TAG: ${{ inputs.release-tag }}
+        CEFARI_RELEASE_NAME: ${{ inputs.release-name }}
+        CEFARI_CREATE_GITHUB_RELEASE: ${{ inputs.create-github-release }}
+        CEFARI_UPLOAD_ARTIFACTS: ${{ inputs.upload-artifacts }}
+        CEFARI_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        CEFARI_SIGNING_PLATFORM: ${{ inputs.signing-platform }}
+        CEFARI_SIGNING_CONFIG: ${{ inputs.signing-config }}
+        CEFARI_NOTARIZE: ${{ inputs.notarize }}
+        CEFARI_UPDATE_URL_BASE: ${{ inputs.update-url-base }}
+        CEFARI_UPDATE_TARGET: ${{ inputs.update-target }}
+        CEFARI_UPDATE_FORMAT: ${{ inputs.update-format }}
+        CEFARI_UPDATE_KEY_ENV: ${{ inputs.update-key-env }}
+        CEFARI_DRY_RUN: ${{ inputs.dry-run }}
       run: |
-        echo "package-dir=${{ inputs.project-path }}/dist/package" >> "$GITHUB_OUTPUT"
-        echo "update-dir=${{ inputs.project-path }}/dist/update" >> "$GITHUB_OUTPUT"
-        echo "artifact-dir=${{ inputs.project-path }}/dist" >> "$GITHUB_OUTPUT"
-        echo "release-mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
-        echo "The Cefari release action interface is defined, but implementation is handled by a later sprint task." >&2
-        exit 1
+        "$GITHUB_ACTION_PATH/release.sh"
+    - name: Upload Cefari release artifacts
+      if: ${{ inputs.upload-artifacts == 'true' && inputs.dry-run != 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}-${{ inputs.mode }}
+        path: ${{ steps.release.outputs.artifact-dir }}
+        if-no-files-found: error
