@@ -9,7 +9,7 @@ use cefari_core::{
     CefariServiceSpec, install_service, service_manager, service_status, start_service,
     stop_service, uninstall_service,
 };
-use service_manager::{ServiceLabel, ServiceStatus};
+use service_manager::{ServiceLabel, ServiceLevel, ServiceStatus};
 
 #[test]
 #[cfg_attr(
@@ -28,7 +28,12 @@ fn native_service_lifecycle_smoke() {
         return;
     }
 
-    let manager = service_manager(None).expect("native service manager should be selectable");
+    let mut manager = service_manager(None).expect("native service manager should be selectable");
+    if let Some(level) = service_level() {
+        manager
+            .set_level(level)
+            .expect("service level should be supported by native service manager");
+    }
     let spec = smoke_service_spec();
 
     let _cleanup = ServiceCleanup { spec: spec.clone() };
@@ -87,6 +92,18 @@ fn service_args() -> Vec<OsString> {
     }
 
     default_service_args()
+}
+
+fn service_level() -> Option<ServiceLevel> {
+    let level = env::var("CEFARI_SERVICE_SMOKE_LEVEL").ok()?;
+    match level.trim().to_ascii_lowercase().as_str() {
+        "" => None,
+        "system" => Some(ServiceLevel::System),
+        "user" => Some(ServiceLevel::User),
+        other => {
+            panic!("unsupported CEFARI_SERVICE_SMOKE_LEVEL {other:?}; expected system or user")
+        }
+    }
 }
 
 fn default_service_args() -> Vec<OsString> {
