@@ -61,6 +61,12 @@ pub enum Error {
         source: io::Error,
     },
 
+    #[error("update operation failed: {operation}")]
+    Updater {
+        operation: &'static str,
+        source: cargo_packager_updater::Error,
+    },
+
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 }

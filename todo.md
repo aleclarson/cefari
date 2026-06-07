@@ -39,11 +39,11 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Define logging configuration consumed by `cefari-desktop`.
   - [x] Provide helpers for log file paths and tracing setup inputs.
   - [x] Document which logging setup remains desktop-owned.
-- [ ] Implement update support.
+- [x] Implement update support.
   - [x] Define update-check configuration and state types.
   - [x] Prepare `cargo-packager-updater` config from Cefari update settings.
-  - [ ] Implement update check helpers using `cargo-packager-updater`.
-  - [ ] Implement update install helpers with clear failure states.
+  - [x] Implement update check helpers using `cargo-packager-updater`.
+  - [x] Implement update install helpers with clear failure states.
   - [x] Add tests around update state and error mapping where possible.
 - [x] Implement service management support.
   - [x] Define service operations for install, start, stop, restart, status, and uninstall.

@@ -1,4 +1,4 @@
-use cargo_packager_updater::{Config, semver::Version};
+use cargo_packager_updater::{Config, Update, check_update, semver::Version};
 
 use crate::{Error, Result};
 
@@ -61,6 +61,60 @@ pub enum UpdateCheckState {
     NoUpdate,
     UpdateAvailable { version: String },
     Failed { message: String },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct AvailableUpdate {
+    pub version: String,
+    pub current_version: String,
+    pub target: String,
+    pub download_url: String,
+    pub notes: Option<String>,
+}
+
+impl From<&Update> for AvailableUpdate {
+    fn from(update: &Update) -> Self {
+        Self {
+            version: update.version.clone(),
+            current_version: update.current_version.clone(),
+            target: update.target.clone(),
+            download_url: update.download_url.to_string(),
+            notes: update.body.clone(),
+        }
+    }
+}
+
+pub fn check_for_update(config: &UpdateCheckConfig) -> Result<(UpdateCheckState, Option<Update>)> {
+    if !config.is_configured() {
+        return Ok((UpdateCheckState::NotConfigured, None));
+    }
+
+    let prepared = config.prepare()?;
+    match check_update(prepared.current_version, prepared.config) {
+        Ok(Some(update)) => {
+            let available = AvailableUpdate::from(&update);
+            Ok((
+                UpdateCheckState::UpdateAvailable {
+                    version: available.version,
+                },
+                Some(update),
+            ))
+        }
+        Ok(None) => Ok((UpdateCheckState::NoUpdate, None)),
+        Err(source) => Err(Error::Updater {
+            operation: "check",
+            source,
+        }),
+    }
+}
+
+pub fn install_update(update: &Update) -> Result<()> {
+    update
+        .download_and_install()
+        .map_err(|source| Error::Updater {
+            operation: "download-and-install",
+            source,
+        })
 }
 
 #[cfg(test)]
@@ -130,5 +184,20 @@ mod tests {
                 version: "0.2.0".to_owned()
             }
         );
+    }
+
+    #[test]
+    fn check_reports_not_configured_without_network() {
+        let config = UpdateCheckConfig {
+            current_version: "0.1.0".to_owned(),
+            endpoints: Vec::new(),
+            public_key: String::new(),
+        };
+
+        let (state, update) =
+            super::check_for_update(&config).expect("unconfigured updates should not fail");
+
+        assert_eq!(state, UpdateCheckState::NotConfigured);
+        assert!(update.is_none());
     }
 }

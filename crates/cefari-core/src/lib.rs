@@ -22,4 +22,7 @@ pub use services::{
     CefariServiceSpec, ServiceOperation, install_service, program_exists, restart_service,
     service_manager, service_status, start_service, stop_service, uninstall_service,
 };
-pub use updates::{PreparedUpdateCheck, UpdateCheckConfig, UpdateCheckState};
+pub use updates::{
+    AvailableUpdate, PreparedUpdateCheck, UpdateCheckConfig, UpdateCheckState, check_for_update,
+    install_update,
+};
