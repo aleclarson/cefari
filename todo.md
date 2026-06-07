@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 144 of the 191 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 145 of the 192 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
 - 1 under release automation.
 - 1 under desktop runtime behavior verification.
@@ -205,6 +205,7 @@ Nesting audit: 144 of the 191 checklist entries are already nested child tasks u
   - [x] Add macOS, Linux, and Windows CI coverage for service helper dispatch tests.
   - [x] Select a platform-supported default service manager level, including system services on Windows.
   - [x] Verify a macOS native service lifecycle smoke installs, starts, reports status, stops, and uninstalls a test service.
+  - [x] Allow native service lifecycle smoke verification to use caller-provided service fixture binaries and arguments.
   - [ ] Service management operations are verified on each supported platform.
 - [x] Verify package and update behavior.
   - [x] A packaged app contains the expected runtime, CEF, UI, and daemon artifacts.

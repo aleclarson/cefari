@@ -1,5 +1,7 @@
 use std::{
-    env, thread,
+    env,
+    ffi::OsString,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -12,15 +14,17 @@ use service_manager::{ServiceLabel, ServiceStatus};
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "requires a Windows-service-aware fixture binary or WinSW"
+    ignore = "installs and starts a native OS service; provide CEFARI_SERVICE_SMOKE_PROGRAM on Windows"
 )]
 #[cfg_attr(
     not(windows),
     ignore = "installs and starts a native OS service; run only on a disposable verification host"
 )]
 fn native_service_lifecycle_smoke() {
-    if cfg!(windows) {
-        eprintln!("skipping Windows lifecycle smoke until a service-aware fixture is available");
+    if cfg!(windows) && env::var_os("CEFARI_SERVICE_SMOKE_PROGRAM").is_none() {
+        eprintln!(
+            "skipping Windows lifecycle smoke; set CEFARI_SERVICE_SMOKE_PROGRAM to a Windows-service-aware fixture binary or run with WinSW available"
+        );
         return;
     }
 
@@ -65,11 +69,20 @@ fn smoke_service_label() -> ServiceLabel {
     }
 }
 
-fn service_program() -> &'static str {
-    "/bin/sh"
+fn service_program() -> OsString {
+    env::var_os("CEFARI_SERVICE_SMOKE_PROGRAM").unwrap_or_else(|| OsString::from("/bin/sh"))
 }
 
-fn service_args() -> Vec<std::ffi::OsString> {
+fn service_args() -> Vec<OsString> {
+    if let Some(args) = env::var_os("CEFARI_SERVICE_SMOKE_ARGS") {
+        let args = args
+            .into_string()
+            .expect("CEFARI_SERVICE_SMOKE_ARGS should be UTF-8 JSON");
+        let parsed: Vec<String> =
+            serde_json::from_str(&args).expect("CEFARI_SERVICE_SMOKE_ARGS should be a JSON array");
+        return parsed.into_iter().map(OsString::from).collect();
+    }
+
     vec!["-c".into(), "while true; do sleep 60; done".into()]
 }
 

@@ -55,7 +55,7 @@ Run native lifecycle verification on a disposable host with:
 cargo test -p cefari-core --test service_lifecycle -- --ignored --nocapture
 ```
 
-That ignored test installs, starts, checks, stops, and uninstalls a uniquely named test service using a shell-loop fixture suitable for macOS and Linux service managers. Windows lifecycle verification still needs a Windows-service-aware fixture binary or WinSW. Real install/start/status/stop/uninstall behavior still needs passing lifecycle smoke results on every supported platform before service operations can be treated as fully verified.
+That ignored test installs, starts, checks, stops, and uninstalls a uniquely named test service using a shell-loop fixture suitable for macOS and Linux service managers. Set `CEFARI_SERVICE_SMOKE_PROGRAM` and optional JSON array `CEFARI_SERVICE_SMOKE_ARGS` to verify another fixture. Windows lifecycle verification requires a Windows-service-aware fixture binary or WinSW. Real install/start/status/stop/uninstall behavior still needs passing lifecycle smoke results on every supported platform before service operations can be treated as fully verified.
 
 ## Non-Goals
 
