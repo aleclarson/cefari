@@ -18,7 +18,7 @@ cefari package PATH
 
 When `cargo-packager` is available on `PATH`, the CLI invokes it with the generated config and writes native package output to `dist/package/output/`. When it is missing, the metadata still remains available for CI or later local packaging.
 
-CEF resources are still recorded as external in the package manifest until the CLI-owned CEF preparation step is implemented.
+CEF resources are resolved from `build/cef/resources/`, which is prepared by `cefari build` and recorded in `build/cef/manifest.json`. The current manifest still marks the source as `pending-download` until the large CEF binary download step is implemented.
 
 ## Signing
 

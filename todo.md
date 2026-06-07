@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 20 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
+Nesting audit: 19 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
 
 ## 1. Establish The Workspace
 
@@ -107,7 +107,8 @@ Nesting audit: 20 currently unchecked checklist items are dependent child tasks 
   - [x] Build frontend artifacts.
   - [x] Build Deno daemon artifacts.
   - [x] Build the Rust desktop app.
-  - [ ] Implement CEF download and preparation as a CLI-owned step.
+  - [x] Implement CEF preparation manifest as a CLI-owned step.
+  - [ ] Implement CEF binary download/cache population as a CLI-owned step.
 - [ ] Implement packaging and release commands.
   - [x] Implement `cefari package` package assembly preparation.
   - [x] Invoke `cargo-packager` from `cefari package` when available.
@@ -132,7 +133,8 @@ Nesting audit: 20 currently unchecked checklist items are dependent child tasks 
   - [x] Define package metadata consumed by `cargo-packager`.
   - [x] Define how generated frontend artifacts are copied into packaged resources.
   - [x] Define how generated Deno daemon artifacts are included in app packages.
-  - [ ] Define how CEF binaries and resources are resolved during package creation.
+  - [x] Define how prepared CEF resources are resolved during package creation.
+  - [ ] Define how downloaded CEF binaries are verified and included during package creation.
 - [ ] Add CI coverage.
   - [x] Add CI steps for formatting, linting, testing, and workspace builds.
   - [x] Add CI steps that install or provide `cargo-packager` and `cargo-codesign`.
@@ -160,11 +162,11 @@ Nesting audit: 20 currently unchecked checklist items are dependent child tasks 
 - [x] Update project documentation after scaffolding.
   - [x] Update `README.md` to reflect actual commands and crate paths.
   - [x] Document runtime versus CLI responsibility boundaries in contributor-facing docs.
-- [ ] Document developer workflows.
+- [x] Document developer workflows.
   - [x] Add CLI usage documentation for each implemented `cefari` command.
   - [x] Add CLI usage documentation for `dev` once implemented.
   - [x] Add CLI usage documentation for signing, notarization, and update commands.
-  - [ ] Add development setup documentation for CEF preparation.
+  - [x] Add development setup documentation for CEF preparation.
   - [x] Add troubleshooting documentation for common `cefari doctor` failures.
 - [x] Document release workflows.
   - [x] Add packaging documentation.

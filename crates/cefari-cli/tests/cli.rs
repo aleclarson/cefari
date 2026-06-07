@@ -92,6 +92,8 @@ fn build_creates_project_artifacts() {
     assert_success(&output);
     assert!(root.join("build/frontend/index.html").exists());
     assert!(root.join("build/daemon/main.ts").exists());
+    assert!(root.join("build/cef/resources").exists());
+    assert!(root.join("build/cef/manifest.json").exists());
     assert!(root.join("frontend/dist/index.html").exists());
 
     fs::remove_dir_all(root).expect("temp project should be removable");
@@ -129,7 +131,12 @@ fn package_creates_assembly_manifest_after_build() {
     let manifest =
         fs::read_to_string(root.join("dist/package/manifest.json")).expect("manifest should exist");
     assert!(manifest.contains(r#""desktop_binary": "cefari-desktop""#));
-    assert!(manifest.contains(r#""cef_resources": "pending-cef-download""#));
+    assert!(manifest.contains(r#""cef_resources": ""#));
+    assert!(manifest.contains("build/cef/resources"));
+
+    let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
+        .expect("package metadata should exist");
+    assert!(metadata.contains("build/cef/resources"));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
 }
@@ -380,6 +387,7 @@ fn dev_orchestrates_frontend_daemon_and_desktop() {
         &tools,
         "deno",
         r#"echo "deno $@" >> "$CEFARI_TOOL_LOG"
+sleep 1
 exit 0"#,
     );
     create_fake_tool(

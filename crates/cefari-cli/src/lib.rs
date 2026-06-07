@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 mod build;
+mod cef;
 mod clean;
 mod dev;
 mod package;

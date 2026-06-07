@@ -2,7 +2,7 @@ use std::{fs, path::Path, process::Command};
 
 use anyhow::{Context, Result};
 
-use crate::project::ProjectConfig;
+use crate::{cef, project::ProjectConfig};
 
 pub fn build_project(project_dir: &Path) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
@@ -25,6 +25,8 @@ pub fn build_project(project_dir: &Path) -> Result<()> {
 
     build_frontend(project_dir, &project, &frontend_out)?;
     build_daemon(project_dir, &project, &daemon_out)?;
+    let cef = cef::prepare_cef(project_dir)?;
+    println!("prepared CEF resources at {}", cef.resources_dir.display());
     build_desktop()?;
 
     println!("built Cefari project at {}", project_dir.display());

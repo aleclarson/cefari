@@ -2,7 +2,7 @@ use std::{fs, path::Path, process::Command};
 
 use anyhow::{Context, Result};
 
-use crate::{project::ProjectConfig, run_process, tool_available};
+use crate::{cef, project::ProjectConfig, run_process, tool_available};
 
 pub fn package_project(project_dir: &Path) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
@@ -10,6 +10,7 @@ pub fn package_project(project_dir: &Path) -> Result<()> {
     let package_dir = ProjectConfig::dist_dir(project_dir).join("package");
 
     ensure_build_artifacts(&build_dir)?;
+    let cef_resources_dir = cef::prepared_resources_dir(project_dir)?;
     fs::create_dir_all(&package_dir).with_context(|| {
         format!(
             "failed to create package directory at {}",
@@ -17,8 +18,8 @@ pub fn package_project(project_dir: &Path) -> Result<()> {
         )
     })?;
 
-    write_package_metadata(&package_dir, &project)?;
-    write_package_manifest(&package_dir, &project, &build_dir)?;
+    write_package_metadata(&package_dir, &project, &cef_resources_dir)?;
+    write_package_manifest(&package_dir, &project, &build_dir, &cef_resources_dir)?;
 
     println!("prepared package assembly at {}", package_dir.display());
     run_cargo_packager_if_available(&package_dir)?;
@@ -43,7 +44,11 @@ fn ensure_build_artifacts(build_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_package_metadata(package_dir: &Path, project: &ProjectConfig) -> Result<()> {
+fn write_package_metadata(
+    package_dir: &Path,
+    project: &ProjectConfig,
+    cef_resources_dir: &Path,
+) -> Result<()> {
     let metadata = format!(
         r#"[package]
 product_name = "{}"
@@ -52,9 +57,11 @@ identifier = "{}"
 [resources]
 frontend = "build/frontend"
 daemon = "build/daemon"
-cef = "external"
+cef = "{}"
 "#,
-        project.package.product_name, project.app.identifier
+        project.package.product_name,
+        project.app.identifier,
+        normalize(cef_resources_dir)
     );
 
     fs::write(package_dir.join("cargo-packager.toml"), metadata).with_context(|| {
@@ -69,6 +76,7 @@ fn write_package_manifest(
     package_dir: &Path,
     project: &ProjectConfig,
     build_dir: &Path,
+    cef_resources_dir: &Path,
 ) -> Result<()> {
     let manifest = PackageManifest {
         product_name: project.package.product_name.clone(),
@@ -76,7 +84,7 @@ fn write_package_manifest(
         desktop_binary: "cefari-desktop".to_owned(),
         frontend_dir: normalize(&build_dir.join("frontend")),
         daemon_dir: normalize(&build_dir.join("daemon")),
-        cef_resources: "pending-cef-download".to_owned(),
+        cef_resources: normalize(cef_resources_dir),
     };
 
     fs::write(package_dir.join("manifest.json"), manifest.to_json()).with_context(|| {
