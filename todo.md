@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 27 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
+Nesting audit: 26 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
 
 ## 1. Establish The Workspace
 
@@ -75,7 +75,7 @@ Nesting audit: 27 currently unchecked checklist items are dependent child tasks 
 - [ ] Implement desktop integration.
   - [ ] Wire native menus through `muda`.
   - [ ] Wire tray or menu-bar icon behavior through `tray-icon`.
-  - [ ] Add external link and file opening helpers through `open`.
+  - [x] Add external link and file opening helpers through `open`.
 - [ ] Integrate runtime operations.
   - [ ] Wire update check and install flow through `cefari-core`.
   - [ ] Wire daemon service install/start/stop/status behavior through `cefari-core`.

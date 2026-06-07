@@ -13,6 +13,8 @@ Before the UI is available, desktop startup failures are reported to stderr with
 
 The desktop process now starts a Tao event loop and creates a blank `Cefari` main window. CEF initialization and packaged UI loading are still separate native shell tasks.
 
+External URL and file open requests are routed through the desktop-only `open` dependency. URL helpers currently allow `http`, `https`, and `mailto` schemes; file helpers validate local path existence before launching the platform opener.
+
 Windows and Linux remain target platforms, but packaging, service operations, and desktop shell behavior still need platform-specific verification before they can be treated as supported.
 
 ## Frontend Template

@@ -12,6 +12,8 @@ use tao::{
 use tracing::{error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 
+mod external;
+
 const MAIN_WINDOW_TITLE: &str = "Cefari";
 const MAIN_WINDOW_WIDTH: f64 = 1200.0;
 const MAIN_WINDOW_HEIGHT: f64 = 800.0;
@@ -88,6 +90,26 @@ fn run_event_loop(event_loop: EventLoop<()>, window: Window, guards: RuntimeGuar
             }
             Event::LoopDestroyed => {
                 info!("cefari native shell stopped");
+            }
+            Event::Opened { urls } => {
+                for url in urls {
+                    let result = if url.scheme() == "file" {
+                        url.to_file_path().map_or_else(
+                            |()| {
+                                Err(anyhow::anyhow!(
+                                    "file URL cannot be converted to a local path: {url}"
+                                ))
+                            },
+                            |path| external::open_external_file(&path),
+                        )
+                    } else {
+                        external::open_external_url(url.as_str())
+                    };
+
+                    if let Err(error) = result {
+                        error!(%url, %error, "failed to open external URL");
+                    }
+                }
             }
             _ => {}
         }
