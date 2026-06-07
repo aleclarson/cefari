@@ -118,22 +118,31 @@ jobs:
       - name: Install WinSW on Windows
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          CEFARI_SERVICE_SMOKE_APPLICATION: service-smoke-${{ github.run_id }}-${{ matrix.target.name }}
         run: |
-          New-Item -ItemType Directory -Force -Path .verify | Out-Null
+          $serviceName = "dev.cefari.$env:CEFARI_SERVICE_SMOKE_APPLICATION"
+          $serviceDir = Join-Path $env:ProgramData "service-manager\$serviceName"
+          New-Item -ItemType Directory -Force -Path $serviceDir | Out-Null
+          $winswPath = Join-Path $serviceDir "$serviceName.exe"
           Invoke-WebRequest `
             -Uri https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe `
-            -OutFile .verify/winsw.exe
-          "WINSW_PATH=$((Resolve-Path .verify/winsw.exe).Path)" >> $env:GITHUB_ENV
+            -OutFile $winswPath
+          "WINSW_PATH=$winswPath" >> $env:GITHUB_ENV
 
       - name: Run native service lifecycle smoke
         shell: bash
         env:
+          CEFARI_SERVICE_SMOKE_APPLICATION: service-smoke-${{ github.run_id }}-${{ matrix.target.name }}
           CEFARI_SERVICE_SMOKE_PROGRAM: ${{ runner.os == 'Windows' && inputs.windows_service_smoke_program || '' }}
           CEFARI_SERVICE_SMOKE_ARGS: ${{ runner.os == 'Windows' && inputs.windows_service_smoke_args || '' }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" && -z "${CEFARI_SERVICE_SMOKE_PROGRAM:-}" ]]; then
             export CEFARI_SERVICE_SMOKE_PROGRAM="${SYSTEMROOT}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
             export CEFARI_SERVICE_SMOKE_ARGS='["-NoProfile","-ExecutionPolicy","Bypass","-Command","for (;;) { Start-Sleep -Seconds 60 }"]'
+          elif [[ "$RUNNER_OS" != "Windows" ]]; then
+            export CEFARI_SERVICE_SMOKE_PROGRAM="/usr/bin/tail"
+            export CEFARI_SERVICE_SMOKE_ARGS='["-f","/dev/null"]'
           fi
 
           if [[ "$RUNNER_OS" == "Linux" ]]; then
@@ -142,6 +151,9 @@ jobs:
               "CARGO_HOME=$CARGO_HOME" \
               "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}" \
               "CARGO_TARGET_DIR=/tmp/cefari-service-smoke-target" \
+              "CEFARI_SERVICE_SMOKE_APPLICATION=$CEFARI_SERVICE_SMOKE_APPLICATION" \
+              "CEFARI_SERVICE_SMOKE_PROGRAM=$CEFARI_SERVICE_SMOKE_PROGRAM" \
+              "CEFARI_SERVICE_SMOKE_ARGS=$CEFARI_SERVICE_SMOKE_ARGS" \
               "CEFARI_SERVICE_SMOKE_LEVEL=system" \
               cargo test -p cefari-core --test service_lifecycle -- --ignored --nocapture
           else

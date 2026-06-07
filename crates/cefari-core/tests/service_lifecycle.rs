@@ -4,8 +4,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-#[cfg(windows)]
-use std::{fs, path::PathBuf};
 
 use cefari_core::{
     CefariServiceSpec, install_service, service_manager, service_status, start_service,
@@ -30,15 +28,13 @@ fn native_service_lifecycle_smoke() {
         return;
     }
 
-    let spec = smoke_service_spec();
-    let _winsw_fixture = prepare_windows_winsw_fixture(&spec);
-
     let mut manager = service_manager(None).expect("native service manager should be selectable");
     if let Some(level) = service_level() {
         manager
             .set_level(level)
             .expect("service level should be supported by native service manager");
     }
+    let spec = smoke_service_spec();
 
     let _cleanup = ServiceCleanup { spec: spec.clone() };
     let _ = uninstall_service(manager.as_ref(), &spec);
@@ -74,7 +70,8 @@ fn smoke_service_label() -> ServiceLabel {
     ServiceLabel {
         qualifier: Some("dev".to_owned()),
         organization: Some("cefari".to_owned()),
-        application: format!("service-smoke-{}", std::process::id()),
+        application: env::var("CEFARI_SERVICE_SMOKE_APPLICATION")
+            .unwrap_or_else(|_| format!("service-smoke-{}", std::process::id())),
     }
 }
 
@@ -112,60 +109,6 @@ fn service_level() -> Option<ServiceLevel> {
 
 fn default_service_args() -> Vec<OsString> {
     vec!["-c".into(), "while true; do sleep 60; done".into()]
-}
-
-#[cfg(windows)]
-fn prepare_windows_winsw_fixture(spec: &CefariServiceSpec) -> Option<WindowsWinswFixture> {
-    let source = env::var_os("WINSW_PATH")?;
-    let source = PathBuf::from(source);
-    if !source.is_file() {
-        return None;
-    }
-
-    let service_name = spec.label.to_qualified_name();
-    let service_dir = PathBuf::from(r"C:\ProgramData\service-manager").join(&service_name);
-    fs::create_dir_all(&service_dir).expect("WinSW service directory should be creatable");
-
-    let service_exe = service_dir.join(format!("{service_name}.exe"));
-    fs::copy(&source, &service_exe).expect("WinSW fixture should copy into service directory");
-
-    let previous_winsw_path = env::var_os("WINSW_PATH");
-    unsafe {
-        env::set_var("WINSW_PATH", &service_exe);
-    }
-
-    Some(WindowsWinswFixture {
-        service_dir,
-        previous_winsw_path,
-    })
-}
-
-#[cfg(not(windows))]
-fn prepare_windows_winsw_fixture(_spec: &CefariServiceSpec) -> Option<()> {
-    None
-}
-
-#[cfg(windows)]
-struct WindowsWinswFixture {
-    service_dir: PathBuf,
-    previous_winsw_path: Option<OsString>,
-}
-
-#[cfg(windows)]
-impl Drop for WindowsWinswFixture {
-    fn drop(&mut self) {
-        if let Some(path) = &self.previous_winsw_path {
-            unsafe {
-                env::set_var("WINSW_PATH", path);
-            }
-        } else {
-            unsafe {
-                env::remove_var("WINSW_PATH");
-            }
-        }
-
-        let _ = fs::remove_dir_all(&self.service_dir);
-    }
 }
 
 fn wait_for_status(
