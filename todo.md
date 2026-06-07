@@ -2,10 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 148 of the 195 checklist entries are already nested child tasks under larger work items. Honest answer: 2 of the remaining unchecked checklist entries should be treated as nested children of bigger tasks, not as standalone project goals. Both are dependent verification leaves under their existing parent tracks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
-
-- 1 under release automation.
-- 1 under desktop runtime behavior verification.
+Nesting audit: 148 of the 195 checklist entries are nested child tasks under larger work items. Honest answer: the final 2 unchecked checklist entries were nested children of bigger tasks, not standalone project goals. Both were dependent verification leaves under their existing parent tracks. All checklist entries are now complete.
 
 ## 1. Establish The Workspace
 
@@ -145,7 +142,7 @@ Nesting audit: 148 of the 195 checklist entries are already nested child tasks u
   - [x] Add CI steps that install or provide `cargo-packager` and `cargo-codesign`.
   - [x] Add platform-specific package assembly jobs.
   - [x] Add platform-specific native installer packaging jobs once CEF binaries are included.
-- [ ] Add release automation.
+- [x] Add release automation.
   - [x] Add signing and notarization jobs for supported platforms.
   - [x] Add update artifact generation and publishing jobs.
   - [x] Verify package assembly contains generated UI, daemon, CEF preparation metadata, and separate CLI output in CI.
@@ -157,8 +154,8 @@ Nesting audit: 148 of the 195 checklist entries are already nested child tasks u
   - [x] Add a reusable native package payload verifier and run it against the real macOS release smoke package.
   - [x] Add CI native package payload extraction and verification for fixture-CEF packages on macOS, Linux, and Windows.
   - [x] Add a manual platform verification workflow for release-profile native packages with downloaded CEF on macOS, Linux, and Windows.
-  - [ ] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.
-    - Evidence needed before this parent can close: successful payload inspection for release-profile native packages on macOS, Linux, and Windows, not just local macOS or fixture-CEF CI packages.
+  - [x] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.
+    - Evidence: Platform Verification run 27084663413 on `a9c8da3e2827c3b6f27e0214e4b836d72031b136` passed Release Package Smoke on macOS, Linux, and Windows, including `Verify native package payload`.
   - [x] Verify `cefari-cli` is built, versioned, and distributed separately from desktop app packages.
 
 ## 6. Keep Dependencies Honest
@@ -200,7 +197,7 @@ Nesting audit: 148 of the 195 checklist entries are already nested child tasks u
   - [x] `cargo run -p cefari-cli -- init` creates a valid sample app.
   - [x] `cargo run -p cefari-cli -- build` creates frontend and daemon artifacts and builds `cefari-desktop`.
   - [x] `cargo run -p cefari-cli -- doctor` reports required tool availability.
-- [ ] Verify desktop runtime behavior.
+- [x] Verify desktop runtime behavior.
   - [x] `cargo run -p cefari-desktop` starts a window and initializes runtime logging.
   - [x] `cargo run -p cefari-desktop` initializes runtime logging and the single-instance lock.
   - [x] A development app can load UI resources through the desktop shell.
@@ -210,8 +207,8 @@ Nesting audit: 148 of the 195 checklist entries are already nested child tasks u
   - [x] Verify a macOS native service lifecycle smoke installs, starts, reports status, stops, and uninstalls a test service.
   - [x] Allow native service lifecycle smoke verification to use caller-provided service fixture binaries and arguments.
   - [x] Add a manual platform verification workflow for native service lifecycle smoke runs on supported runners.
-  - [ ] Service management operations are verified on each supported platform.
-    - Evidence needed before this parent can close: successful native lifecycle smoke results for macOS, Linux, and Windows, including a Windows-service-aware fixture for Windows.
+  - [x] Service management operations are verified on each supported platform.
+    - Evidence: Platform Verification run 27084663413 on `a9c8da3e2827c3b6f27e0214e4b836d72031b136` passed Service Lifecycle Smoke on macOS, Linux, and Windows, including the Windows-service-aware fixture.
 - [x] Verify package and update behavior.
   - [x] A packaged app contains the expected runtime, CEF, UI, and daemon artifacts.
   - [x] An update artifact can be generated and consumed by the runtime update flow.
