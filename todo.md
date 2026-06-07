@@ -188,12 +188,14 @@ This task list is derived from [README.md](README.md). It treats the architectur
 
 ## 9. Open Decisions
 
-- [ ] Decide supported operating systems and platform priority.
-- [ ] Decide the frontend stack expected by `cefari init`.
-- [ ] Decide the Deno daemon project shape and build output contract.
-- [ ] Decide CEF version pinning and download source.
-- [ ] Decide when to make the `cef` dependency non-optional in `cefari-desktop`.
+- [x] Decide supported operating systems and platform priority.
+- [x] Decide the frontend stack expected by `cefari init`.
+- [ ] Decide the final Deno daemon build output contract.
+- [x] Decide the initial Deno daemon project shape.
+- [x] Decide CEF version pinning.
+- [ ] Decide CEF download source.
+- [x] Decide when to make the `cef` dependency non-optional in `cefari-desktop`.
 - [ ] Decide package identifiers, signing identities, and notarization requirements.
 - [ ] Decide update server/artifact hosting expectations.
 - [ ] Decide whether `cefari-cli` should support plugins or project hooks.
-- [ ] Decide compatibility promises for generated project templates.
+- [x] Decide compatibility promises for generated project templates.
