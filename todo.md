@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 11 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
+Nesting audit: 133 of the 180 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 11 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 5 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
 - 1 under native shell implementation.
 - 1 under CI coverage.
