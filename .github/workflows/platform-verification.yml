@@ -172,6 +172,7 @@ jobs:
           if (Test-Path $serviceDir) {
             Get-ChildItem -Force $serviceDir | Format-List FullName,Length,LastWriteTime
             Get-ChildItem -Force $serviceDir -File |
+              Where-Object { $_.Extension -ne '.exe' } |
               ForEach-Object {
                 Write-Host "::group::$($_.Name)"
                 Get-Content -Raw $_.FullName -ErrorAction Continue
