@@ -41,6 +41,8 @@ Release tags and manual dispatches run `.github/workflows/release.yml`. That wor
 
 Before upload, the release workflow verifies that native package output exists and that package metadata points at existing frontend, daemon executable, CEF resource directory, and CEF archive metadata inputs.
 
+`.github/workflows/platform-verification.yml` is a manual workflow for producing evidence without publishing a release. Its release-package job builds release-profile packages with downloaded CEF on macOS, Linux, and Windows, extracts package payloads, runs the native payload verifier, and uploads inspected payload artifacts.
+
 ### Local macOS release smoke
 
 On macOS, a full local release smoke can verify the real downloaded CEF payload and release-profile desktop binary:
