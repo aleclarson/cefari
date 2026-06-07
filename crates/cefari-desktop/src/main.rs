@@ -5,7 +5,7 @@ use cefari_core::{AppIdentity, RuntimeLogConfig, RuntimePaths};
 use single_instance::SingleInstance;
 use tao::{
     dpi::LogicalSize,
-    event::{Event, WindowEvent},
+    event::{Event, StartCause, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Window, WindowBuilder},
 };
@@ -13,6 +13,7 @@ use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 
 mod desktop_menu;
+mod desktop_tray;
 mod external;
 mod runtime;
 
@@ -58,6 +59,7 @@ struct RuntimeGuards {
 #[derive(Debug)]
 enum UserEvent {
     Menu(muda::MenuEvent),
+    Tray(tray_icon::TrayIconEvent),
 }
 
 fn run_native_shell(guards: RuntimeGuards, paths: RuntimePaths) -> Result<()> {
@@ -65,6 +67,10 @@ fn run_native_shell(guards: RuntimeGuards, paths: RuntimePaths) -> Result<()> {
     let event_proxy = event_loop.create_proxy();
     muda::MenuEvent::set_event_handler(Some(move |event| {
         let _ = event_proxy.send_event(UserEvent::Menu(event));
+    }));
+    let event_proxy = event_loop.create_proxy();
+    tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+        let _ = event_proxy.send_event(UserEvent::Tray(event));
     }));
 
     let window = create_main_window(&event_loop)?;
@@ -92,13 +98,23 @@ fn run_event_loop(
     logs_dir: PathBuf,
 ) -> ! {
     let mut window = Some(window);
+    let mut tray = None;
 
     event_loop.run(move |event, _, control_flow| {
         let _guards = &guards;
         let _menu = &menu;
+        let _tray = &tray;
         *control_flow = ControlFlow::Wait;
 
         match event {
+            Event::NewEvents(StartCause::Init) => match desktop_tray::DesktopTray::new() {
+                Ok(desktop_tray) => {
+                    tray = Some(desktop_tray);
+                }
+                Err(error) => {
+                    error!(%error, "failed to initialize tray icon");
+                }
+            },
             Event::UserEvent(UserEvent::Menu(menu_event)) => {
                 match desktop_menu::handle_menu_event(&menu_event, &logs_dir) {
                     Ok(desktop_menu::MenuCommand::Quit) => {
@@ -113,6 +129,18 @@ fn run_event_loop(
                         error!(id = %menu_event.id.as_ref(), %error, "failed to handle menu event");
                     }
                 }
+            }
+            Event::UserEvent(UserEvent::Tray(tray_event))
+                if desktop_tray::handle_tray_event(&tray_event)
+                    == desktop_tray::TrayAction::RestoreWindow =>
+            {
+                if let Some(window) = &window {
+                    window.set_visible(true);
+                    window.set_focus();
+                }
+            }
+            Event::UserEvent(UserEvent::Tray(tray_event)) => {
+                let _ = desktop_tray::handle_tray_event(&tray_event);
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,

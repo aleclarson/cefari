@@ -17,6 +17,8 @@ External URL and file open requests are routed through the desktop-only `open` d
 
 Native menus are built with `muda` during desktop startup. On macOS the menu is installed as the application menu, menu events are forwarded through Tao user events, and implemented menu actions currently quit the app or open the runtime log directory. Update-check, UI reload, and service-status menu entries are wired to the event path and currently log activation until the corresponding UI/runtime flows are ready to run from the menu.
 
+Tray/menu-bar icon behavior is built with `tray-icon`. The tray icon is created after Tao emits `StartCause::Init`, has a small generated template icon and context menu, routes tray events into the Tao user-event loop, restores/focuses the main window on primary click, and shares the menu command IDs used by the native app menu.
+
 Desktop runtime operations are adapted through `cefari-core`: update checks/install calls use `UpdateCheckConfig`, `check_for_update`, and `install_update`, while daemon service operations build a `CefariServiceSpec` and call the core service-manager wrappers. These adapters are prepared at startup but side-effecting operations are reserved for later UI or menu triggers.
 
 Windows and Linux remain target platforms, but packaging, service operations, and desktop shell behavior still need platform-specific verification before they can be treated as supported.

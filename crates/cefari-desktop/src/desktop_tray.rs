@@ -1,0 +1,127 @@
+use anyhow::{Context, Result};
+use tracing::{debug, info};
+use tray_icon::{
+    Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent,
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+};
+
+use crate::desktop_menu::{CHECK_FOR_UPDATES_ID, OPEN_LOGS_ID, QUIT_ID};
+
+const TRAY_ICON_SIZE: u32 = 18;
+const TRAY_ICON_PIXEL_COUNT: usize = (TRAY_ICON_SIZE * TRAY_ICON_SIZE) as usize;
+#[cfg(test)]
+const TRAY_MENU_LABELS: [&str; 4] = ["Open Logs", "Check for Updates...", "Quit Cefari", ""];
+
+pub struct DesktopTray {
+    _tray_icon: TrayIcon,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrayAction {
+    RestoreWindow,
+    None,
+}
+
+impl DesktopTray {
+    pub fn new() -> Result<Self> {
+        let menu = tray_menu()?;
+        let icon = tray_icon().context("failed to create Cefari tray icon")?;
+        let tray_icon = TrayIconBuilder::new()
+            .with_tooltip("Cefari")
+            .with_icon(icon)
+            .with_icon_as_template(true)
+            .with_menu(Box::new(menu))
+            .with_menu_on_left_click(false)
+            .with_menu_on_right_click(true)
+            .build()
+            .context("failed to create Cefari tray icon")?;
+
+        info!("cefari tray icon created");
+        Ok(Self {
+            _tray_icon: tray_icon,
+        })
+    }
+}
+
+pub fn handle_tray_event(event: &TrayIconEvent) -> TrayAction {
+    debug!(?event, "received tray icon event");
+
+    match event {
+        TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        }
+        | TrayIconEvent::DoubleClick {
+            button: MouseButton::Left,
+            ..
+        } => TrayAction::RestoreWindow,
+        _ => TrayAction::None,
+    }
+}
+
+fn tray_menu() -> Result<Menu> {
+    let menu = Menu::with_items(&[
+        &MenuItem::with_id(OPEN_LOGS_ID, "Open Logs", true, None),
+        &MenuItem::with_id(CHECK_FOR_UPDATES_ID, "Check for Updates...", true, None),
+        &PredefinedMenuItem::separator(),
+        &MenuItem::with_id(QUIT_ID, "Quit Cefari", true, None),
+    ])
+    .context("failed to build Cefari tray menu")?;
+
+    Ok(menu)
+}
+
+fn tray_icon() -> Result<Icon> {
+    Icon::from_rgba(tray_icon_rgba(), TRAY_ICON_SIZE, TRAY_ICON_SIZE)
+        .map_err(|error| anyhow::anyhow!("{error}"))
+}
+
+fn tray_icon_rgba() -> Vec<u8> {
+    let mut rgba = Vec::with_capacity(TRAY_ICON_PIXEL_COUNT * 4);
+    let center = f64::from(TRAY_ICON_SIZE - 1) / 2.0;
+    let outer_radius = center;
+    let inner_radius = center * 0.45;
+
+    for y in 0..TRAY_ICON_SIZE {
+        for x in 0..TRAY_ICON_SIZE {
+            let dx = f64::from(x) - center;
+            let dy = f64::from(y) - center;
+            let distance = dx.hypot(dy);
+            let alpha = if distance <= inner_radius {
+                0
+            } else if distance <= outer_radius {
+                255
+            } else {
+                0
+            };
+
+            rgba.extend_from_slice(&[0, 0, 0, alpha]);
+        }
+    }
+
+    rgba
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TRAY_ICON_PIXEL_COUNT, TRAY_ICON_SIZE, TRAY_MENU_LABELS, tray_icon_rgba};
+
+    #[test]
+    fn tray_icon_rgba_has_expected_dimensions() {
+        let rgba = tray_icon_rgba();
+
+        assert_eq!(rgba.len(), TRAY_ICON_PIXEL_COUNT * 4);
+        assert_eq!(TRAY_ICON_SIZE, 18);
+        assert!(rgba.chunks_exact(4).any(|pixel| pixel[3] == 255));
+        assert!(rgba.chunks_exact(4).any(|pixel| pixel[3] == 0));
+    }
+
+    #[test]
+    fn tray_menu_spec_has_expected_commands() {
+        assert_eq!(
+            TRAY_MENU_LABELS,
+            ["Open Logs", "Check for Updates...", "Quit Cefari", ""]
+        );
+    }
+}
