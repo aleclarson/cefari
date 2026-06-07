@@ -31,14 +31,14 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Add configuration schema structs.
   - [x] Add configuration loading and saving.
   - [x] Add JSON parsing and validation tests for configuration data.
-- [ ] Implement runtime resource support.
-  - [ ] Wrap `cargo-packager-resource-resolver`.
-  - [ ] Define missing-resource error behavior.
-  - [ ] Add host-independent tests where possible.
-- [ ] Implement runtime logging support.
-  - [ ] Define logging configuration consumed by `cefari-desktop`.
-  - [ ] Provide helpers for log file paths and tracing setup inputs.
-  - [ ] Document which logging setup remains desktop-owned.
+- [x] Implement runtime resource support.
+  - [x] Wrap `cargo-packager-resource-resolver`.
+  - [x] Define missing-resource error behavior.
+  - [x] Add host-independent tests where possible.
+- [x] Implement runtime logging support.
+  - [x] Define logging configuration consumed by `cefari-desktop`.
+  - [x] Provide helpers for log file paths and tracing setup inputs.
+  - [x] Document which logging setup remains desktop-owned.
 - [ ] Implement update support.
   - [ ] Define update-check configuration and state types.
   - [ ] Implement update check helpers using `cargo-packager-updater`.
@@ -50,8 +50,8 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [ ] Add tests for platform-independent service configuration behavior.
 - [ ] Document the `cefari-core` API surface.
   - [x] Add crate-level docs.
-  - [ ] Mark which APIs are stable for `cefari-desktop`.
-  - [ ] Keep internal helpers private unless a runtime caller needs them.
+  - [x] Mark which APIs are stable for `cefari-desktop`.
+  - [x] Keep internal helpers private unless a runtime caller needs them.
 
 ## 3. Build `cefari-desktop`
 
