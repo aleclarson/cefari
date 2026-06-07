@@ -22,6 +22,25 @@ impl SignPlatform {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum UpdatePackageFormat {
+    App,
+    Appimage,
+    Nsis,
+    Wix,
+}
+
+impl UpdatePackageFormat {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::App => "app",
+            Self::Appimage => "appimage",
+            Self::Nsis => "nsis",
+            Self::Wix => "wix",
+        }
+    }
+}
+
 pub fn codesign(artifact: &Path, platform: SignPlatform, config: Option<&Path>) -> Result<()> {
     ensure_artifact(artifact)?;
 
@@ -67,6 +86,7 @@ pub fn make_update(
     url: &str,
     version: &str,
     target: &str,
+    format: UpdatePackageFormat,
     key_env: &str,
     output_dir: &Path,
 ) -> Result<()> {
@@ -94,7 +114,7 @@ pub fn make_update(
 
     let signature = fs::read_to_string(&signature_path)
         .with_context(|| format!("failed to read signature at {}", signature_path.display()))?;
-    let manifest = update_manifest(version, target, url, signature.trim());
+    let manifest = update_manifest(version, target, url, signature.trim(), format);
     let manifest_path = output_dir.join("update.json");
     fs::write(&manifest_path, manifest).with_context(|| {
         format!(
@@ -109,6 +129,16 @@ pub fn make_update(
 
 pub fn default_update_target() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+pub fn default_update_format(target: &str) -> UpdatePackageFormat {
+    if target.starts_with("macos-") || target.starts_with("darwin-") {
+        UpdatePackageFormat::App
+    } else if target.starts_with("windows-") {
+        UpdatePackageFormat::Nsis
+    } else {
+        UpdatePackageFormat::Appimage
+    }
 }
 
 fn push_config(command: &mut Command, config: Option<&Path>) {
@@ -153,12 +183,19 @@ fn archive_stem(path: &Path) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("archive path has no file name: {}", path.display()))
 }
 
-fn update_manifest(version: &str, target: &str, url: &str, signature: &str) -> String {
+fn update_manifest(
+    version: &str,
+    target: &str,
+    url: &str,
+    signature: &str,
+    format: UpdatePackageFormat,
+) -> String {
     format!(
         r#"{{
   "version": "{}",
   "platforms": {{
     "{}": {{
+      "format": "{}",
       "signature": "{}",
       "url": "{}"
     }}
@@ -167,6 +204,7 @@ fn update_manifest(version: &str, target: &str, url: &str, signature: &str) -> S
 "#,
         json_escape(version),
         json_escape(target),
+        format.as_str(),
         json_escape(signature),
         json_escape(url)
     )
@@ -189,7 +227,9 @@ fn json_escape(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_update_target, update_manifest};
+    use super::{
+        UpdatePackageFormat, default_update_format, default_update_target, update_manifest,
+    };
 
     #[test]
     fn default_update_target_includes_os_and_arch() {
@@ -199,9 +239,36 @@ mod tests {
     }
 
     #[test]
+    fn default_update_format_follows_target_platform() {
+        assert_eq!(
+            default_update_format("macos-aarch64"),
+            UpdatePackageFormat::App
+        );
+        assert_eq!(
+            default_update_format("darwin-aarch64"),
+            UpdatePackageFormat::App
+        );
+        assert_eq!(
+            default_update_format("windows-x86_64"),
+            UpdatePackageFormat::Nsis
+        );
+        assert_eq!(
+            default_update_format("linux-x86_64"),
+            UpdatePackageFormat::Appimage
+        );
+    }
+
+    #[test]
     fn update_manifest_escapes_json_fields() {
-        let manifest = update_manifest("1.0.0", "darwin-aarch64", "https://e.test/a\"b", "sig");
+        let manifest = update_manifest(
+            "1.0.0",
+            "darwin-aarch64",
+            "https://e.test/a\"b",
+            "sig",
+            UpdatePackageFormat::App,
+        );
         assert!(manifest.contains(r#""version": "1.0.0""#));
         assert!(manifest.contains(r#""url": "https://e.test/a\"b""#));
+        assert!(manifest.contains(r#""format": "app""#));
     }
 }

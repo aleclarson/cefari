@@ -99,6 +99,10 @@ pub enum Command {
         #[arg(long, default_value_t = release::default_update_target())]
         target: String,
 
+        /// Updater package format. Defaults from --target when omitted.
+        #[arg(long, value_enum)]
+        format: Option<release::UpdatePackageFormat>,
+
         /// Env var read by cargo-codesign for the update signing key.
         #[arg(long, default_value = "UPDATE_SIGNING_KEY")]
         key_env: String,
@@ -152,9 +156,18 @@ pub fn run_command(command: Command) -> Result<()> {
             url,
             version,
             target,
+            format,
             key_env,
             output_dir,
-        } => release::make_update(&archive, &url, &version, &target, &key_env, &output_dir),
+        } => release::make_update(
+            &archive,
+            &url,
+            &version,
+            &target,
+            format.unwrap_or_else(|| release::default_update_format(&target)),
+            &key_env,
+            &output_dir,
+        ),
         Command::Clean { path } => clean::clean_project(&path),
         Command::Doctor => {
             doctor();

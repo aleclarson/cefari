@@ -23,5 +23,8 @@ thiserror.workspace = true
 toml.workspace = true
 xshell.workspace = true
 
+[dev-dependencies]
+cargo-packager-updater.workspace = true
+
 [lints]
 workspace = true

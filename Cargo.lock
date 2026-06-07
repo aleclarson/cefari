@@ -318,6 +318,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "camino",
+ "cargo-packager-updater",
  "clap",
  "download-cef",
  "duct",

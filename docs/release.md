@@ -60,8 +60,8 @@ Generate updater metadata with:
 cefari make-update ARCHIVE --url URL --version VERSION
 ```
 
-The command signs `ARCHIVE` through `cargo-codesign codesign update`, then writes `dist/update/update.json`. The JSON follows the response shape consumed by `cargo-packager-updater`: a release `version` with per-target `url` and `signature` entries.
+The command signs `ARCHIVE` through `cargo-codesign codesign update`, then writes `dist/update/update.json`. The JSON follows the response shape consumed by `cargo-packager-updater`: a release `version` with per-target `url`, `signature`, and `format` entries.
 
-Use `--target`, `--key-env`, and `--output-dir` when CI needs explicit platform keys, signing-key environment names, or output locations.
+Use `--target`, `--format`, `--key-env`, and `--output-dir` when CI needs explicit platform keys, package formats, signing-key environment names, or output locations.
 
 The release workflow downloads the native package artifacts, archives each platform package, runs `cefari make-update` for each platform target, uploads generated update metadata, and publishes native packages, update archives, signatures, and `update.json` files to the GitHub release for tag builds. `UPDATE_SIGNING_KEY` must be configured as a repository secret for update artifact generation.

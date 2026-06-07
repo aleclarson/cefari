@@ -151,6 +151,8 @@ fn package_creates_assembly_manifest_after_build() {
 
     let manifest =
         fs::read_to_string(root.join("dist/package/manifest.json")).expect("manifest should exist");
+    let manifest_json: serde_json::Value =
+        serde_json::from_str(&manifest).expect("manifest should be valid JSON");
     assert!(manifest.contains(r#""desktop_binary": "cefari-desktop""#));
     assert!(manifest.contains(r#""daemon_executable": ""#));
     assert!(manifest.contains(daemon_executable_name()));
@@ -158,6 +160,18 @@ fn package_creates_assembly_manifest_after_build() {
     assert!(manifest.contains(r#""cef_archive_json": ""#));
     assert!(manifest.contains("build/cef/resources"));
     assert!(manifest.contains("build/cef/resources/archive.json"));
+    assert!(
+        PathBuf::from(json_field(&manifest_json, "frontend_dir"))
+            .join("index.html")
+            .exists()
+    );
+    assert!(PathBuf::from(json_field(&manifest_json, "daemon_executable")).exists());
+    assert!(PathBuf::from(json_field(&manifest_json, "cef_archive_json")).exists());
+    assert!(
+        PathBuf::from(json_field(&manifest_json, "cef_resources"))
+            .join("libcef.fixture")
+            .exists()
+    );
 
     let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
         .expect("package metadata should exist");
@@ -398,8 +412,32 @@ exit 1"#,
         fs::read_to_string(output_dir.join("update.json")).expect("manifest should exist");
     assert!(manifest.contains(r#""version": "1.2.3""#));
     assert!(manifest.contains(r#""darwin-aarch64""#));
+    assert!(manifest.contains(r#""format": "app""#));
     assert!(manifest.contains(r#""signature": "fake-signature""#));
     assert!(manifest.contains(r#""url": "https://downloads.example.test/Example.tar.gz""#));
+    let update: cargo_packager_updater::RemoteRelease =
+        serde_json::from_str(&manifest).expect("updater should parse generated manifest");
+    assert_eq!(update.version.to_string(), "1.2.3");
+    assert_eq!(
+        update
+            .download_url("darwin-aarch64")
+            .expect("target URL should resolve")
+            .as_str(),
+        "https://downloads.example.test/Example.tar.gz"
+    );
+    assert_eq!(
+        update
+            .signature("darwin-aarch64")
+            .expect("target signature should resolve"),
+        "fake-signature"
+    );
+    assert_eq!(
+        update
+            .format("darwin-aarch64")
+            .expect("target format should resolve")
+            .to_string(),
+        "app"
+    );
 
     fs::remove_dir_all(root).expect("temp project should be removable");
     fs::remove_dir_all(tools).expect("temp tools should be removable");
@@ -464,6 +502,13 @@ fn assert_success(output: &Output) {
 
 fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn json_field<'a>(value: &'a serde_json::Value, field: &str) -> &'a str {
+    value
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_else(|| panic!("manifest field {field} should be a string"))
 }
 
 fn stderr(output: &Output) -> String {

@@ -69,7 +69,7 @@ Signing identities are not hard-coded into generated projects. They are supplied
 
 Update artifact hosting is external to the app package. Runtime update checks consume configured endpoints and public keys; release automation is responsible for publishing compatible update metadata and signed artifacts.
 
-`cefari make-update` signs a release archive through `cargo-codesign` and writes metadata that matches the `cargo-packager-updater` response shape documented by that crate.
+`cefari make-update` signs a release archive through `cargo-codesign` and writes metadata that matches the `cargo-packager-updater` response shape documented by that crate, including per-target URL, signature, and package format fields.
 
 ## Generated Template Compatibility
 

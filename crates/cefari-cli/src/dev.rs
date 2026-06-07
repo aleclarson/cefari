@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
@@ -236,7 +236,12 @@ fn write_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<(
     .context("failed to write frontend dev server response header")?;
     stream
         .write_all(body)
-        .context("failed to write frontend dev server response body")
+        .context("failed to write frontend dev server response body")?;
+    stream
+        .flush()
+        .context("failed to flush frontend dev server response")?;
+    let _ = stream.shutdown(Shutdown::Write);
+    Ok(())
 }
 
 #[cfg(test)]

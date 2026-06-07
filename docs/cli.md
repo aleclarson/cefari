@@ -103,6 +103,7 @@ Signs a release archive through `cargo-codesign codesign update` and writes upda
 Useful options:
 
 - `--target TARGET`: updater platform key, defaulting to the current OS and architecture
+- `--format FORMAT`: updater package format, one of `app`, `appimage`, `nsis`, or `wix`; defaults from `--target`
 - `--key-env NAME`: environment variable read by `cargo-codesign` for the update signing key, defaulting to `UPDATE_SIGNING_KEY`
 - `--output-dir PATH`: output directory for the signature and `update.json`, defaulting to `dist/update`
 
