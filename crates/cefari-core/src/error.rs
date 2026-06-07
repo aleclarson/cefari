@@ -55,6 +55,12 @@ pub enum Error {
         source: cargo_packager_updater::semver::Error,
     },
 
+    #[error("service manager operation failed: {operation}")]
+    ServiceManager {
+        operation: &'static str,
+        source: io::Error,
+    },
+
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 }

@@ -45,10 +45,10 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [ ] Implement update check helpers using `cargo-packager-updater`.
   - [ ] Implement update install helpers with clear failure states.
   - [x] Add tests around update state and error mapping where possible.
-- [ ] Implement service management support.
-  - [ ] Define service operations for install, start, stop, restart, status, and uninstall.
-  - [ ] Implement service helpers using `service-manager`.
-  - [ ] Add tests for platform-independent service configuration behavior.
+- [x] Implement service management support.
+  - [x] Define service operations for install, start, stop, restart, status, and uninstall.
+  - [x] Implement service helpers using `service-manager`.
+  - [x] Add tests for platform-independent service configuration behavior.
 - [ ] Document the `cefari-core` API surface.
   - [x] Add crate-level docs.
   - [x] Mark which APIs are stable for `cefari-desktop`.
