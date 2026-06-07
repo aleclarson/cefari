@@ -4,6 +4,14 @@ use anyhow::{Context, Result};
 
 use crate::{cef, project::ProjectConfig};
 
+pub(crate) fn daemon_executable_name() -> &'static str {
+    if cfg!(windows) {
+        "cefari-daemon.exe"
+    } else {
+        "cefari-daemon"
+    }
+}
+
 pub fn build_project(project_dir: &Path) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
     let build_dir = ProjectConfig::build_dir(project_dir);
@@ -63,14 +71,30 @@ fn build_frontend(project_dir: &Path, project: &ProjectConfig, output_dir: &Path
 
 fn build_daemon(project_dir: &Path, project: &ProjectConfig, output_dir: &Path) -> Result<()> {
     let source = project_dir.join(&project.daemon.entry);
-    let output = output_dir.join("main.ts");
-    fs::copy(&source, &output).with_context(|| {
+    let source_copy = output_dir.join("main.ts");
+    fs::copy(&source, &source_copy).with_context(|| {
         format!(
             "failed to copy daemon entry from {} to {}",
             source.display(),
-            output.display()
+            source_copy.display()
         )
     })?;
+
+    let executable = output_dir.join(daemon_executable_name());
+    let status = Command::new("deno")
+        .arg("compile")
+        .arg("--allow-read")
+        .arg("--allow-net")
+        .arg("--output")
+        .arg(&executable)
+        .arg(&source)
+        .status()
+        .context("failed to run deno compile for Cefari daemon")?;
+
+    if !status.success() {
+        anyhow::bail!("deno compile failed with status {status}");
+    }
+
     Ok(())
 }
 
@@ -101,7 +125,16 @@ pub(crate) fn workspace_manifest() -> std::path::PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::workspace_manifest;
+    use super::{daemon_executable_name, workspace_manifest};
+
+    #[test]
+    fn daemon_executable_name_matches_host_platform() {
+        if cfg!(windows) {
+            assert_eq!(daemon_executable_name(), "cefari-daemon.exe");
+        } else {
+            assert_eq!(daemon_executable_name(), "cefari-daemon");
+        }
+    }
 
     #[test]
     fn resolves_workspace_manifest() {

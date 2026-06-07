@@ -92,6 +92,11 @@ fn build_creates_project_artifacts() {
     assert_success(&output);
     assert!(root.join("build/frontend/index.html").exists());
     assert!(root.join("build/daemon/main.ts").exists());
+    assert!(
+        root.join("build/daemon")
+            .join(daemon_executable_name())
+            .exists()
+    );
     assert!(root.join("build/cef/resources").exists());
     assert!(root.join("build/cef/manifest.json").exists());
     assert!(root.join("frontend/dist/index.html").exists());
@@ -131,6 +136,8 @@ fn package_creates_assembly_manifest_after_build() {
     let manifest =
         fs::read_to_string(root.join("dist/package/manifest.json")).expect("manifest should exist");
     assert!(manifest.contains(r#""desktop_binary": "cefari-desktop""#));
+    assert!(manifest.contains(r#""daemon_executable": ""#));
+    assert!(manifest.contains(daemon_executable_name()));
     assert!(manifest.contains(r#""cef_resources": ""#));
     assert!(manifest.contains("build/cef/resources"));
 
@@ -441,6 +448,14 @@ fn stdout(output: &Output) -> String {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn daemon_executable_name() -> &'static str {
+    if cfg!(windows) {
+        "cefari-daemon.exe"
+    } else {
+        "cefari-daemon"
+    }
 }
 
 fn temp_project_path() -> std::path::PathBuf {

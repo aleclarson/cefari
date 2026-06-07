@@ -48,9 +48,11 @@ Current build behavior:
 - copies `frontend/index.html` into `build/frontend/index.html`
 - copies `frontend/index.html` into the configured frontend dist path
 - copies the configured daemon entry into `build/daemon/main.ts`
+- compiles the configured daemon entry with `deno compile` into `build/daemon/cefari-daemon` or `build/daemon/cefari-daemon.exe`
+- prepares CEF metadata under `build/cef/`
 - runs `cargo build -p cefari-desktop` through the Cefari workspace manifest
 
-The final daemon output contract and packaging layout are still evolving.
+Package metadata records the compiled daemon executable explicitly.
 
 ### `cefari dev [PATH] [--frontend-port PORT]`
 

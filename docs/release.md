@@ -22,6 +22,8 @@ CEF resources are resolved from `build/cef/resources/`, which is prepared by `ce
 
 CI runs package assembly on macOS, Linux, and Windows. Those jobs create a sample Cefari project, run `cefari build`, run `cefari package`, verify the generated frontend, daemon, CEF preparation, package metadata, and confirm the `cefari` CLI binary is built separately from desktop package metadata.
 
+Daemon package inputs include the copied source entry and the compiled `cefari-daemon` executable produced by `deno compile`; package metadata records the executable path explicitly.
+
 Native installer validation is still separate from package assembly validation and remains blocked on downloaded CEF binaries and real package contents.
 
 ## Signing

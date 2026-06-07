@@ -7,6 +7,12 @@ use cefari_core::{
     service_status, start_service, stop_service,
 };
 
+const DAEMON_EXECUTABLE_NAME: &str = if cfg!(windows) {
+    "cefari-daemon.exe"
+} else {
+    "cefari-daemon"
+};
+
 pub struct RuntimeOperations {
     config: CefariConfig,
     paths: RuntimePaths,
@@ -88,7 +94,10 @@ impl RuntimeOperations {
     }
 
     fn daemon_program(&self) -> PathBuf {
-        self.paths.resource_dir.join("daemon/main.ts")
+        self.paths
+            .resource_dir
+            .join("daemon")
+            .join(DAEMON_EXECUTABLE_NAME)
     }
 }
 
@@ -104,7 +113,7 @@ fn load_desktop_config(path: &Path) -> Result<CefariConfig> {
 mod tests {
     use cefari_core::{AppIdentity, RuntimePaths, UpdateCheckState};
 
-    use super::RuntimeOperations;
+    use super::{DAEMON_EXECUTABLE_NAME, RuntimeOperations};
 
     #[test]
     fn defaults_to_unconfigured_updates_without_config_file() {
@@ -127,7 +136,7 @@ mod tests {
         let spec = runtime.daemon_service_spec();
 
         assert_eq!(spec.label.to_qualified_name(), "dev.cefari.daemon");
-        assert!(spec.program.ends_with("daemon/main.ts"));
+        assert!(spec.program.ends_with(DAEMON_EXECUTABLE_NAME));
         assert_eq!(spec.working_directory, Some(paths.data_dir));
     }
 }

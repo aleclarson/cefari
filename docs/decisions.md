@@ -45,7 +45,7 @@ No JavaScript framework is selected yet. A richer template should be introduced 
 
 `cefari dev` runs the daemon entry with `deno run --watch --allow-read --allow-net`.
 
-Final packaged releases should not rely on a developer Deno installation or treat TypeScript source as the service executable. The final packaged daemon output contract is a platform executable produced from the configured Deno entry and copied into `build/daemon/` with a stable executable name. Until that compile step is implemented, the current TypeScript copy remains a pre-release build artifact only.
+Final packaged releases should not rely on a developer Deno installation or treat TypeScript source as the service executable. The final packaged daemon output contract is a platform executable produced from the configured Deno entry and copied into `build/daemon/` with the stable name `cefari-daemon` or `cefari-daemon.exe`. `cefari build` keeps a `main.ts` source copy for traceability, but package metadata and desktop service management point at the compiled executable.
 
 `cefari-cli` should not support plugins or arbitrary project hooks before the first public release. The current command surface stays explicit and deterministic; extension points should be reconsidered only after the core init, dev, build, package, signing, notarization, and update workflows are stable.
 

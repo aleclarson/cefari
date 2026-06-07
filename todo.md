@@ -2,10 +2,10 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 14 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
+Nesting audit: 13 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
 
 - 1 under native shell implementation.
-- 2 under build orchestration.
+- 1 under build orchestration.
 - 1 under package assembly.
 - 1 under CI coverage.
 - 4 under release automation.
@@ -114,7 +114,7 @@ Nesting audit: 14 currently unchecked checklist items are dependent child tasks 
   - [x] Implement `cefari build`.
   - [x] Build frontend artifacts.
   - [x] Build Deno daemon artifacts.
-  - [ ] Compile the Deno daemon entry into a packaged daemon executable.
+  - [x] Compile the Deno daemon entry into a packaged daemon executable.
   - [x] Build the Rust desktop app.
   - [x] Implement CEF preparation manifest as a CLI-owned step.
   - [ ] Implement CEF binary download/cache population as a CLI-owned step.

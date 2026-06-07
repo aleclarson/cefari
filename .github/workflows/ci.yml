@@ -20,6 +20,11 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Check formatting
         run: cargo fmt --all --check
 
@@ -69,6 +74,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Build cefari CLI
         run: cargo build -p cefari-cli
 
@@ -86,6 +96,7 @@ jobs:
         run: |
           test -f .ci/cefari-sample/build/frontend/index.html
           test -f .ci/cefari-sample/build/daemon/main.ts
+          test -f .ci/cefari-sample/build/daemon/cefari-daemon || test -f .ci/cefari-sample/build/daemon/cefari-daemon.exe
           test -d .ci/cefari-sample/build/cef/resources
           test -f .ci/cefari-sample/build/cef/manifest.json
           test -f .ci/cefari-sample/dist/package/cargo-packager.toml

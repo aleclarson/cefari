@@ -2,7 +2,9 @@ use std::{fs, path::Path, process::Command};
 
 use anyhow::{Context, Result};
 
-use crate::{cef, project::ProjectConfig, run_process, tool_available};
+use crate::{
+    build::daemon_executable_name, cef, project::ProjectConfig, run_process, tool_available,
+};
 
 pub fn package_project(project_dir: &Path) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
@@ -30,6 +32,7 @@ fn ensure_build_artifacts(build_dir: &Path) -> Result<()> {
     let required = [
         build_dir.join("frontend/index.html"),
         build_dir.join("daemon/main.ts"),
+        build_dir.join("daemon").join(daemon_executable_name()),
     ];
 
     for artifact in required {
@@ -84,6 +87,7 @@ fn write_package_manifest(
         desktop_binary: "cefari-desktop".to_owned(),
         frontend_dir: normalize(&build_dir.join("frontend")),
         daemon_dir: normalize(&build_dir.join("daemon")),
+        daemon_executable: normalize(&build_dir.join("daemon").join(daemon_executable_name())),
         cef_resources: normalize(cef_resources_dir),
     };
 
@@ -121,6 +125,7 @@ struct PackageManifest {
     desktop_binary: String,
     frontend_dir: String,
     daemon_dir: String,
+    daemon_executable: String,
     cef_resources: String,
 }
 
@@ -133,6 +138,7 @@ impl PackageManifest {
   "desktop_binary": "{}",
   "frontend_dir": "{}",
   "daemon_dir": "{}",
+  "daemon_executable": "{}",
   "cef_resources": "{}"
 }}
 "#,
@@ -141,6 +147,7 @@ impl PackageManifest {
             self.desktop_binary,
             self.frontend_dir,
             self.daemon_dir,
+            self.daemon_executable,
             self.cef_resources
         )
     }
