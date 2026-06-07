@@ -49,7 +49,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Define service operations for install, start, stop, restart, status, and uninstall.
   - [x] Implement service helpers using `service-manager`.
   - [x] Add tests for platform-independent service configuration behavior.
-- [ ] Document the `cefari-core` API surface.
+- [x] Document the `cefari-core` API surface.
   - [x] Add crate-level docs.
   - [x] Mark which APIs are stable for `cefari-desktop`.
   - [x] Keep internal helpers private unless a runtime caller needs them.
