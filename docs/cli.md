@@ -52,15 +52,6 @@ Current build behavior:
 
 The final daemon output contract and packaging layout are still evolving.
 
-### Planned Commands
-
-These commands are present in the parser but intentionally fail until their orchestration work is implemented:
-
-- `cefari dev`
-- `cefari codesign`
-- `cefari notarize`
-- `cefari make-update`
-
 ### `cefari package [PATH]`
 
 Prepares package assembly metadata for the Cefari project at `PATH`. If `PATH` is omitted, the CLI uses the current directory.
@@ -72,7 +63,42 @@ Current output:
 - `dist/package/cargo-packager.toml`
 - `dist/package/manifest.json`
 
-The native installer invocation through `cargo-packager` is still planned.
+If `cargo-packager` is available on `PATH`, `cefari package` invokes it with the generated config and writes native package output under `dist/package/output`. If the tool is missing, the command leaves the assembly metadata in place and reports that the native package step was skipped.
+
+### `cefari codesign ARTIFACT [--platform PLATFORM] [--config PATH]`
+
+Invokes `cargo-codesign` for a packaged artifact. `PLATFORM` defaults to the current host platform and can be `macos`, `windows`, or `linux`.
+
+Current behavior:
+
+- macOS: runs `cargo-codesign codesign macos --app ARTIFACT --skip-notarize` for `.app` bundles or `--dmg ARTIFACT --skip-notarize` for `.dmg` files
+- Windows: runs `cargo-codesign codesign windows`
+- Linux: runs `cargo-codesign codesign linux --archive ARTIFACT`
+
+### `cefari notarize ARTIFACT [--config PATH]`
+
+Invokes the macOS notarization flow through `cargo-codesign`. The artifact must be a `.app` bundle or `.dmg` file.
+
+### `cefari make-update ARCHIVE --url URL --version VERSION`
+
+Signs a release archive through `cargo-codesign codesign update` and writes update metadata compatible with `cargo-packager-updater`.
+
+Useful options:
+
+- `--target TARGET`: updater platform key, defaulting to the current OS and architecture
+- `--key-env NAME`: environment variable read by `cargo-codesign` for the update signing key, defaulting to `UPDATE_SIGNING_KEY`
+- `--output-dir PATH`: output directory for the signature and `update.json`, defaulting to `dist/update`
+
+Current output:
+
+- `<ARCHIVE file name>.sig`
+- `update.json`
+
+### Planned Commands
+
+These commands are present in the parser but intentionally fail until their orchestration work is implemented:
+
+- `cefari dev`
 
 ### `cefari clean [PATH]`
 

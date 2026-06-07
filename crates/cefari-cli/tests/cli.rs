@@ -1,5 +1,6 @@
 use std::{
     fs,
+    path::{Path, PathBuf},
     process::{Command, Output},
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
@@ -134,6 +135,49 @@ fn package_creates_assembly_manifest_after_build() {
 }
 
 #[test]
+fn package_invokes_cargo_packager_when_available() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "cargo-packager",
+        r#"echo "cargo-packager $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Package Tool App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let build_output = cefari()
+        .arg("build")
+        .arg(&root)
+        .output()
+        .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+
+    assert_success(&output);
+    let tool_log = fs::read_to_string(&log).expect("tool log should exist");
+    assert!(tool_log.contains("cargo-packager --config"));
+    assert!(tool_log.contains("cargo-packager.toml"));
+    assert!(tool_log.contains("--out-dir"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
 fn package_requires_build_artifacts() {
     let root = temp_project_path();
     let init_output = cefari()
@@ -214,6 +258,120 @@ fn doctor_reports_tool_statuses() {
 }
 
 #[test]
+fn codesign_invokes_cargo_codesign_for_macos_artifact() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    let artifact = root.join("Example.dmg");
+    fs::create_dir_all(&root).expect("temp project should be created");
+    fs::write(&artifact, "dmg").expect("artifact should be created");
+    create_fake_tool(
+        &tools,
+        "cargo-codesign",
+        r#"echo "cargo-codesign $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("codesign")
+        .arg(&artifact)
+        .arg("--platform")
+        .arg("macos")
+        .output()
+        .expect("cefari codesign should run");
+
+    assert_success(&output);
+    let tool_log = fs::read_to_string(&log).expect("tool log should exist");
+    assert!(tool_log.contains("cargo-codesign codesign macos --dmg"));
+    assert!(tool_log.contains("--skip-notarize"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
+fn notarize_invokes_cargo_codesign_macos_flow() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    let artifact = root.join("Example.dmg");
+    fs::create_dir_all(&root).expect("temp project should be created");
+    fs::write(&artifact, "dmg").expect("artifact should be created");
+    create_fake_tool(
+        &tools,
+        "cargo-codesign",
+        r#"echo "cargo-codesign $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("notarize")
+        .arg(&artifact)
+        .output()
+        .expect("cefari notarize should run");
+
+    assert_success(&output);
+    let tool_log = fs::read_to_string(&log).expect("tool log should exist");
+    assert!(tool_log.contains("cargo-codesign codesign macos --dmg"));
+    assert!(!tool_log.contains("--skip-notarize"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
+fn make_update_signs_archive_and_writes_updater_manifest() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    let archive = root.join("Example.tar.gz");
+    let output_dir = root.join("dist/update");
+    fs::create_dir_all(&root).expect("temp project should be created");
+    fs::write(&archive, "archive").expect("archive should be created");
+    create_fake_tool(
+        &tools,
+        "cargo-codesign",
+        r#"echo "cargo-codesign $@" >> "$CEFARI_TOOL_LOG"
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output" ]; then
+    shift
+    echo "fake-signature" > "$1"
+    exit 0
+  fi
+  shift
+done
+exit 1"#,
+    );
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("make-update")
+        .arg(&archive)
+        .arg("--url")
+        .arg("https://downloads.example.test/Example.tar.gz")
+        .arg("--version")
+        .arg("1.2.3")
+        .arg("--target")
+        .arg("darwin-aarch64")
+        .arg("--output-dir")
+        .arg(&output_dir)
+        .output()
+        .expect("cefari make-update should run");
+
+    assert_success(&output);
+    let tool_log = fs::read_to_string(&log).expect("tool log should exist");
+    assert!(tool_log.contains("cargo-codesign codesign update --archive"));
+    assert!(output_dir.join("Example.tar.gz.sig").exists());
+
+    let manifest =
+        fs::read_to_string(output_dir.join("update.json")).expect("manifest should exist");
+    assert!(manifest.contains(r#""version": "1.2.3""#));
+    assert!(manifest.contains(r#""darwin-aarch64""#));
+    assert!(manifest.contains(r#""signature": "fake-signature""#));
+    assert!(manifest.contains(r#""url": "https://downloads.example.test/Example.tar.gz""#));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
 fn unimplemented_command_fails_clearly() {
     let output = cefari().arg("dev").output().expect("cefari dev should run");
 
@@ -249,3 +407,35 @@ fn temp_project_path() -> std::path::PathBuf {
     let count = COUNTER.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!("cefari-cli-integration-test-{suffix}-{count}"))
 }
+
+fn with_fake_tools(mut command: Command, tools_dir: &Path, log: &Path) -> Command {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![tools_dir.to_path_buf()];
+    paths.extend(std::env::split_paths(&path));
+    let path = std::env::join_paths(paths).expect("PATH should be joinable");
+    command.env("PATH", path);
+    command.env("CEFARI_TOOL_LOG", log);
+    command
+}
+
+fn create_fake_tool(tools_dir: &Path, name: &str, body: &str) -> PathBuf {
+    fs::create_dir_all(tools_dir).expect("tools dir should be created");
+    let tool = tools_dir.join(name);
+    fs::write(&tool, format!("#!/bin/sh\n{body}\n")).expect("fake tool should be written");
+    make_executable(&tool);
+    tool
+}
+
+#[cfg(unix)]
+fn make_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)
+        .expect("fake tool metadata should exist")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).expect("fake tool should be executable");
+}
+
+#[cfg(not(unix))]
+fn make_executable(_path: &Path) {}

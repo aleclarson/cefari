@@ -43,13 +43,13 @@ CEF preparation is owned by `cefari-cli`. The initial download source should be 
 
 Generated projects use the app identifier from `cefari.toml` as the package identifier. `cefari init` currently derives that identifier from the display name, using the `dev.cefari.<slug>` shape.
 
-Signing identities are not hard-coded into generated projects. They should be supplied by developer environment or CI configuration when `cefari codesign` and notarization workflows are implemented.
+Signing identities are not hard-coded into generated projects. They are supplied by developer environment, CI configuration, or an explicit `sign.toml` path passed to `cefari codesign` and `cefari notarize`.
 
 ## Update Artifacts
 
 Update artifact hosting is external to the app package. Runtime update checks consume configured endpoints and public keys; release automation is responsible for publishing compatible update metadata and signed artifacts.
 
-`cefari make-update` should generate artifacts that match the `cargo-packager-updater` response shape documented by that crate.
+`cefari make-update` signs a release archive through `cargo-codesign` and writes metadata that matches the `cargo-packager-updater` response shape documented by that crate.
 
 ## Generated Template Compatibility
 

@@ -1,8 +1,8 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 use anyhow::{Context, Result};
 
-use crate::project::ProjectConfig;
+use crate::{project::ProjectConfig, run_process, tool_available};
 
 pub fn package_project(project_dir: &Path) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
@@ -21,6 +21,7 @@ pub fn package_project(project_dir: &Path) -> Result<()> {
     write_package_manifest(&package_dir, &project, &build_dir)?;
 
     println!("prepared package assembly at {}", package_dir.display());
+    run_cargo_packager_if_available(&package_dir)?;
     Ok(())
 }
 
@@ -84,6 +85,25 @@ fn write_package_manifest(
             package_dir.join("manifest.json").display()
         )
     })
+}
+
+fn run_cargo_packager_if_available(package_dir: &Path) -> Result<()> {
+    if !tool_available("cargo-packager") {
+        println!("cargo-packager not found; skipped native package invocation");
+        return Ok(());
+    }
+
+    let output_dir = package_dir.join("output");
+    let mut command = Command::new("cargo-packager");
+    command
+        .arg("--config")
+        .arg(package_dir.join("cargo-packager.toml"))
+        .arg("--out-dir")
+        .arg(&output_dir);
+
+    run_process(&mut command, "cargo-packager")?;
+    println!("created native packages at {}", output_dir.display());
+    Ok(())
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

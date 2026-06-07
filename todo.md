@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 39 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
+Nesting audit: 32 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
 
 ## 1. Establish The Workspace
 
@@ -110,10 +110,10 @@ Nesting audit: 39 currently unchecked checklist items are dependent child tasks 
   - [ ] Implement CEF download and preparation as a CLI-owned step.
 - [ ] Implement packaging and release commands.
   - [x] Implement `cefari package` package assembly preparation.
-  - [ ] Invoke `cargo-packager` from `cefari package` when available.
-  - [ ] Implement `cefari codesign` to invoke `cargo-codesign`.
-  - [ ] Implement `cefari notarize` for platform notarization flow.
-  - [ ] Implement `cefari make-update` to generate update artifacts.
+  - [x] Invoke `cargo-packager` from `cefari package` when available.
+  - [x] Implement `cefari codesign` to invoke `cargo-codesign`.
+  - [x] Implement `cefari notarize` for platform notarization flow.
+  - [x] Implement `cefari make-update` to generate update artifacts.
   - [x] Add clean and dist task support if needed by build/package workflows.
 - [x] Implement diagnostics.
   - [x] Implement `cefari doctor`.
@@ -162,13 +162,14 @@ Nesting audit: 39 currently unchecked checklist items are dependent child tasks 
   - [x] Document runtime versus CLI responsibility boundaries in contributor-facing docs.
 - [ ] Document developer workflows.
   - [x] Add CLI usage documentation for each implemented `cefari` command.
-  - [ ] Add CLI usage documentation for `dev`, signing, notarization, and update commands once implemented.
+  - [ ] Add CLI usage documentation for `dev` once implemented.
+  - [x] Add CLI usage documentation for signing, notarization, and update commands.
   - [ ] Add development setup documentation for CEF preparation.
   - [x] Add troubleshooting documentation for common `cefari doctor` failures.
-- [ ] Document release workflows.
-  - [ ] Add packaging documentation.
-  - [ ] Add signing and notarization documentation.
-  - [ ] Add update release documentation.
+- [x] Document release workflows.
+  - [x] Add packaging documentation.
+  - [x] Add signing and notarization documentation.
+  - [x] Add update release documentation.
 
 ## 8. Verification Milestones
 

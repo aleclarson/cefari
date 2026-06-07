@@ -11,6 +11,7 @@ mod build;
 mod clean;
 mod package;
 pub mod project;
+mod release;
 
 use project::ProjectConfig;
 
@@ -49,11 +50,52 @@ pub enum Command {
         path: PathBuf,
     },
     /// Code sign a packaged app.
-    Codesign,
+    Codesign {
+        /// Artifact to sign.
+        artifact: PathBuf,
+
+        /// Platform signing flow to use.
+        #[arg(long, value_enum, default_value_t = release::SignPlatform::current())]
+        platform: release::SignPlatform,
+
+        /// Path to sign.toml.
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
     /// Notarize a signed app.
-    Notarize,
+    Notarize {
+        /// macOS .app or .dmg artifact to notarize.
+        artifact: PathBuf,
+
+        /// Path to sign.toml.
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
     /// Generate update artifacts.
-    MakeUpdate,
+    MakeUpdate {
+        /// Release archive to sign for update installation.
+        archive: PathBuf,
+
+        /// Public download URL for the release archive.
+        #[arg(long)]
+        url: String,
+
+        /// Version advertised to the runtime updater.
+        #[arg(long)]
+        version: String,
+
+        /// Updater target key, such as darwin-aarch64 or linux-x86_64.
+        #[arg(long, default_value_t = release::default_update_target())]
+        target: String,
+
+        /// Env var read by cargo-codesign for the update signing key.
+        #[arg(long, default_value = "UPDATE_SIGNING_KEY")]
+        key_env: String,
+
+        /// Directory where update metadata and signatures are written.
+        #[arg(long, default_value = "dist/update")]
+        output_dir: PathBuf,
+    },
     /// Remove generated build and dist artifacts.
     Clean {
         /// Project directory to clean. Defaults to the current directory.
@@ -85,9 +127,20 @@ pub fn run_command(command: Command) -> Result<()> {
         Command::Dev => todo_command("dev"),
         Command::Build { path } => build::build_project(&path),
         Command::Package { path } => package::package_project(&path),
-        Command::Codesign => todo_command("codesign"),
-        Command::Notarize => todo_command("notarize"),
-        Command::MakeUpdate => todo_command("make-update"),
+        Command::Codesign {
+            artifact,
+            platform,
+            config,
+        } => release::codesign(&artifact, platform, config.as_deref()),
+        Command::Notarize { artifact, config } => release::notarize(&artifact, config.as_deref()),
+        Command::MakeUpdate {
+            archive,
+            url,
+            version,
+            target,
+            key_env,
+            output_dir,
+        } => release::make_update(&archive, &url, &version, &target, &key_env, &output_dir),
         Command::Clean { path } => clean::clean_project(&path),
         Command::Doctor => {
             doctor();
@@ -192,11 +245,23 @@ fn print_tool_status(tool: &str) {
     }
 }
 
-fn tool_available(tool: &str) -> bool {
+pub(crate) fn tool_available(tool: &str) -> bool {
     ProcessCommand::new(tool)
         .arg("--version")
         .output()
         .is_ok_and(|output| output.status.success())
+}
+
+pub(crate) fn run_process(command: &mut ProcessCommand, description: &str) -> Result<()> {
+    let status = command
+        .status()
+        .with_context(|| format!("failed to run {description}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("{description} failed with status {status}");
+    }
 }
 
 fn write_file(path: &Path, contents: &str) -> Result<()> {
@@ -265,10 +330,30 @@ mod tests {
             Command::Doctor
         ));
         assert!(matches!(
-            Cli::try_parse_from(["cefari", "make-update"])
-                .expect("make-update should parse")
+            Cli::try_parse_from([
+                "cefari",
+                "make-update",
+                "release.tar.gz",
+                "--url",
+                "https://downloads.example.test/release.tar.gz",
+                "--version",
+                "1.2.3"
+            ])
+            .expect("make-update should parse")
+            .command,
+            Command::MakeUpdate { .. }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["cefari", "codesign", "Example.dmg"])
+                .expect("codesign should parse")
                 .command,
-            Command::MakeUpdate
+            Command::Codesign { .. }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["cefari", "notarize", "Example.dmg"])
+                .expect("notarize should parse")
+                .command,
+            Command::Notarize { .. }
         ));
         assert!(matches!(
             Cli::try_parse_from(["cefari", "build", "sample"])
