@@ -2,10 +2,10 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 17 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
+Nesting audit: 16 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
 
 - 3 under native shell implementation.
-- 2 under desktop integration.
+- 1 under desktop integration.
 - 1 under build orchestration.
 - 1 under package assembly.
 - 1 under CI coverage.
@@ -82,7 +82,7 @@ Nesting audit: 17 currently unchecked checklist items are dependent child tasks 
   - [ ] Load packaged UI resources promptly at startup.
   - [ ] Add a fallback or diagnostic view for missing UI resources.
 - [ ] Implement desktop integration.
-  - [ ] Wire native menus through `muda`.
+  - [x] Wire native menus through `muda`.
   - [ ] Wire tray or menu-bar icon behavior through `tray-icon`.
   - [x] Add external link and file opening helpers through `open`.
 - [x] Integrate runtime operations.

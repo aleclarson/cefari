@@ -1,4 +1,4 @@
-use std::{fs, process::ExitCode};
+use std::{fs, path::PathBuf, process::ExitCode};
 
 use anyhow::{Context, Result};
 use cefari_core::{AppIdentity, RuntimeLogConfig, RuntimePaths};
@@ -6,12 +6,13 @@ use single_instance::SingleInstance;
 use tao::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Window, WindowBuilder},
 };
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 
+mod desktop_menu;
 mod external;
 mod runtime;
 
@@ -46,7 +47,7 @@ fn run() -> Result<()> {
         daemon = %runtime_operations.daemon_service_spec().program.display(),
         "cefari desktop startup"
     );
-    run_native_shell(guards)
+    run_native_shell(guards, paths)
 }
 
 struct RuntimeGuards {
@@ -54,15 +55,27 @@ struct RuntimeGuards {
     _log_guard: WorkerGuard,
 }
 
-fn run_native_shell(guards: RuntimeGuards) -> Result<()> {
-    let event_loop = EventLoop::new();
-    let window = create_main_window(&event_loop)?;
-
-    info!(window = ?window.id(), "cefari native shell started");
-    run_event_loop(event_loop, window, guards)
+#[derive(Debug)]
+enum UserEvent {
+    Menu(muda::MenuEvent),
 }
 
-fn create_main_window(event_loop: &EventLoop<()>) -> Result<Window> {
+fn run_native_shell(guards: RuntimeGuards, paths: RuntimePaths) -> Result<()> {
+    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    let event_proxy = event_loop.create_proxy();
+    muda::MenuEvent::set_event_handler(Some(move |event| {
+        let _ = event_proxy.send_event(UserEvent::Menu(event));
+    }));
+
+    let window = create_main_window(&event_loop)?;
+    let menu = desktop_menu::DesktopMenu::new()?;
+    menu.install();
+
+    info!(window = ?window.id(), "cefari native shell started");
+    run_event_loop(event_loop, window, guards, menu, paths.log_dir)
+}
+
+fn create_main_window(event_loop: &EventLoop<UserEvent>) -> Result<Window> {
     WindowBuilder::new()
         .with_title(MAIN_WINDOW_TITLE)
         .with_inner_size(LogicalSize::new(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT))
@@ -71,14 +84,36 @@ fn create_main_window(event_loop: &EventLoop<()>) -> Result<Window> {
         .context("failed to create Cefari main window")
 }
 
-fn run_event_loop(event_loop: EventLoop<()>, window: Window, guards: RuntimeGuards) -> ! {
+fn run_event_loop(
+    event_loop: EventLoop<UserEvent>,
+    window: Window,
+    guards: RuntimeGuards,
+    menu: desktop_menu::DesktopMenu,
+    logs_dir: PathBuf,
+) -> ! {
     let mut window = Some(window);
 
     event_loop.run(move |event, _, control_flow| {
         let _guards = &guards;
+        let _menu = &menu;
         *control_flow = ControlFlow::Wait;
 
         match event {
+            Event::UserEvent(UserEvent::Menu(menu_event)) => {
+                match desktop_menu::handle_menu_event(&menu_event, &logs_dir) {
+                    Ok(desktop_menu::MenuCommand::Quit) => {
+                        window = None;
+                        *control_flow = ControlFlow::Exit;
+                    }
+                    Ok(desktop_menu::MenuCommand::Unhandled) => {
+                        debug!(id = %menu_event.id.as_ref(), "unhandled menu event");
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        error!(id = %menu_event.id.as_ref(), %error, "failed to handle menu event");
+                    }
+                }
+            }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
