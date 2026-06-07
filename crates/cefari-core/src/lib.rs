@@ -8,6 +8,7 @@ pub mod config;
 pub mod logging;
 pub mod paths;
 pub mod resources;
+pub mod updates;
 
 mod error;
 
@@ -16,3 +17,4 @@ pub use error::{Error, Result};
 pub use logging::{LogFormat, RuntimeLogConfig};
 pub use paths::{AppIdentity, RuntimePaths};
 pub use resources::{PackageFormat, packaged_resources_dir, resolve_resource};
+pub use updates::{PreparedUpdateCheck, UpdateCheckConfig, UpdateCheckState};

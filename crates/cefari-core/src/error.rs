@@ -43,6 +43,18 @@ pub enum Error {
     #[error("resource does not exist at {path}")]
     MissingResource { path: PathBuf },
 
+    #[error("update endpoint is invalid: {endpoint}")]
+    InvalidUpdateEndpoint {
+        endpoint: String,
+        source: cargo_packager_updater::url::ParseError,
+    },
+
+    #[error("current version is invalid: {version}")]
+    InvalidCurrentVersion {
+        version: String,
+        source: cargo_packager_updater::semver::Error,
+    },
+
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 }
