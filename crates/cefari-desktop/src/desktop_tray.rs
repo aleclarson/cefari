@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use cefari_core::CefariIpcCommand;
 use tracing::{debug, info};
 use tray_icon::{
     Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent,
@@ -14,12 +15,6 @@ const TRAY_MENU_LABELS: [&str; 4] = ["Open Logs", "Check for Updates...", "Quit 
 
 pub struct DesktopTray {
     _tray_icon: TrayIcon,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TrayAction {
-    RestoreWindow,
-    None,
 }
 
 impl DesktopTray {
@@ -43,21 +38,30 @@ impl DesktopTray {
     }
 }
 
-pub fn handle_tray_event(event: &TrayIconEvent) -> TrayAction {
-    debug!(?event, "received tray icon event");
+pub fn ipc_command_for_event(event: &TrayIconEvent) -> Option<CefariIpcCommand> {
+    if is_restore_window_event(event) {
+        Some(CefariIpcCommand::TrayRestoreWindow)
+    } else {
+        None
+    }
+}
 
-    match event {
+pub fn log_tray_event(event: &TrayIconEvent) {
+    debug!(?event, "received tray icon event");
+}
+
+fn is_restore_window_event(event: &TrayIconEvent) -> bool {
+    matches!(
+        event,
         TrayIconEvent::Click {
             button: MouseButton::Left,
             button_state: MouseButtonState::Up,
             ..
-        }
-        | TrayIconEvent::DoubleClick {
+        } | TrayIconEvent::DoubleClick {
             button: MouseButton::Left,
             ..
-        } => TrayAction::RestoreWindow,
-        _ => TrayAction::None,
-    }
+        }
+    )
 }
 
 fn tray_menu() -> Result<Menu> {
@@ -105,7 +109,10 @@ fn tray_icon_rgba() -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{TRAY_ICON_PIXEL_COUNT, TRAY_ICON_SIZE, TRAY_MENU_LABELS, tray_icon_rgba};
+    use super::{
+        TRAY_ICON_PIXEL_COUNT, TRAY_ICON_SIZE, TRAY_MENU_LABELS, ipc_command_for_event,
+        tray_icon_rgba,
+    };
 
     #[test]
     fn tray_icon_rgba_has_expected_dimensions() {
@@ -123,5 +130,18 @@ mod tests {
             TRAY_MENU_LABELS,
             ["Open Logs", "Check for Updates...", "Quit Cefari", ""]
         );
+    }
+
+    #[test]
+    fn non_primary_tray_events_do_not_emit_ipc_commands() {
+        let event = tray_icon::TrayIconEvent::Click {
+            id: tray_icon::TrayIconId("test".to_owned()),
+            position: tray_icon::dpi::PhysicalPosition::new(0.0, 0.0),
+            rect: tray_icon::Rect::default(),
+            button: tray_icon::MouseButton::Right,
+            button_state: tray_icon::MouseButtonState::Up,
+        };
+
+        assert_eq!(ipc_command_for_event(&event), None);
     }
 }

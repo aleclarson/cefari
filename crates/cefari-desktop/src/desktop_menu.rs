@@ -1,15 +1,13 @@
-use std::path::Path;
-
 use anyhow::{Context, Result};
+use cefari_core::CefariIpcCommand;
 use muda::{
     AboutMetadata, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu,
     accelerator::{Accelerator, CMD_OR_CTRL, Code},
 };
+#[cfg(target_os = "macos")]
 use tracing::info;
 #[cfg(not(target_os = "macos"))]
 use tracing::{debug, warn};
-
-use crate::external;
 
 pub const CHECK_FOR_UPDATES_ID: &str = "cefari.menu.check_for_updates";
 pub const OPEN_LOGS_ID: &str = "cefari.menu.open_logs";
@@ -19,7 +17,7 @@ pub const QUIT_ID: &str = "cefari.menu.quit";
 #[cfg(test)]
 const ROOT_MENU_LABELS: [&str; 6] = ["Cefari", "File", "Edit", "View", "Window", "Help"];
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuCommand {
     CheckForUpdates,
     OpenLogs,
@@ -84,26 +82,19 @@ fn command_for_id(id: &MenuId) -> MenuCommand {
     }
 }
 
-pub fn handle_menu_event(event: &MenuEvent, logs_dir: &Path) -> Result<MenuCommand> {
-    let command = command_for_event(event);
+pub fn ipc_command_for_event(event: &MenuEvent) -> Option<CefariIpcCommand> {
+    ipc_command_for_menu_command(command_for_event(event))
+}
 
+fn ipc_command_for_menu_command(command: MenuCommand) -> Option<CefariIpcCommand> {
     match command {
-        MenuCommand::OpenLogs => {
-            external::open_external_file(logs_dir)?;
-        }
-        MenuCommand::CheckForUpdates => {
-            info!("update check requested from desktop menu");
-        }
-        MenuCommand::ReloadUi => {
-            info!("UI reload requested from desktop menu");
-        }
-        MenuCommand::ServiceStatus => {
-            info!("service status requested from desktop menu");
-        }
-        MenuCommand::Quit | MenuCommand::Unhandled => {}
+        MenuCommand::CheckForUpdates => Some(CefariIpcCommand::UpdateCheck),
+        MenuCommand::OpenLogs => Some(CefariIpcCommand::OpenLogs),
+        MenuCommand::ReloadUi => Some(CefariIpcCommand::ReloadUi),
+        MenuCommand::ServiceStatus => Some(CefariIpcCommand::ServiceStatus),
+        MenuCommand::Quit => Some(CefariIpcCommand::AppQuit),
+        MenuCommand::Unhandled => None,
     }
-
-    Ok(command)
 }
 
 fn app_menu() -> Result<Submenu> {
@@ -244,7 +235,7 @@ mod tests {
 
     use super::{
         CHECK_FOR_UPDATES_ID, MenuCommand, OPEN_LOGS_ID, QUIT_ID, RELOAD_UI_ID, ROOT_MENU_LABELS,
-        SERVICE_STATUS_ID, command_for_id,
+        SERVICE_STATUS_ID, command_for_id, ipc_command_for_menu_command,
     };
 
     #[test]
@@ -278,5 +269,30 @@ mod tests {
             command_for_id(&MenuId::new("cefari.menu.unknown")),
             MenuCommand::Unhandled
         );
+    }
+
+    #[test]
+    fn menu_commands_map_to_ipc_commands() {
+        assert_eq!(
+            ipc_command_for_menu_command(MenuCommand::CheckForUpdates),
+            Some(cefari_core::CefariIpcCommand::UpdateCheck)
+        );
+        assert_eq!(
+            ipc_command_for_menu_command(MenuCommand::OpenLogs),
+            Some(cefari_core::CefariIpcCommand::OpenLogs)
+        );
+        assert_eq!(
+            ipc_command_for_menu_command(MenuCommand::ReloadUi),
+            Some(cefari_core::CefariIpcCommand::ReloadUi)
+        );
+        assert_eq!(
+            ipc_command_for_menu_command(MenuCommand::ServiceStatus),
+            Some(cefari_core::CefariIpcCommand::ServiceStatus)
+        );
+        assert_eq!(
+            ipc_command_for_menu_command(MenuCommand::Quit),
+            Some(cefari_core::CefariIpcCommand::AppQuit)
+        );
+        assert_eq!(ipc_command_for_menu_command(MenuCommand::Unhandled), None);
     }
 }

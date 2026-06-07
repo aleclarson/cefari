@@ -31,6 +31,7 @@ pub enum CefariIpcCommand {
     WindowClose,
     WindowSetTitle(WindowSetTitleRequest),
     OpenLogs,
+    ReloadUi,
     OpenExternalUrl(OpenExternalUrlRequest),
     UpdateState,
     UpdateCheck,
@@ -44,6 +45,7 @@ pub enum CefariIpcCommand {
 pub enum CefariIpcResult {
     Empty,
     Window(WindowState),
+    ReloadUi,
     ExternalUrl(ExternalUrlResult),
     UpdateState(UpdateStateResult),
     UpdateCheck(UpdateCheckResult),
