@@ -70,6 +70,32 @@ fn info_reports_project_when_manifest_exists() {
 }
 
 #[test]
+fn build_creates_project_artifacts() {
+    let root = temp_project_path();
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Build App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let output = cefari()
+        .arg("build")
+        .arg(&root)
+        .output()
+        .expect("cefari build should run");
+
+    assert_success(&output);
+    assert!(root.join("build/frontend/index.html").exists());
+    assert!(root.join("build/daemon/main.ts").exists());
+    assert!(root.join("frontend/dist/index.html").exists());
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+}
+
+#[test]
 fn doctor_reports_tool_statuses() {
     let output = cefari()
         .arg("doctor")

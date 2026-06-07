@@ -27,7 +27,9 @@ No JavaScript framework is selected yet. A richer template should be introduced 
 - `daemon/main.ts`
 - configured daemon entry: `daemon/main.ts`
 
-The daemon build output contract is not final. `cefari build` should define the artifact path and how that artifact is packaged.
+`cefari build` currently copies the daemon entry to `build/daemon/main.ts`.
+
+The final packaged daemon output contract is not final. Packaging work should define whether the daemon remains TypeScript, is bundled, or is compiled before distribution.
 
 ## CEF Version
 
@@ -40,4 +42,3 @@ The dependency is optional in `cefari-desktop` until CEF initialization is imple
 Generated project templates are pre-release and may change before the first public distribution of `cefari-cli`.
 
 Until compatibility is formalized, tests only guarantee that the current CLI can parse the current generated `cefari.toml` schema.
-

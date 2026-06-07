@@ -88,7 +88,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Set the binary name to `cefari`.
   - [x] Pin and add CLI dependencies: `clap`, `anyhow`, `xshell`, `duct`, `camino`, `serde`, and `toml`.
   - [x] Define the top-level CLI parser and command enum.
-- [ ] Implement project creation.
+- [x] Implement project creation.
   - [x] Implement `cefari init`.
   - [x] Define the generated Cefari project layout.
   - [x] Add typed parsing for generated `cefari.toml` manifests.
@@ -101,10 +101,10 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [ ] Run the Rust desktop app.
   - [ ] Handle process shutdown and error reporting.
 - [ ] Implement build orchestration.
-  - [ ] Implement `cefari build`.
-  - [ ] Build frontend artifacts.
-  - [ ] Build Deno daemon artifacts.
-  - [ ] Build the Rust desktop app.
+  - [x] Implement `cefari build`.
+  - [x] Build frontend artifacts.
+  - [x] Build Deno daemon artifacts.
+  - [x] Build the Rust desktop app.
   - [ ] Implement CEF download and preparation as a CLI-owned step.
 - [ ] Implement packaging and release commands.
   - [ ] Implement `cefari package` to invoke `cargo-packager`.
@@ -112,7 +112,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [ ] Implement `cefari notarize` for platform notarization flow.
   - [ ] Implement `cefari make-update` to generate update artifacts.
   - [ ] Add clean and dist task support if needed by build/package workflows.
-- [ ] Implement diagnostics.
+- [x] Implement diagnostics.
   - [x] Implement `cefari doctor`.
   - [x] Implement `cefari info`.
   - [x] Include generated project manifest details in `cefari info`.
@@ -159,7 +159,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Document runtime versus CLI responsibility boundaries in contributor-facing docs.
 - [ ] Document developer workflows.
   - [x] Add CLI usage documentation for each implemented `cefari` command.
-  - [ ] Add CLI usage documentation for `dev`, `build`, package, signing, notarization, and update commands once implemented.
+  - [ ] Add CLI usage documentation for `dev`, package, signing, notarization, and update commands once implemented.
   - [ ] Add development setup documentation for CEF preparation.
   - [x] Add troubleshooting documentation for common `cefari doctor` failures.
 - [ ] Document release workflows.
@@ -173,9 +173,10 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] `cargo fmt --all` passes.
   - [x] `cargo clippy --workspace --all-targets` passes.
   - [x] `cargo test --workspace` passes.
-- [ ] Verify CLI workflows.
+- [x] Verify CLI workflows.
   - [x] `cargo run -p cefari-cli -- --help` shows all planned commands.
   - [x] `cargo run -p cefari-cli -- init` creates a valid sample app.
+  - [x] `cargo run -p cefari-cli -- build` creates frontend and daemon artifacts and builds `cefari-desktop`.
   - [x] `cargo run -p cefari-cli -- doctor` reports required tool availability.
 - [ ] Verify desktop runtime behavior.
   - [ ] `cargo run -p cefari-desktop` starts a window and initializes runtime logging.
@@ -190,7 +191,8 @@ This task list is derived from [README.md](README.md). It treats the architectur
 
 - [x] Decide supported operating systems and platform priority.
 - [x] Decide the frontend stack expected by `cefari init`.
-- [ ] Decide the final Deno daemon build output contract.
+- [x] Decide the initial Deno daemon build output contract.
+- [ ] Decide the final Deno daemon build output contract for packaged releases.
 - [x] Decide the initial Deno daemon project shape.
 - [x] Decide CEF version pinning.
 - [ ] Decide CEF download source.

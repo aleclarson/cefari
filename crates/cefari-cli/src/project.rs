@@ -34,6 +34,11 @@ impl ProjectConfig {
             source,
         })
     }
+
+    #[must_use]
+    pub fn build_dir(path: impl AsRef<Path>) -> PathBuf {
+        path.as_ref().join("build")
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]

@@ -7,6 +7,7 @@ use std::{
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
+mod build;
 pub mod project;
 
 use project::ProjectConfig;
@@ -34,7 +35,11 @@ pub enum Command {
     /// Run the local development environment.
     Dev,
     /// Build frontend, daemon, and desktop artifacts.
-    Build,
+    Build {
+        /// Project directory to build. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
     /// Package a built Cefari app.
     Package,
     /// Code sign a packaged app.
@@ -66,7 +71,7 @@ pub fn run_command(command: Command) -> Result<()> {
     match command {
         Command::Init { path, name } => init_project(&path, name.as_deref()),
         Command::Dev => todo_command("dev"),
-        Command::Build => todo_command("build"),
+        Command::Build { path } => build::build_project(&path),
         Command::Package => todo_command("package"),
         Command::Codesign => todo_command("codesign"),
         Command::Notarize => todo_command("notarize"),
@@ -251,6 +256,12 @@ mod tests {
                 .expect("make-update should parse")
                 .command,
             Command::MakeUpdate
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["cefari", "build", "sample"])
+                .expect("build should parse")
+                .command,
+            Command::Build { .. }
         ));
     }
 
