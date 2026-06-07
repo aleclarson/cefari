@@ -44,9 +44,9 @@ pub enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
 
-        /// Port for the built-in static frontend dev server. Use 0 to request any free port.
-        #[arg(long, default_value_t = 5173)]
-        frontend_port: u16,
+        /// Override the frontend dev server port. Use 0 with the built-in static server to request any free port.
+        #[arg(long)]
+        frontend_port: Option<u16>,
     },
     /// Build frontend, daemon, and desktop artifacts.
     Build {
@@ -210,6 +210,7 @@ identifier = "{identifier}"
 
 [frontend]
 dist = "frontend/dist"
+dev_port = 5173
 
 [daemon]
 entry = "daemon/main.ts"

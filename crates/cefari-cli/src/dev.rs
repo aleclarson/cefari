@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsString,
     fs,
     io::{Read, Write},
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
@@ -14,31 +15,54 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use crate::{build::workspace_manifest, project::ProjectConfig};
+use crate::{
+    build::workspace_manifest,
+    project::{FrontendConfig, ProjectConfig},
+};
 
-pub fn dev_project(project_dir: &Path, frontend_port: u16) -> Result<()> {
+pub fn dev_project(project_dir: &Path, frontend_port: Option<u16>) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
-    let frontend_dir = project_dir.join("frontend");
-    let frontend = StaticDevServer::start(&frontend_dir, frontend_port)?;
-    println!("frontend dev server: http://{}", frontend.address());
+    let frontend_port = frontend_port.unwrap_or(project.frontend.dev_port);
 
-    let mut processes = DevProcesses::new(frontend);
+    let mut processes = DevProcesses::new();
+    processes.start_frontend(project_dir, &project.frontend, frontend_port)?;
     processes.spawn_daemon(project_dir, &project)?;
     processes.spawn_desktop()?;
     processes.wait()
 }
 
 struct DevProcesses {
-    frontend: StaticDevServer,
+    frontend: Option<StaticDevServer>,
     children: Vec<NamedChild>,
 }
 
 impl DevProcesses {
-    fn new(frontend: StaticDevServer) -> Self {
+    fn new() -> Self {
         Self {
-            frontend,
+            frontend: None,
             children: Vec::new(),
         }
+    }
+
+    fn start_frontend(
+        &mut self,
+        project_dir: &Path,
+        frontend: &FrontendConfig,
+        port: u16,
+    ) -> Result<()> {
+        if let Some(command) = &frontend.dev_command {
+            let child = spawn_frontend_command(project_dir, command, port)?;
+            self.children
+                .push(NamedChild::new("frontend dev server", child));
+            println!("frontend dev server: http://127.0.0.1:{port}");
+            return Ok(());
+        }
+
+        let frontend_dir = project_dir.join("frontend");
+        let frontend = StaticDevServer::start(&frontend_dir, port)?;
+        println!("frontend dev server: http://{}", frontend.address());
+        self.frontend = Some(frontend);
+        Ok(())
     }
 
     fn spawn_daemon(&mut self, project_dir: &Path, project: &ProjectConfig) -> Result<()> {
@@ -94,7 +118,9 @@ impl DevProcesses {
     }
 
     fn shutdown(&mut self) {
-        self.frontend.shutdown();
+        if let Some(frontend) = &mut self.frontend {
+            frontend.shutdown();
+        }
         for child in &mut self.children {
             child.stop();
         }
@@ -125,6 +151,34 @@ impl NamedChild {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+fn spawn_frontend_command(project_dir: &Path, command: &[String], port: u16) -> Result<Child> {
+    if command.is_empty() {
+        anyhow::bail!("frontend dev_command must contain at least one argument");
+    }
+    if port == 0 {
+        anyhow::bail!(
+            "frontend dev_command requires a fixed port; set frontend.dev_port or pass --frontend-port"
+        );
+    }
+
+    let program = &command[0];
+    let args = command[1..]
+        .iter()
+        .map(|arg| substitute_frontend_port(arg, port))
+        .collect::<Vec<_>>();
+    Command::new(program)
+        .args(args)
+        .current_dir(project_dir)
+        .env("CEFARI_FRONTEND_PORT", port.to_string())
+        .stdin(Stdio::null())
+        .spawn()
+        .with_context(|| format!("failed to start frontend dev command {program}"))
+}
+
+fn substitute_frontend_port(arg: &str, port: u16) -> OsString {
+    OsString::from(arg.replace("{port}", &port.to_string()))
 }
 
 struct StaticDevServer {
@@ -248,7 +302,7 @@ fn write_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<(
 mod tests {
     use std::io::{Read, Write};
 
-    use super::{StaticDevServer, request_path, static_file_path};
+    use super::{StaticDevServer, request_path, static_file_path, substitute_frontend_port};
 
     #[test]
     fn extracts_request_path() {
@@ -265,6 +319,14 @@ mod tests {
         assert_eq!(
             static_file_path(frontend, "/../secret"),
             frontend.join("index.html")
+        );
+    }
+
+    #[test]
+    fn substitutes_frontend_port_placeholder() {
+        assert_eq!(
+            substitute_frontend_port("--port={port}", 5174),
+            std::ffi::OsString::from("--port=5174")
         );
     }
 

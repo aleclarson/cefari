@@ -57,6 +57,12 @@ pub struct ProjectApp {
 #[serde(deny_unknown_fields)]
 pub struct FrontendConfig {
     pub dist: String,
+    #[serde(default)]
+    pub build_command: Option<Vec<String>>,
+    #[serde(default)]
+    pub dev_command: Option<Vec<String>>,
+    #[serde(default = "default_frontend_dev_port")]
+    pub dev_port: u16,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
@@ -69,6 +75,10 @@ pub struct DaemonConfig {
 #[serde(deny_unknown_fields)]
 pub struct PackageConfig {
     pub product_name: String,
+}
+
+fn default_frontend_dev_port() -> u16 {
+    5173
 }
 
 #[derive(Debug, Error)]
@@ -99,6 +109,7 @@ identifier = "dev.cefari.example-app"
 
 [frontend]
 dist = "frontend/dist"
+dev_port = 5173
 
 [daemon]
 entry = "daemon/main.ts"
@@ -111,6 +122,46 @@ product_name = "Example App"
 
         assert_eq!(project.app.name, "Example App");
         assert_eq!(project.package.product_name, "Example App");
+        assert_eq!(project.frontend.dev_port, 5173);
+        assert!(project.frontend.build_command.is_none());
+        assert!(project.frontend.dev_command.is_none());
+    }
+
+    #[test]
+    fn parses_project_frontend_commands() {
+        let project: ProjectConfig = toml::from_str(
+            r#"[app]
+name = "Example App"
+identifier = "dev.cefari.example-app"
+
+[frontend]
+dist = "frontend/dist"
+build_command = ["npm", "--prefix", "frontend", "run", "build"]
+dev_command = ["npm", "--prefix", "frontend", "run", "dev", "--", "--port", "{port}"]
+dev_port = 5174
+
+[daemon]
+entry = "daemon/main.ts"
+
+[package]
+product_name = "Example App"
+"#,
+        )
+        .expect("manifest should parse");
+
+        assert_eq!(project.frontend.dev_port, 5174);
+        assert_eq!(
+            project.frontend.build_command.as_deref(),
+            Some(
+                &[
+                    "npm".to_owned(),
+                    "--prefix".to_owned(),
+                    "frontend".to_owned(),
+                    "run".to_owned(),
+                    "build".to_owned(),
+                ][..]
+            )
+        );
     }
 
     #[test]

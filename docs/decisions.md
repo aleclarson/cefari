@@ -30,10 +30,13 @@ Windows and Linux remain target platforms, but packaging, service operations, an
 
 - `frontend/index.html`
 - configured dist path: `frontend/dist`
+- default dev port: `5173`
 
-No JavaScript framework is selected yet. A richer template should be introduced only when `cefari dev` and `cefari build` define how frontend commands are run.
+The repository also includes `templates/vite-react-basic/`, a minimal Vite and React Cefari project that can be run with the local `cefari` build.
 
-`cefari dev` currently serves this static frontend with a built-in local HTTP server instead of assuming a Node-based frontend toolchain. A future template that selects a JavaScript framework should replace or extend this with project-configured frontend commands.
+`cefari dev` serves the static generated frontend with a built-in local HTTP server when no frontend dev command is configured. Projects can set `[frontend].dev_command` and `[frontend].dev_port` to run a tool-managed frontend dev server such as `vite dev`; command arguments may use `{port}` as a placeholder for the selected port.
+
+`cefari build` runs `[frontend].build_command` when configured and copies the configured dist directory into `build/frontend/`. Without a build command, it preserves the generated static-template behavior by copying `frontend/index.html`.
 
 ## Deno Daemon Shape
 

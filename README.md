@@ -126,6 +126,19 @@ cefari doctor
 cefari info
 ```
 
+Checked-in templates:
+
+```text
+templates/vite-react-basic
+```
+
+Run the Vite React template with the local Cefari build:
+
+```bash
+npm --prefix templates/vite-react-basic/frontend ci
+cargo run -p cefari-cli -- dev templates/vite-react-basic
+```
+
 Owns:
 
 ```text

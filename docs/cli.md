@@ -19,6 +19,7 @@ The generated `cefari.toml` currently contains:
 
 - `[app]` name and identifier
 - `[frontend]` dist path
+- optional `[frontend]` build and dev command settings
 - `[daemon]` entry path
 - `[package]` product name
 
@@ -45,8 +46,8 @@ Builds the Cefari project at `PATH`. If `PATH` is omitted, the CLI builds the cu
 
 Current build behavior:
 
-- copies `frontend/index.html` into `build/frontend/index.html`
-- copies `frontend/index.html` into the configured frontend dist path
+- runs `[frontend].build_command` when configured, then copies the configured frontend dist directory into `build/frontend/`
+- without `[frontend].build_command`, copies `frontend/index.html` into `build/frontend/index.html` and the configured frontend dist path
 - copies the configured daemon entry into `build/daemon/main.ts`
 - compiles the configured daemon entry with `deno compile` into `build/daemon/cefari-daemon` or `build/daemon/cefari-daemon.exe`
 - downloads, verifies, and extracts minimal CEF resources into `build/cef/resources/`
@@ -63,12 +64,13 @@ Runs the local Cefari development environment for the project at `PATH`. If `PAT
 
 Current dev behavior:
 
-- starts a built-in static frontend dev server for `frontend/index.html`
+- starts `[frontend].dev_command` when configured, substituting `{port}` with the selected frontend port
+- otherwise starts a built-in static frontend dev server for `frontend/index.html`
 - runs `deno run --watch --allow-read --allow-net` for the configured daemon entry
 - runs `cargo run -p cefari-desktop` through the Cefari workspace manifest
 - stops the remaining processes when one child process exits or fails
 
-Use `--frontend-port 0` to bind the frontend server to any available local port.
+The frontend port defaults to `[frontend].dev_port`, or `5173` when omitted. Use `--frontend-port PORT` to override it. Use `--frontend-port 0` only with the built-in static frontend server to bind any available local port.
 
 ### `cefari package [PATH] [--release]`
 

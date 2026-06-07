@@ -1,0 +1,15 @@
+[app]
+name = "Vite React Basic"
+identifier = "dev.cefari.vite-react-basic"
+
+[frontend]
+dist = "frontend/dist"
+build_command = ["npm", "--prefix", "frontend", "run", "build"]
+dev_command = ["npm", "--prefix", "frontend", "run", "dev", "--", "--host", "127.0.0.1", "--port", "{port}"]
+dev_port = 5173
+
+[daemon]
+entry = "daemon/main.ts"
+
+[package]
+product_name = "Vite React Basic"
