@@ -41,6 +41,9 @@ cefari dev PATH --frontend-port 5273
 Use `--frontend-port 0` only with the built-in static server, where Cefari can
 bind an available local port itself.
 
+For command syntax, see [Project Commands](../cli/project.md). For all
+frontend manifest fields, see [`[frontend]`](../config/frontend.md).
+
 ## Vite React Template
 
 The checked-in Vite React template lives at `templates/vite-react-basic/`. It

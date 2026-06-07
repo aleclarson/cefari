@@ -90,16 +90,18 @@ and prerelease workflow stubs that call that action.
 For automated release setup, signing, update metadata, and prerelease dry runs,
 see [Automated Deployment](guides/deployment.md).
 
-## Built-In App Contracts
+## App Developer References
 
+- [CLI Reference](cli/index.md): command syntax for development, release, and
+  diagnostics.
+- [`cefari.toml` Reference](config/index.md): project manifest fields and
+  validation rules.
 - [Cefari CSS Contract](css-contract.md): opt-in drag-region utility classes.
 - [Cefari IPC Protocol](ipc.md): typed Rust-to-CEF native action protocol.
 - [TypeScript App Guide](typescript/index.md): task-oriented `@cefari/app`
   usage from frontend code.
 - [Desktop Notifications](notifications.md): runtime-owned OS notification
   boundary.
-- [Architecture Boundary](architecture.md): crate responsibilities and
-  dependency boundaries.
 
 ## Claim Verification
 

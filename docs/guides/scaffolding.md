@@ -54,6 +54,9 @@ product_name = "My Cefari App"
 Add `frontend.build_command` and `frontend.dev_command` when a framework owns
 frontend builds or dev serving. See [Develop Locally](development.md) for Vite.
 
+For the complete app-developer manifest reference, see
+[`cefari.toml` Reference](../config/index.md).
+
 ## Generated Agent Skill
 
 `cefari init` copies the Cefari skill into `.agents/skills/cefari/`. That skill

@@ -34,6 +34,8 @@ PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari --help
 PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari init /tmp/cefari-docs-smoke --name "Docs Smoke"
 PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari info
 PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari doctor
+cargo run -q -p cefari-cli -- --help
+cargo test -p cefari-cli
 deno task --cwd templates/vite-react-basic/frontend check
 actionlint docs/examples/cefari-release-workflow.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml
 ```

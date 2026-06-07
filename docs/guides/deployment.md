@@ -115,6 +115,8 @@ Useful options:
 
 The default update signing key environment variable is `UPDATE_SIGNING_KEY`.
 
+For command syntax and defaults, see [Release Commands](../cli/release.md).
+
 ## Required CI State
 
 Release jobs that publish real artifacts need:

@@ -24,6 +24,10 @@ The repository is split into:
   desktop app together.
 - [Build And Package](docs/guides/build-and-package.md): produce local build
   artifacts and package assembly.
+- [CLI Reference](docs/cli/index.md): command syntax for development, release,
+  and diagnostics.
+- [`cefari.toml` Reference](docs/config/index.md): project manifest fields and
+  validation rules.
 - [Native Capabilities](docs/guides/native-capabilities.md): use Rust-owned
   window, menu, tray, notification, and IPC surfaces.
 - [TypeScript App Guide](docs/typescript/index.md): use `@cefari/app` from

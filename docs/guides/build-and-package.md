@@ -81,3 +81,6 @@ Remove generated build and package outputs:
 ```bash
 cefari clean PATH
 ```
+
+For command syntax, see [Project Commands](../cli/project.md). For package
+manifest fields, see [`cefari.toml` Reference](../config/index.md).
