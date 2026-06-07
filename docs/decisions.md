@@ -11,6 +11,8 @@ Cefari currently verifies the workspace on macOS first. The desktop startup path
 
 Before the UI is available, desktop startup failures are reported to stderr with a stable `Cefari failed to start before the UI was available` prefix and, when tracing has already initialized, to the runtime log.
 
+The desktop process now starts a Tao event loop and creates a blank `Cefari` main window. CEF initialization and packaged UI loading are still separate native shell tasks.
+
 Windows and Linux remain target platforms, but packaging, service operations, and desktop shell behavior still need platform-specific verification before they can be treated as supported.
 
 ## Frontend Template
