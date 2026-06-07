@@ -49,7 +49,7 @@ cefari build /tmp/cefari-real-release-smoke --release
 PATH="$HOME/.cargo/bin:$PATH" cefari package /tmp/cefari-real-release-smoke --release
 ```
 
-Inspect `dist/package/output/*.app` and `dist/package/output/*.dmg` to confirm the `.app` contains `Contents/MacOS/cefari-desktop`, `Contents/Resources/frontend/index.html`, `Contents/Resources/daemon/cefari-daemon`, `Contents/Resources/cef/archive.json`, and additional CEF payload files. `cargo tree -p cefari-desktop -i cefari-core` confirms the packaged desktop binary is built from the crate that links `cefari-core`.
+Inspect `dist/package/output/*.app` and `dist/package/output/*.dmg` to confirm the `.app` contains `Contents/MacOS/cefari-desktop`, `Contents/Resources/frontend/index.html`, `Contents/Resources/daemon/cefari-daemon`, `Contents/Resources/cef/archive.json`, and additional CEF payload files. `scripts/verify-native-package-payload.rb INSPECT_DIR macOS` performs the payload file checks. `cargo tree -p cefari-desktop -i cefari-core` confirms the packaged desktop binary is built from the crate that links `cefari-core`.
 
 ## Signing
 

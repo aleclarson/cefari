@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 143 of the 190 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 144 of the 191 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
 - 1 under release automation.
 - 1 under desktop runtime behavior verification.
@@ -154,6 +154,7 @@ Nesting audit: 143 of the 190 checklist entries are already nested child tasks u
   - [x] Verify a macOS release-profile native package with downloaded CEF contains `cefari-desktop`, `cefari-core` runtime dependency code, CEF resources, generated UI, generated daemon output, and a `.dmg`.
   - [x] Build release workflow packages from the Cargo release profile instead of debug desktop binaries.
   - [x] Add release workflow payload inspection for supported-platform native package outputs before upload.
+  - [x] Add a reusable native package payload verifier and run it against the real macOS release smoke package.
   - [ ] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.
   - [x] Verify `cefari-cli` is built, versioned, and distributed separately from desktop app packages.
 
