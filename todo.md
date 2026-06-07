@@ -107,7 +107,8 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Build the Rust desktop app.
   - [ ] Implement CEF download and preparation as a CLI-owned step.
 - [ ] Implement packaging and release commands.
-  - [ ] Implement `cefari package` to invoke `cargo-packager`.
+  - [x] Implement `cefari package` package assembly preparation.
+  - [ ] Invoke `cargo-packager` from `cefari package` when available.
   - [ ] Implement `cefari codesign` to invoke `cargo-codesign`.
   - [ ] Implement `cefari notarize` for platform notarization flow.
   - [ ] Implement `cefari make-update` to generate update artifacts.
@@ -126,9 +127,9 @@ This task list is derived from [README.md](README.md). It treats the architectur
 ## 5. Create The Packaging And Release Pipeline
 
 - [ ] Define package assembly.
-  - [ ] Define package metadata consumed by `cargo-packager`.
-  - [ ] Define how generated frontend artifacts are copied into packaged resources.
-  - [ ] Define how generated Deno daemon artifacts are included in app packages.
+  - [x] Define package metadata consumed by `cargo-packager`.
+  - [x] Define how generated frontend artifacts are copied into packaged resources.
+  - [x] Define how generated Deno daemon artifacts are included in app packages.
   - [ ] Define how CEF binaries and resources are resolved during package creation.
 - [ ] Add CI coverage.
   - [x] Add CI steps for formatting, linting, testing, and workspace builds.

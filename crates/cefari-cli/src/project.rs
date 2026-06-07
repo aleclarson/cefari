@@ -39,6 +39,11 @@ impl ProjectConfig {
     pub fn build_dir(path: impl AsRef<Path>) -> PathBuf {
         path.as_ref().join("build")
     }
+
+    #[must_use]
+    pub fn dist_dir(path: impl AsRef<Path>) -> PathBuf {
+        path.as_ref().join("dist")
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]

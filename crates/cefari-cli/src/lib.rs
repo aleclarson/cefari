@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 mod build;
+mod package;
 pub mod project;
 
 use project::ProjectConfig;
@@ -41,7 +42,11 @@ pub enum Command {
         path: PathBuf,
     },
     /// Package a built Cefari app.
-    Package,
+    Package {
+        /// Project directory to package. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
     /// Code sign a packaged app.
     Codesign,
     /// Notarize a signed app.
@@ -72,7 +77,7 @@ pub fn run_command(command: Command) -> Result<()> {
         Command::Init { path, name } => init_project(&path, name.as_deref()),
         Command::Dev => todo_command("dev"),
         Command::Build { path } => build::build_project(&path),
-        Command::Package => todo_command("package"),
+        Command::Package { path } => package::package_project(&path),
         Command::Codesign => todo_command("codesign"),
         Command::Notarize => todo_command("notarize"),
         Command::MakeUpdate => todo_command("make-update"),
@@ -262,6 +267,12 @@ mod tests {
                 .expect("build should parse")
                 .command,
             Command::Build { .. }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["cefari", "package", "sample"])
+                .expect("package should parse")
+                .command,
+            Command::Package { .. }
         ));
     }
 

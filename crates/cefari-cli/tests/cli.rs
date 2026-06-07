@@ -1,6 +1,7 @@
 use std::{
     fs,
     process::{Command, Output},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -96,6 +97,67 @@ fn build_creates_project_artifacts() {
 }
 
 #[test]
+fn package_creates_assembly_manifest_after_build() {
+    let root = temp_project_path();
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Package App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let build_output = cefari()
+        .arg("build")
+        .arg(&root)
+        .output()
+        .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = cefari()
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+
+    assert_success(&output);
+    assert!(root.join("dist/package/cargo-packager.toml").exists());
+    assert!(root.join("dist/package/manifest.json").exists());
+
+    let manifest =
+        fs::read_to_string(root.join("dist/package/manifest.json")).expect("manifest should exist");
+    assert!(manifest.contains(r#""desktop_binary": "cefari-desktop""#));
+    assert!(manifest.contains(r#""cef_resources": "pending-cef-download""#));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+}
+
+#[test]
+fn package_requires_build_artifacts() {
+    let root = temp_project_path();
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Unbuilt App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let output = cefari()
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("run cefari build first"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+}
+
+#[test]
 fn doctor_reports_tool_statuses() {
     let output = cefari()
         .arg("doctor")
@@ -136,9 +198,12 @@ fn stderr(output: &Output) -> String {
 }
 
 fn temp_project_path() -> std::path::PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system time should be after epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("cefari-cli-integration-test-{suffix}"))
+    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("cefari-cli-integration-test-{suffix}-{count}"))
 }

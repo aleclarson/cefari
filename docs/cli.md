@@ -57,10 +57,22 @@ The final daemon output contract and packaging layout are still evolving.
 These commands are present in the parser but intentionally fail until their orchestration work is implemented:
 
 - `cefari dev`
-- `cefari package`
 - `cefari codesign`
 - `cefari notarize`
 - `cefari make-update`
+
+### `cefari package [PATH]`
+
+Prepares package assembly metadata for the Cefari project at `PATH`. If `PATH` is omitted, the CLI uses the current directory.
+
+The command requires `cefari build` artifacts to exist first.
+
+Current output:
+
+- `dist/package/cargo-packager.toml`
+- `dist/package/manifest.json`
+
+The native installer invocation through `cargo-packager` is still planned.
 
 ## Troubleshooting `cefari doctor`
 
