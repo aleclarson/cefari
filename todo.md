@@ -117,11 +117,11 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [x] Implement `cefari info`.
   - [x] Include generated project manifest details in `cefari info`.
   - [x] Report when external tools such as `cargo-packager` or `cargo-codesign` are missing.
-- [ ] Test CLI behavior.
+- [x] Test CLI behavior.
   - [x] Add parser tests for planned commands.
-  - [ ] Add integration tests for command dispatch.
-  - [ ] Promote scaffold tests into integration tests once CLI code is split out of `main.rs`.
-  - [ ] Confirm `clap` and CLI-only orchestration dependencies are not introduced into runtime crates.
+  - [x] Add integration tests for command dispatch.
+  - [x] Promote scaffold tests into integration tests once CLI code is split out of `main.rs`.
+  - [x] Confirm `clap` and CLI-only orchestration dependencies are not introduced into runtime crates.
 
 ## 5. Create The Packaging And Release Pipeline
 
