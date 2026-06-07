@@ -15,6 +15,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 camino.workspace = true
 clap = { workspace = true, features = ["derive"] }
+cefari-core = { path = "../cefari-core" }
 download-cef.workspace = true
 duct.workspace = true
 serde = { workspace = true, features = ["derive"] }

@@ -1,6 +1,6 @@
 use std::{
     ffi::OsString,
-    fs,
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
@@ -14,6 +14,10 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use cefari_core::{
+    AppIdentity, CEFARI_DAEMON_LOG_ENV, LogRotation, RuntimeLogConfig, RuntimePaths,
+    prune_rotated_logs,
+};
 
 use crate::{
     build::workspace_manifest,
@@ -66,6 +70,8 @@ impl DevProcesses {
     }
 
     fn spawn_daemon(&mut self, project_dir: &Path, project: &ProjectConfig) -> Result<()> {
+        let log_config = RuntimeLogConfig::new(&RuntimePaths::resolve(&AppIdentity::cefari())?);
+        let daemon_log = open_daemon_log(&log_config)?;
         let child = Command::new("deno")
             .arg("run")
             .arg("--watch")
@@ -73,7 +79,17 @@ impl DevProcesses {
             .arg("--allow-net")
             .arg(&project.daemon.entry)
             .current_dir(project_dir)
+            .env(
+                CEFARI_DAEMON_LOG_ENV,
+                log_config.daemon.file_path().display().to_string(),
+            )
             .stdin(Stdio::null())
+            .stdout(Stdio::from(
+                daemon_log
+                    .try_clone()
+                    .context("failed to clone daemon log for stdout")?,
+            ))
+            .stderr(Stdio::from(daemon_log))
             .spawn()
             .context("failed to start Deno daemon for cefari dev")?;
         self.children.push(NamedChild::new("deno daemon", child));
@@ -175,6 +191,84 @@ fn spawn_frontend_command(project_dir: &Path, command: &[String], port: u16) -> 
         .stdin(Stdio::null())
         .spawn()
         .with_context(|| format!("failed to start frontend dev command {program}"))
+}
+
+fn open_daemon_log(config: &RuntimeLogConfig) -> Result<File> {
+    fs::create_dir_all(&config.directory).with_context(|| {
+        format!(
+            "failed to create log directory at {}",
+            config.directory.display()
+        )
+    })?;
+    rotate_daemon_log(config)?;
+    prune_rotated_logs(&config.daemon).with_context(|| {
+        format!(
+            "failed to prune rotated daemon logs in {}",
+            config.directory.display()
+        )
+    })?;
+
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(config.daemon.file_path())
+        .with_context(|| {
+            format!(
+                "failed to open daemon log at {}",
+                config.daemon.file_path().display()
+            )
+        })
+}
+
+fn rotate_daemon_log(config: &RuntimeLogConfig) -> Result<()> {
+    let LogRotation::Size { max_bytes } = config.daemon.rotation else {
+        return Ok(());
+    };
+    let current = config.daemon.file_path();
+    if fs::metadata(&current).map_or(0, |metadata| metadata.len()) < max_bytes {
+        return Ok(());
+    }
+
+    let oldest = config.directory.join(format!(
+        "{}.{}",
+        config.daemon.file_name, config.daemon.retained_files
+    ));
+    if oldest.exists() {
+        fs::remove_file(&oldest)
+            .with_context(|| format!("failed to remove old daemon log {}", oldest.display()))?;
+    }
+
+    for index in (1..config.daemon.retained_files).rev() {
+        let from = config
+            .directory
+            .join(format!("{}.{}", config.daemon.file_name, index));
+        if !from.exists() {
+            continue;
+        }
+        let to = config
+            .directory
+            .join(format!("{}.{}", config.daemon.file_name, index + 1));
+        fs::rename(&from, &to).with_context(|| {
+            format!(
+                "failed to rotate daemon log from {} to {}",
+                from.display(),
+                to.display()
+            )
+        })?;
+    }
+
+    let first = config
+        .directory
+        .join(format!("{}.1", config.daemon.file_name));
+    fs::rename(&current, &first).with_context(|| {
+        format!(
+            "failed to rotate daemon log from {} to {}",
+            current.display(),
+            first.display()
+        )
+    })?;
+
+    Ok(())
 }
 
 fn substitute_frontend_port(arg: &str, port: u16) -> OsString {

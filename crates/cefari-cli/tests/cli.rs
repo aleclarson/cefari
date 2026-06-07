@@ -17,6 +17,7 @@ fn help_shows_planned_commands() {
     assert_success(&output);
     let stdout = stdout(&output);
     assert!(stdout.contains("init"));
+    assert!(stdout.contains("logs"));
     assert!(stdout.contains("make-update"));
     assert!(stdout.contains("doctor"));
 }

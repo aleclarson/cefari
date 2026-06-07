@@ -3,8 +3,9 @@ use std::{fs, process::ExitCode};
 use anyhow::{Context, Result};
 use cefari_core::{
     AppIdentity, CefariIpcCommand, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
-    FileResult, FilesCommand, OpenExternalUrlRequest, RuntimeLogConfig, RuntimePaths,
-    ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult, WindowState,
+    FileResult, FilesCommand, LogFileConfig, OpenExternalUrlRequest, RuntimeLogConfig,
+    RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult,
+    WindowState, prune_rotated_logs,
 };
 use single_instance::SingleInstance;
 use tao::{
@@ -15,6 +16,7 @@ use tao::{
 };
 use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod desktop_bridge;
 mod desktop_cef;
@@ -46,7 +48,7 @@ fn main() -> ExitCode {
 fn run() -> Result<()> {
     let paths = RuntimePaths::resolve(&AppIdentity::cefari())?;
     let instance = acquire_single_instance(&paths)?;
-    let log_guard = init_logging(&paths)?;
+    let log_guards = init_logging(&paths)?;
 
     #[cfg(feature = "cef")]
     let cef_runtime = desktop_cef::initialize()?;
@@ -64,7 +66,7 @@ fn run() -> Result<()> {
 
     let guards = RuntimeGuards {
         _instance: instance,
-        _log_guard: log_guard,
+        _log_guards: log_guards,
         _desktop_notifier: desktop_notifier,
         cef_runtime,
     };
@@ -83,7 +85,7 @@ fn run() -> Result<()> {
 
 struct RuntimeGuards {
     _instance: SingleInstance,
-    _log_guard: WorkerGuard,
+    _log_guards: LogGuards,
     _desktop_notifier: desktop_notifications::DesktopNotifier,
     cef_runtime: desktop_cef::CefRuntime,
 }
@@ -412,7 +414,12 @@ fn acquire_single_instance(paths: &RuntimePaths) -> Result<SingleInstance> {
     }
 }
 
-fn init_logging(paths: &RuntimePaths) -> Result<WorkerGuard> {
+struct LogGuards {
+    _app: WorkerGuard,
+    _rust: WorkerGuard,
+}
+
+fn init_logging(paths: &RuntimePaths) -> Result<LogGuards> {
     let log_config = RuntimeLogConfig::new(paths);
     fs::create_dir_all(&log_config.directory).with_context(|| {
         format!(
@@ -420,18 +427,52 @@ fn init_logging(paths: &RuntimePaths) -> Result<WorkerGuard> {
             log_config.directory.display()
         )
     })?;
+    prune_all_rotated_logs(&log_config);
 
-    let file_appender =
-        tracing_appender::rolling::never(&log_config.directory, &log_config.file_name);
-    let (writer, guard) = tracing_appender::non_blocking(file_appender);
+    let (app_writer, app_guard) = log_writer(&log_config.app);
+    let (rust_writer, rust_guard) = log_writer(&log_config.rust);
 
-    tracing_subscriber::fmt()
-        .with_writer(writer)
-        .with_ansi(false)
+    let app_layer = tracing_subscriber::fmt::layer()
+        .compact()
+        .with_writer(app_writer)
+        .with_ansi(false);
+    let rust_layer = tracing_subscriber::fmt::layer()
+        .json()
+        .with_writer(rust_writer)
+        .with_ansi(false);
+
+    tracing_subscriber::registry()
+        .with(app_layer)
+        .with(rust_layer)
         .try_init()
         .map_err(|error| anyhow::anyhow!("failed to initialize tracing subscriber: {error}"))?;
 
-    Ok(guard)
+    Ok(LogGuards {
+        _app: app_guard,
+        _rust: rust_guard,
+    })
+}
+
+fn log_writer(
+    config: &LogFileConfig,
+) -> (
+    tracing_appender::non_blocking::NonBlocking,
+    tracing_appender::non_blocking::WorkerGuard,
+) {
+    let file_appender = tracing_appender::rolling::daily(&config.directory, &config.file_name);
+    tracing_appender::non_blocking(file_appender)
+}
+
+fn prune_all_rotated_logs(config: &RuntimeLogConfig) {
+    for stream in config.streams() {
+        if let Err(error) = prune_rotated_logs(stream) {
+            eprintln!(
+                "failed to prune rotated {} logs in {}: {error}",
+                stream.file_name,
+                stream.directory.display()
+            );
+        }
+    }
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@ mod build;
 mod cef;
 mod clean;
 mod dev;
+mod logs;
 mod package;
 pub mod project;
 mod release;
@@ -127,6 +128,24 @@ pub enum Command {
     },
     /// Check local tool and project health.
     Doctor,
+    /// Print Cefari app, daemon, and Rust runtime logs for debugging.
+    Logs {
+        /// Log stream to read.
+        #[arg(long, value_enum, default_value_t = logs::LogKind::All)]
+        kind: logs::LogKind,
+
+        /// Number of recent lines to print per stream. Use 0 for all lines.
+        #[arg(long, default_value_t = 200)]
+        tail: usize,
+
+        /// Keep printing appended log output.
+        #[arg(long)]
+        follow: bool,
+
+        /// Print the Cefari log directory and exit.
+        #[arg(long)]
+        path: bool,
+    },
     /// Print environment and project information.
     Info,
 }
@@ -181,6 +200,12 @@ pub fn run_command(command: Command) -> Result<()> {
             doctor();
             Ok(())
         }
+        Command::Logs {
+            kind,
+            tail,
+            follow,
+            path,
+        } => logs::print_logs(kind, tail, follow, path),
         Command::Info => {
             info();
             Ok(())

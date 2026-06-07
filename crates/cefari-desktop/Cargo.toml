@@ -21,7 +21,7 @@ single-instance.workspace = true
 tao.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
-tracing-subscriber.workspace = true
+tracing-subscriber = { workspace = true, features = ["json"] }
 tray-icon.workspace = true
 user-notify.workspace = true
 

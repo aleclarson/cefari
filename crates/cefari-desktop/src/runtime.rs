@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use cefari_core::{
-    AppConfig, CefariConfig, CefariServiceSpec, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
-    check_for_update, install_service, install_update, load_config, service_manager,
-    service_status, start_service, stop_service,
+    AppConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, RuntimeLogConfig,
+    RuntimePaths, UpdateCheckConfig, UpdateCheckState, check_for_update, install_service,
+    install_update, load_config, service_manager, service_status, start_service, stop_service,
 };
 
 const DAEMON_EXECUTABLE_NAME: &str = if cfg!(windows) {
@@ -64,9 +64,14 @@ impl RuntimeOperations {
     }
 
     pub fn daemon_service_spec(&self) -> CefariServiceSpec {
+        let log_config = RuntimeLogConfig::new(&self.paths);
         CefariServiceSpec::daemon(self.daemon_program())
             .with_arg("--foreground")
             .with_working_directory(&self.paths.data_dir)
+            .with_environment(
+                CEFARI_DAEMON_LOG_ENV,
+                log_config.daemon.file_path().display().to_string(),
+            )
     }
 
     #[allow(dead_code)]
@@ -115,7 +120,7 @@ fn load_desktop_config(path: &Path) -> Result<CefariConfig> {
 
 #[cfg(test)]
 mod tests {
-    use cefari_core::{AppIdentity, RuntimePaths, UpdateCheckState};
+    use cefari_core::{AppIdentity, CEFARI_DAEMON_LOG_ENV, RuntimePaths, UpdateCheckState};
 
     use super::{DAEMON_EXECUTABLE_NAME, RuntimeOperations};
 
@@ -142,5 +147,12 @@ mod tests {
         assert_eq!(spec.label.to_qualified_name(), "dev.cefari.daemon");
         assert!(spec.program.ends_with(DAEMON_EXECUTABLE_NAME));
         assert_eq!(spec.working_directory, Some(paths.data_dir));
+        assert_eq!(
+            spec.environment,
+            vec![(
+                CEFARI_DAEMON_LOG_ENV.to_owned(),
+                paths.log_dir.join("daemon.log").display().to_string()
+            )]
+        );
     }
 }
