@@ -68,6 +68,24 @@ fn write_package_metadata(
     cef_resources_dir: &Path,
     release: bool,
 ) -> Result<()> {
+    let frontend_dir = build_dir.join("frontend").canonicalize().with_context(|| {
+        format!(
+            "failed to resolve frontend resources at {}",
+            build_dir.join("frontend").display()
+        )
+    })?;
+    let daemon_dir = build_dir.join("daemon").canonicalize().with_context(|| {
+        format!(
+            "failed to resolve daemon resources at {}",
+            build_dir.join("daemon").display()
+        )
+    })?;
+    let cef_resources_dir = cef_resources_dir.canonicalize().with_context(|| {
+        format!(
+            "failed to resolve CEF resources at {}",
+            cef_resources_dir.display()
+        )
+    })?;
     let metadata = CargoPackagerConfig {
         name: project.app.identifier.clone(),
         product_name: project.package.product_name.clone(),
@@ -80,15 +98,15 @@ fn write_package_metadata(
         }],
         resources: vec![
             CargoPackagerResource {
-                src: build_dir.join("frontend"),
+                src: frontend_dir,
                 target: "frontend".into(),
             },
             CargoPackagerResource {
-                src: build_dir.join("daemon"),
+                src: daemon_dir,
                 target: "daemon".into(),
             },
             CargoPackagerResource {
-                src: cef_resources_dir.to_path_buf(),
+                src: cef_resources_dir,
                 target: "cef".into(),
             },
         ],
@@ -153,16 +171,30 @@ fn write_package_manifest(
 }
 
 fn run_cargo_packager_if_available(package_dir: &Path) -> Result<()> {
-    if !tool_available("cargo-packager") {
+    let use_cargo_subcommand = !tool_available("cargo-packager") && tool_available("cargo");
+    if !tool_available("cargo-packager") && !use_cargo_subcommand {
         println!("cargo-packager not found; skipped native package invocation");
         return Ok(());
     }
 
+    let package_dir = package_dir.canonicalize().with_context(|| {
+        format!(
+            "failed to resolve package directory at {}",
+            package_dir.display()
+        )
+    })?;
+    let config = package_dir.join("cargo-packager.toml");
     let output_dir = package_dir.join("output");
-    let mut command = Command::new("cargo-packager");
+    let mut command = if use_cargo_subcommand {
+        let mut command = Command::new("cargo");
+        command.arg("packager");
+        command
+    } else {
+        Command::new("cargo-packager")
+    };
     command
         .arg("--config")
-        .arg(package_dir.join("cargo-packager.toml"))
+        .arg(&config)
         .arg("--out-dir")
         .arg(&output_dir);
 

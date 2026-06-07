@@ -271,6 +271,46 @@ fn package_invokes_cargo_packager_when_available() {
 }
 
 #[test]
+fn package_invokes_cargo_packager_subcommand_when_binary_is_unavailable() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(&tools, "cargo", r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG""#);
+
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Package Subcommand App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
+        .arg("build")
+        .arg(&root)
+        .output()
+        .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+
+    assert_success(&output);
+    let tool_log = fs::read_to_string(&log).expect("tool log should exist");
+    assert!(tool_log.contains("cargo packager --config"));
+    assert!(tool_log.contains("cargo-packager.toml"));
+    assert!(tool_log.contains("--out-dir"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
 fn package_requires_build_artifacts() {
     let root = temp_project_path();
     let init_output = cefari()

@@ -78,11 +78,18 @@ fn service_args() -> Vec<OsString> {
         let args = args
             .into_string()
             .expect("CEFARI_SERVICE_SMOKE_ARGS should be UTF-8 JSON");
+        if args.trim().is_empty() {
+            return default_service_args();
+        }
         let parsed: Vec<String> =
             serde_json::from_str(&args).expect("CEFARI_SERVICE_SMOKE_ARGS should be a JSON array");
         return parsed.into_iter().map(OsString::from).collect();
     }
 
+    default_service_args()
+}
+
+fn default_service_args() -> Vec<OsString> {
     vec!["-c".into(), "while true; do sleep 60; done".into()]
 }
 
