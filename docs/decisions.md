@@ -15,6 +15,8 @@ The desktop process now starts a Tao event loop and creates a blank `Cefari` mai
 
 External URL and file open requests are routed through the desktop-only `open` dependency. URL helpers currently allow `http`, `https`, and `mailto` schemes; file helpers validate local path existence before launching the platform opener.
 
+Desktop runtime operations are adapted through `cefari-core`: update checks/install calls use `UpdateCheckConfig`, `check_for_update`, and `install_update`, while daemon service operations build a `CefariServiceSpec` and call the core service-manager wrappers. These adapters are prepared at startup but side-effecting operations are reserved for later UI or menu triggers.
+
 Windows and Linux remain target platforms, but packaging, service operations, and desktop shell behavior still need platform-specific verification before they can be treated as supported.
 
 ## Frontend Template

@@ -13,6 +13,7 @@ use tracing::{error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 
 mod external;
+mod runtime;
 
 const MAIN_WINDOW_TITLE: &str = "Cefari";
 const MAIN_WINDOW_WIDTH: f64 = 1200.0;
@@ -36,8 +37,15 @@ fn run() -> Result<()> {
         _instance: acquire_single_instance(&paths)?,
         _log_guard: init_logging(&paths)?,
     };
+    let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
+    let update_state = runtime_operations.update_check_config();
 
-    info!(config = %paths.config_file.display(), "cefari desktop startup");
+    info!(
+        config = %paths.config_file.display(),
+        updates_configured = update_state.is_configured(),
+        daemon = %runtime_operations.daemon_service_spec().program.display(),
+        "cefari desktop startup"
+    );
     run_native_shell(guards)
 }
 
