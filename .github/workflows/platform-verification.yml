@@ -138,8 +138,8 @@ jobs:
           CEFARI_SERVICE_SMOKE_ARGS: ${{ runner.os == 'Windows' && inputs.windows_service_smoke_args || '' }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" && -z "${CEFARI_SERVICE_SMOKE_PROGRAM:-}" ]]; then
-            export CEFARI_SERVICE_SMOKE_PROGRAM="${SYSTEMROOT}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
-            export CEFARI_SERVICE_SMOKE_ARGS='["-NoProfile","-ExecutionPolicy","Bypass","-Command","for (;;) { Start-Sleep -Seconds 60 }"]'
+            export CEFARI_SERVICE_SMOKE_PROGRAM="${SYSTEMROOT}\\System32\\PING.EXE"
+            export CEFARI_SERVICE_SMOKE_ARGS='["-t","127.0.0.1"]'
           elif [[ "$RUNNER_OS" != "Windows" ]]; then
             export CEFARI_SERVICE_SMOKE_PROGRAM="/usr/bin/tail"
             export CEFARI_SERVICE_SMOKE_ARGS='["-f","/dev/null"]'
