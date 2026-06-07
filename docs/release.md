@@ -33,7 +33,9 @@ Daemon package inputs include the copied source entry and the compiled `cefari-d
 
 The package assembly jobs build the `cefari` CLI in release mode, verify `cefari --version`, and copy the binary into a separate CI distribution directory. Package manifest checks assert that desktop app metadata names `cefari-desktop` and does not include the CLI distribution path.
 
-Native installer validation is separate from package assembly validation. Release jobs extract or inspect platform package outputs before upload and require the packaged payload to contain `cefari-desktop`, generated frontend files, generated daemon output, CEF archive metadata, and CEF payload resources.
+Native installer validation is separate from package assembly validation. CI package assembly jobs build fixture-CEF native packages on macOS, Linux, and Windows, extract their payloads with `scripts/extract-native-package-payload.sh`, and require the packaged payload to contain `cefari-desktop`, generated frontend files, generated daemon output, CEF archive metadata, and CEF payload resources.
+
+Release jobs run the same payload verifier before upload against release-profile packages built with downloaded CEF resources.
 
 Release tags and manual dispatches run `.github/workflows/release.yml`. That workflow builds native packages on macOS, Linux, and Windows using real `cefari build --release` CEF preparation, invokes `cefari package --release`, and uploads each platform's package output as a workflow artifact. Signing runs when `CEFARI_ENABLE_SIGNING` is set to `true` in repository secrets. macOS notarization runs when `CEFARI_ENABLE_NOTARIZATION` is set to `true`.
 
@@ -49,7 +51,7 @@ cefari build /tmp/cefari-real-release-smoke --release
 PATH="$HOME/.cargo/bin:$PATH" cefari package /tmp/cefari-real-release-smoke --release
 ```
 
-Inspect `dist/package/output/*.app` and `dist/package/output/*.dmg` to confirm the `.app` contains `Contents/MacOS/cefari-desktop`, `Contents/Resources/frontend/index.html`, `Contents/Resources/daemon/cefari-daemon`, `Contents/Resources/cef/archive.json`, and additional CEF payload files. `scripts/verify-native-package-payload.rb INSPECT_DIR macOS` performs the payload file checks. `cargo tree -p cefari-desktop -i cefari-core` confirms the packaged desktop binary is built from the crate that links `cefari-core`.
+Inspect `dist/package/output/*.app` and `dist/package/output/*.dmg` to confirm the `.app` contains `Contents/MacOS/cefari-desktop`, `Contents/Resources/frontend/index.html`, `Contents/Resources/daemon/cefari-daemon`, `Contents/Resources/cef/archive.json`, and additional CEF payload files. `scripts/extract-native-package-payload.sh OUTPUT_DIR INSPECT_DIR` and `scripts/verify-native-package-payload.rb INSPECT_DIR macOS` perform the payload file checks. `cargo tree -p cefari-desktop -i cefari-core` confirms the packaged desktop binary is built from the crate that links `cefari-core`.
 
 ## Signing
 
