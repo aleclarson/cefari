@@ -14,6 +14,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 
 mod desktop_menu;
 mod desktop_tray;
+mod desktop_ui;
 mod external;
 mod runtime;
 
@@ -41,14 +42,17 @@ fn run() -> Result<()> {
     };
     let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
     let update_state = runtime_operations.update_check_config();
+    let shell_ui = desktop_ui::ShellUi::load(&paths)?;
 
     info!(
         config = %paths.config_file.display(),
         updates_configured = update_state.is_configured(),
         daemon = %runtime_operations.daemon_service_spec().program.display(),
+        ui_entry = %shell_ui.entry_path.display(),
+        ui_diagnostic = shell_ui.is_diagnostic(),
         "cefari desktop startup"
     );
-    run_native_shell(guards, paths)
+    run_native_shell(guards, paths, &shell_ui)
 }
 
 struct RuntimeGuards {
@@ -62,7 +66,11 @@ enum UserEvent {
     Tray(tray_icon::TrayIconEvent),
 }
 
-fn run_native_shell(guards: RuntimeGuards, paths: RuntimePaths) -> Result<()> {
+fn run_native_shell(
+    guards: RuntimeGuards,
+    paths: RuntimePaths,
+    shell_ui: &desktop_ui::ShellUi,
+) -> Result<()> {
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let event_proxy = event_loop.create_proxy();
     muda::MenuEvent::set_event_handler(Some(move |event| {
@@ -74,11 +82,19 @@ fn run_native_shell(guards: RuntimeGuards, paths: RuntimePaths) -> Result<()> {
     }));
 
     let window = create_main_window(&event_loop)?;
+    apply_ui_diagnostic_state(&window, shell_ui);
     let menu = desktop_menu::DesktopMenu::new()?;
     menu.install();
 
     info!(window = ?window.id(), "cefari native shell started");
     run_event_loop(event_loop, window, guards, menu, paths.log_dir)
+}
+
+fn apply_ui_diagnostic_state(window: &Window, shell_ui: &desktop_ui::ShellUi) {
+    if shell_ui.is_diagnostic() {
+        window.set_title("Cefari - Missing UI Resources");
+        error!(ui_entry = %shell_ui.entry_path.display(), "using diagnostic UI fallback");
+    }
 }
 
 fn create_main_window(event_loop: &EventLoop<UserEvent>) -> Result<Window> {

@@ -11,7 +11,7 @@ Cefari currently verifies the workspace on macOS first. The desktop startup path
 
 Before the UI is available, desktop startup failures are reported to stderr with a stable `Cefari failed to start before the UI was available` prefix and, when tracing has already initialized, to the runtime log.
 
-The desktop process now starts a Tao event loop and creates a blank `Cefari` main window. CEF initialization and packaged UI loading are still separate native shell tasks.
+The desktop process now resolves `frontend/index.html` from platform-appropriate package resource directories or the runtime resource directory before the main window is created. If the UI entry is missing, startup writes a cache-backed diagnostic HTML file and marks the window title as `Cefari - Missing UI Resources`. CEF initialization is still a separate native shell task.
 
 External URL and file open requests are routed through the desktop-only `open` dependency. URL helpers currently allow `http`, `https`, and `mailto` schemes; file helpers validate local path existence before launching the platform opener.
 
