@@ -1,10 +1,10 @@
-use std::{fs, path::PathBuf, process::ExitCode};
+use std::{fs, process::ExitCode};
 
 use anyhow::{Context, Result};
 use cefari_core::{
     AppIdentity, CefariIpcCommand, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
-    OpenExternalUrlRequest, RuntimeLogConfig, RuntimePaths, ServiceStatusResult, TrayResult,
-    UpdateCheckResult, UpdateStateResult, WindowState,
+    FileResult, FilesCommand, OpenExternalUrlRequest, RuntimeLogConfig, RuntimePaths,
+    ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult, WindowState,
 };
 use single_instance::SingleInstance;
 use tao::{
@@ -18,6 +18,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 
 mod desktop_bridge;
 mod desktop_cef;
+mod desktop_files;
 mod desktop_ipc;
 mod desktop_menu;
 mod desktop_notifications;
@@ -115,14 +116,7 @@ fn run_native_shell(
     menu.install();
 
     info!(window = ?window.id(), "cefari native shell started");
-    run_event_loop(
-        event_loop,
-        window,
-        guards,
-        menu,
-        paths.log_dir,
-        runtime_operations,
-    )
+    run_event_loop(event_loop, window, guards, menu, paths, runtime_operations)
 }
 
 fn apply_ui_diagnostic_state(window: &Window, shell_ui: &desktop_ui::ShellUi) {
@@ -146,7 +140,7 @@ fn run_event_loop(
     window: Window,
     guards: RuntimeGuards,
     menu: desktop_menu::DesktopMenu,
-    logs_dir: PathBuf,
+    paths: RuntimePaths,
     runtime_operations: runtime::RuntimeOperations,
 ) -> ! {
     #![allow(clippy::too_many_lines)]
@@ -174,7 +168,7 @@ fn run_event_loop(
                     let mut context = DesktopShellContext {
                         window: &mut window,
                         window_title: &mut window_title,
-                        logs_dir: &logs_dir,
+                        paths: &paths,
                         runtime_operations: &runtime_operations,
                         should_exit: false,
                     };
@@ -198,7 +192,7 @@ fn run_event_loop(
                     let mut context = DesktopShellContext {
                         window: &mut window,
                         window_title: &mut window_title,
-                        logs_dir: &logs_dir,
+                        paths: &paths,
                         runtime_operations: &runtime_operations,
                         should_exit: false,
                     };
@@ -256,7 +250,7 @@ fn run_event_loop(
                         let mut context = DesktopShellContext {
                             window: &mut window,
                             window_title: &mut window_title,
-                            logs_dir: &logs_dir,
+                            paths: &paths,
                             runtime_operations: &runtime_operations,
                             should_exit: false,
                         };
@@ -283,7 +277,7 @@ fn run_event_loop(
 struct DesktopShellContext<'a> {
     window: &'a mut Option<Window>,
     window_title: &'a mut String,
-    logs_dir: &'a PathBuf,
+    paths: &'a RuntimePaths,
     runtime_operations: &'a runtime::RuntimeOperations,
     should_exit: bool,
 }
@@ -330,7 +324,7 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn open_logs(&mut self) -> Result<()> {
-        external::open_external_file(self.logs_dir)
+        external::open_external_file(&self.paths.log_dir)
     }
 
     fn open_external_url(&mut self, url: &str) -> Result<()> {
@@ -358,6 +352,10 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     fn tray_restore_window(&mut self) -> Result<TrayResult> {
         self.window_focus()?;
         Ok(TrayResult { restored: true })
+    }
+
+    fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
+        desktop_files::AppDataFs::open(self.paths)?.dispatch(command)
     }
 }
 

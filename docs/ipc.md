@@ -13,8 +13,14 @@ The initial command surface reserves typed payloads for:
 - daemon service status
 - tray restore-window
 - notification permission/send commands
+- sandboxed app-data file commands
 
 Notification commands are protocol-reserved until the dispatcher exposes notification behavior. They may return an `unsupported` error while the transport and dispatcher are being wired.
+
+File commands are rooted in Cefari's managed app-data directory. They support
+text and base64 reads/writes, directory listing, directory creation, removal,
+rename, copy, stat, and access checks. The desktop dispatcher rejects absolute
+paths and parent traversal before invoking the `cap-std` directory capability.
 
 All responses use a request `id` and a typed `outcome`. Error responses use explicit `invalidCommand`, `denied`, `unknownCommand`, and `unsupported` variants.
 

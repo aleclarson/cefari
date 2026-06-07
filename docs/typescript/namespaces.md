@@ -166,6 +166,87 @@ Service lifecycle commands are not exposed through the current TypeScript
 wrapper. Add Rust IPC commands first when frontend code needs start, stop, or
 restart actions.
 
+## App Data Files
+
+Use `cefari.fs` for files inside Cefari's managed app-data directory. Paths are
+relative to that directory. Absolute paths and `..` traversal are rejected by
+Rust before filesystem access.
+
+```ts
+import { cefari } from "@cefari/app";
+
+await cefari.fs.writeFile("settings/preferences.json", "{\"theme\":\"dark\"}");
+
+const preferences = await cefari.fs.readFile(
+  "settings/preferences.json",
+  "utf8",
+);
+console.log(preferences);
+```
+
+The API mirrors the async `node:fs` shape where Cefari supports the operation:
+
+```ts
+await cefari.fs.mkdir("cache/images", { recursive: true });
+await cefari.fs.copyFile("cache/source.png", "cache/images/source.png");
+
+const entries = await cefari.fs.readdir("cache", { withFileTypes: true });
+for (const entry of entries) {
+  if (entry.isDirectory()) console.log(entry.path);
+}
+
+const stat = await cefari.fs.stat("cache/images/source.png");
+console.log(stat.size, stat.isFile());
+
+await cefari.fs.rm("cache/images", { recursive: true, force: true });
+```
+
+`readFile(path)` returns `Uint8Array`. Pass `"utf8"` or `{ encoding: "utf8" }`
+when app code expects text. `writeFile` accepts strings, `Uint8Array`, and
+`ArrayBuffer`; string writes default to UTF-8 text and byte writes are encoded
+as base64 over the IPC boundary.
+
+Use `cefari.files` for app-oriented helpers:
+
+```ts
+const root = await cefari.files.appDataDir();
+console.log(root.displayPath);
+
+const state = await cefari.files.readJson("state.json");
+await cefari.files.writeJson("state.json", { ...state, openedAt: Date.now() });
+
+const iconUrl = await cefari.files.toObjectUrl("assets/icon.png", {
+  type: "image/png",
+});
+```
+
+This filesystem API is scoped to app data. It does not expose file descriptors,
+streams, watchers, arbitrary OS paths, or direct access to config, cache, logs,
+resources, or update directories.
+
+Current `cefari.fs` methods:
+
+- `readFile(path, options?): Promise<string | Uint8Array>`
+- `writeFile(path, data, options?): Promise<void>`
+- `readdir(path?, options?): Promise<string[] | CefariDirent[]>`
+- `mkdir(path, options?): Promise<void>`
+- `rm(path, options?): Promise<void>`
+- `rename(from, to): Promise<void>`
+- `copyFile(from, to): Promise<void>`
+- `stat(path): Promise<CefariStats>`
+- `access(path): Promise<boolean>`
+
+Current `cefari.files` methods:
+
+- `appDataDir(): Promise<AppDataDir>`
+- `readText(path): Promise<string>`
+- `writeText(path, contents): Promise<void>`
+- `readBytes(path): Promise<Uint8Array>`
+- `writeBytes(path, contents): Promise<void>`
+- `readJson(path): Promise<JsonValue>`
+- `writeJson(path, value, options?): Promise<void>`
+- `toObjectUrl(path, options?): Promise<string>`
+
 ## Tray
 
 Subscribe to tray restore events when the UI needs to refresh visible state:

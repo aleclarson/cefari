@@ -65,6 +65,7 @@ The generated command union currently includes:
 - `serviceStatus`
 - `trayRestoreWindow`
 - `notification`
+- `files`
 
 Reserved commands can be present in generated types before the desktop
 dispatcher supports them. At the moment:
@@ -74,6 +75,10 @@ dispatcher supports them. At the moment:
   `unsupported`.
 - There is no generated command for applying an update, restarting the app, or
   applying an update and restarting.
+
+The `files` command is typed and dispatched. It is rooted in Cefari's managed
+app-data directory and rejects absolute paths and parent traversal before
+filesystem access.
 
 ## Keep Types In Sync
 

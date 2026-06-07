@@ -15,6 +15,7 @@ import { cefari } from "@cefari/app";
 const updateState = await cefari.updates.state();
 await cefari.window.setTitle("Dashboard");
 await cefari.shell.openExternalUrl("https://example.com");
+await cefari.files.writeJson("state.json", { ready: true });
 ```
 
 ## API Shape
@@ -35,6 +36,12 @@ Namespaces:
 - `cefari.service`
 - `cefari.tray`
 - `cefari.notifications`
+- `cefari.fs`, a sandboxed async filesystem for the app-data directory
+- `cefari.files`, app-data helpers for text, bytes, JSON, object URLs, and root
+  discovery
+
+File paths are relative to Cefari's managed app-data directory. The Rust side
+rejects absolute paths and parent traversal before filesystem access.
 
 ## Contract Source
 

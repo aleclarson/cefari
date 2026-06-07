@@ -15,7 +15,9 @@ authors = ["Cefari Contributors"]
 
 [workspace.dependencies]
 anyhow = "1.0.102"
+base64 = "0.22.1"
 camino = "1.2.2"
+cap-std = "4.0.2"
 cargo-packager-resource-resolver = "0.1.2"
 cargo-packager-updater = "0.2.3"
 cef = "148.4.0"

@@ -233,8 +233,9 @@ fn response_json(response: &CefariIpcResponse) -> String {
 mod tests {
     use anyhow::Result;
     use cefari_core::{
-        CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest, ServiceStatusResult,
-        TrayResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult, WindowState,
+        AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
+        FileResult, FilesCommand, ServiceStatusResult, TrayResult, UpdateCheckResult,
+        UpdateStateKind, UpdateStateResult, WindowState,
     };
 
     use super::{BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CEFARI_DEFAULT_STYLES, CefariBridge};
@@ -296,6 +297,16 @@ mod tests {
 
         fn tray_restore_window(&mut self) -> Result<TrayResult> {
             Ok(TrayResult { restored: true })
+        }
+
+        fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
+            match command {
+                FilesCommand::AppDataDir => Ok(FileResult::AppDataDir(AppDataDirInfo {
+                    root_kind: "appData".to_owned(),
+                    display_path: "/tmp/cefari".to_owned(),
+                })),
+                _ => anyhow::bail!("unsupported test file command"),
+            }
         }
     }
 

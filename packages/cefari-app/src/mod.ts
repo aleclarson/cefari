@@ -4,6 +4,15 @@ export { CefariError, type CefariResult, isCefariError } from "./errors.ts";
 export type { CefariBridge, CefariWindow, Unsubscribe } from "./transport.ts";
 export { invoke, isAvailable, onAnyEvent, tryInvoke } from "./transport.ts";
 export { type CefariEventMap, type CefariEventName, on } from "./events.ts";
+export { files, type FilesApi, type JsonValue } from "./files.ts";
+export {
+  CefariDirent,
+  type FileData,
+  type FileEncoding,
+  fs,
+  type FileSystemApi,
+  CefariStats,
+} from "./fs.ts";
 export { app } from "./app.ts";
 export type { WindowApi } from "./window.ts";
 export { windowControls as window } from "./window.ts";
@@ -26,6 +35,8 @@ export {
 import { app, type AppApi } from "./app.ts";
 import { type CefariEventMap, on } from "./events.ts";
 import type { CefariResult } from "./errors.ts";
+import { files, type FilesApi } from "./files.ts";
+import { fs, type FileSystemApi } from "./fs.ts";
 import type {
   CefariIpcCommand,
   CefariIpcEvent,
@@ -56,6 +67,8 @@ export type CefariApp = {
   service: ServiceApi;
   tray: TrayApi;
   notifications: NotificationsApi;
+  fs: FileSystemApi;
+  files: FilesApi;
 };
 
 export const cefari: Readonly<CefariApp> = Object.freeze({
@@ -71,4 +84,6 @@ export const cefari: Readonly<CefariApp> = Object.freeze({
   service,
   tray,
   notifications,
+  fs,
+  files,
 });

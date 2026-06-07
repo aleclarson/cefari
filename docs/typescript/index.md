@@ -78,7 +78,7 @@ whose code is `unsupported`.
 ## Documentation Map
 
 - [Namespace APIs](namespaces.md): `app`, `window`, `shell`, `updates`,
-  `service`, `tray`, and `notifications`.
+  `service`, `tray`, `notifications`, `fs`, and `files`.
 - [Events And Errors](events-and-errors.md): typed event subscriptions,
   low-level event logging, thrown errors, and result-style helpers.
 - [Raw IPC And Type Sync](raw-ipc.md): raw `invoke`, generated types, bridge

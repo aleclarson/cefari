@@ -66,6 +66,21 @@ Deno.test("wraps typed namespace commands", async () => {
   assertEquals(await cefari.notifications.send({ title: "Done" }), {
     id: "n1",
   });
+  assertEquals(await cefari.fs.readFile("state.json", "utf8"), "{}");
+  await cefari.fs.writeFile("state.json", "{}");
+  assertEquals(await cefari.fs.readdir(".", { withFileTypes: true }), [
+    {
+      name: "state.json",
+      path: "state.json",
+      kind: "file",
+    },
+  ]);
+  assertEquals(await cefari.fs.access("state.json"), true);
+  assertEquals(await cefari.files.appDataDir(), {
+    rootKind: "appData",
+    displayPath: "/tmp/cefari",
+  });
+  assertEquals(await cefari.files.readBytes("blob.bin"), new Uint8Array([1, 2]));
 
   assertEquals(commands, [
     { command: "windowFocus" },
@@ -91,6 +106,46 @@ Deno.test("wraps typed namespace commands", async () => {
       payload: {
         notification: "send",
         payload: { title: "Done", body: null },
+      },
+    },
+    {
+      command: "files",
+      payload: {
+        file: "readFile",
+        payload: { path: "state.json", encoding: "utf8" },
+      },
+    },
+    {
+      command: "files",
+      payload: {
+        file: "writeFile",
+        payload: {
+          path: "state.json",
+          contents: { kind: "text", value: "{}" },
+          options: { createParents: true, overwrite: true },
+        },
+      },
+    },
+    {
+      command: "files",
+      payload: {
+        file: "readdir",
+        payload: { path: ".", withFileTypes: true },
+      },
+    },
+    {
+      command: "files",
+      payload: { file: "access", payload: { path: "state.json" } },
+    },
+    {
+      command: "files",
+      payload: { file: "appDataDir" },
+    },
+    {
+      command: "files",
+      payload: {
+        file: "readFile",
+        payload: { path: "blob.bin", encoding: "base64" },
       },
     },
   ]);
@@ -237,6 +292,83 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
           return ok({
             result: "notification",
             payload: { result: "sent", payload: { id: "n1" } },
+          });
+      }
+      break;
+    case "files":
+      switch (command.payload.file) {
+        case "appDataDir":
+          return ok({
+            result: "file",
+            payload: {
+              result: "appDataDir",
+              payload: { rootKind: "appData", displayPath: "/tmp/cefari" },
+            },
+          });
+        case "readFile":
+          if (command.payload.payload.encoding === "utf8") {
+            return ok({
+              result: "file",
+              payload: { result: "text", payload: { contents: "{}" } },
+            });
+          }
+          return ok({
+            result: "file",
+            payload: { result: "base64", payload: { contents: "AQI=" } },
+          });
+        case "writeFile":
+          return ok({
+            result: "file",
+            payload: {
+              result: "written",
+              payload: {
+                path: command.payload.payload.path,
+                bytesWritten: 2,
+              },
+            },
+          });
+        case "readdir":
+          return ok({
+            result: "file",
+            payload: {
+              result: "dirEntries",
+              payload: {
+                entries: [
+                  {
+                    kind: "file",
+                    name: "state.json",
+                    path: "state.json",
+                  },
+                ],
+              },
+            },
+          });
+        case "mkdir":
+        case "rm":
+        case "rename":
+        case "copyFile":
+          return ok({
+            result: "file",
+            payload: { result: "empty" },
+          });
+        case "stat":
+          return ok({
+            result: "file",
+            payload: {
+              result: "stat",
+              payload: {
+                path: command.payload.payload.path,
+                kind: "file",
+                size: 2,
+                modifiedAtMs: null,
+                createdAtMs: null,
+              },
+            },
+          });
+        case "access":
+          return ok({
+            result: "file",
+            payload: { result: "access", payload: { ok: true } },
           });
       }
   }

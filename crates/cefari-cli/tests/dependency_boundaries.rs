@@ -3,6 +3,8 @@ use std::{collections::BTreeSet, fs, path::Path};
 use toml::Value;
 
 const DESKTOP_ONLY_DEPENDENCIES: &[&str] = &[
+    "base64",
+    "cap-std",
     "cef",
     "muda",
     "open",
