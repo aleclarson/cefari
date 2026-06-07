@@ -133,7 +133,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
   - [ ] Define how CEF binaries and resources are resolved during package creation.
 - [ ] Add CI coverage.
   - [x] Add CI steps for formatting, linting, testing, and workspace builds.
-  - [ ] Add CI steps that install or provide `cargo-packager` and `cargo-codesign`.
+  - [x] Add CI steps that install or provide `cargo-packager` and `cargo-codesign`.
   - [ ] Add platform-specific packaging jobs.
 - [ ] Add release automation.
   - [ ] Add signing and notarization jobs for supported platforms.

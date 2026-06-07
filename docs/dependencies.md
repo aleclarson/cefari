@@ -46,6 +46,13 @@ The `cef` dependency is optional until CEF initialization is implemented and ver
 
 `cefari-cli` must not pull in `tao` or `cef`.
 
+## External CLI Tools
+
+Packaging and release jobs install these developer tools outside the shipped desktop runtime:
+
+- `cargo-packager` `0.11.8`
+- `cargo-codesign` `0.4.2`
+
 ## Audit Commands
 
 ```bash
@@ -53,4 +60,3 @@ cargo tree -p cefari-core | rg 'clap|xshell|duct|camino|toml|tao|cef ' || true
 cargo tree -p cefari-cli | rg 'tao|cef ' || true
 cargo tree -p cefari-desktop --depth 1
 ```
-

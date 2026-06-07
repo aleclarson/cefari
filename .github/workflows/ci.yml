@@ -32,3 +32,21 @@ jobs:
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+  packaging-tools:
+    name: Packaging Tools
+    runs-on: macos-latest
+
+    steps:
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --version 0.11.8 --locked
+
+      - name: Install cargo-codesign
+        run: cargo install cargo-codesign --version 0.4.2 --locked
+
+      - name: Verify packaging tools
+        run: |
+          cargo packager --help
+          cargo codesign --help
