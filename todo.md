@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 142 of the 189 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 143 of the 190 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
 - 1 under release automation.
 - 1 under desktop runtime behavior verification.
@@ -151,6 +151,7 @@ Nesting audit: 142 of the 189 checklist entries are already nested child tasks u
   - [x] Verify package assembly contains generated UI, daemon, CEF preparation metadata, and separate CLI output in CI.
   - [x] Verify release workflow package outputs exist and metadata points at runtime, CEF, UI, and daemon inputs before upload.
   - [x] Verify a macOS native package smoke contains `cefari-desktop`, generated UI, generated daemon output, CEF resources, and a `.dmg`.
+  - [x] Verify a macOS release-profile native package with downloaded CEF contains `cefari-desktop`, `cefari-core` runtime dependency code, CEF resources, generated UI, generated daemon output, and a `.dmg`.
   - [x] Build release workflow packages from the Cargo release profile instead of debug desktop binaries.
   - [x] Add release workflow payload inspection for supported-platform native package outputs before upload.
   - [ ] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.

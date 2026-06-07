@@ -39,6 +39,18 @@ Release tags and manual dispatches run `.github/workflows/release.yml`. That wor
 
 Before upload, the release workflow verifies that native package output exists and that package metadata points at existing frontend, daemon executable, CEF resource directory, and CEF archive metadata inputs.
 
+### Local macOS release smoke
+
+On macOS, a full local release smoke can verify the real downloaded CEF payload and release-profile desktop binary:
+
+```bash
+cefari init /tmp/cefari-real-release-smoke --name "Real Release Smoke"
+cefari build /tmp/cefari-real-release-smoke --release
+PATH="$HOME/.cargo/bin:$PATH" cefari package /tmp/cefari-real-release-smoke --release
+```
+
+Inspect `dist/package/output/*.app` and `dist/package/output/*.dmg` to confirm the `.app` contains `Contents/MacOS/cefari-desktop`, `Contents/Resources/frontend/index.html`, `Contents/Resources/daemon/cefari-daemon`, `Contents/Resources/cef/archive.json`, and additional CEF payload files. `cargo tree -p cefari-desktop -i cefari-core` confirms the packaged desktop binary is built from the crate that links `cefari-core`.
+
 ## Signing
 
 Sign a packaged artifact with:
