@@ -135,7 +135,7 @@ templates/vite-react-basic
 Run the Vite React template with the local Cefari build:
 
 ```bash
-npm --prefix templates/vite-react-basic/frontend ci
+deno install --config templates/vite-react-basic/deno.json
 cargo run -p cefari-cli -- dev templates/vite-react-basic
 ```
 
