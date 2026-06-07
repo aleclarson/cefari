@@ -37,6 +37,18 @@ The workspace currently pins `cef = "148.4.0"`.
 
 The dependency is optional in `cefari-desktop` until CEF initialization is implemented and verified in the desktop process.
 
+## Package Identifiers And Signing
+
+Generated projects use the app identifier from `cefari.toml` as the package identifier. `cefari init` currently derives that identifier from the display name, using the `dev.cefari.<slug>` shape.
+
+Signing identities are not hard-coded into generated projects. They should be supplied by developer environment or CI configuration when `cefari codesign` and notarization workflows are implemented.
+
+## Update Artifacts
+
+Update artifact hosting is external to the app package. Runtime update checks consume configured endpoints and public keys; release automation is responsible for publishing compatible update metadata and signed artifacts.
+
+`cefari make-update` should generate artifacts that match the `cargo-packager-updater` response shape documented by that crate.
+
 ## Generated Template Compatibility
 
 Generated project templates are pre-release and may change before the first public distribution of `cefari-cli`.

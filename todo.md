@@ -198,7 +198,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
 - [x] Decide CEF version pinning.
 - [ ] Decide CEF download source.
 - [x] Decide when to make the `cef` dependency non-optional in `cefari-desktop`.
-- [ ] Decide package identifiers, signing identities, and notarization requirements.
-- [ ] Decide update server/artifact hosting expectations.
+- [x] Decide package identifiers, signing identities, and notarization requirements.
+- [x] Decide update server/artifact hosting expectations.
 - [ ] Decide whether `cefari-cli` should support plugins or project hooks.
 - [x] Decide compatibility promises for generated project templates.
