@@ -2,10 +2,9 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 134 of the 181 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 9 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 4 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 134 of the 181 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 6 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 3 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
-- 1 under CI coverage.
-- 3 under release automation.
+- 1 under release automation.
 - 3 under desktop runtime behavior verification.
 - 2 under package and update behavior verification.
 
@@ -142,14 +141,14 @@ Nesting audit: 134 of the 181 checklist entries are already nested child tasks u
   - [x] Define how generated Deno daemon artifacts are included in app packages.
   - [x] Define how prepared CEF resources are resolved during package creation.
   - [x] Define how downloaded CEF binaries are verified and included during package creation.
-- [ ] Add CI coverage.
+- [x] Add CI coverage.
   - [x] Add CI steps for formatting, linting, testing, and workspace builds.
   - [x] Add CI steps that install or provide `cargo-packager` and `cargo-codesign`.
   - [x] Add platform-specific package assembly jobs.
-  - [ ] Add platform-specific native installer packaging jobs once CEF binaries are included.
+  - [x] Add platform-specific native installer packaging jobs once CEF binaries are included.
 - [ ] Add release automation.
-  - [ ] Add signing and notarization jobs for supported platforms.
-  - [ ] Add update artifact generation and publishing jobs.
+  - [x] Add signing and notarization jobs for supported platforms.
+  - [x] Add update artifact generation and publishing jobs.
   - [x] Verify package assembly contains generated UI, daemon, CEF preparation metadata, and separate CLI output in CI.
   - [ ] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.
   - [x] Verify `cefari-cli` is built, versioned, and distributed separately from desktop app packages.

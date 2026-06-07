@@ -28,6 +28,8 @@ The package assembly jobs build the `cefari` CLI in release mode, verify `cefari
 
 Native installer validation is still separate from package assembly validation and remains blocked on downloaded CEF binaries and real package contents.
 
+Release tags and manual dispatches run `.github/workflows/release.yml`. That workflow builds native packages on macOS, Linux, and Windows using real `cefari build` CEF preparation, invokes `cefari package`, and uploads each platform's package output as a workflow artifact. Signing runs when `CEFARI_ENABLE_SIGNING` is set to `true` in repository secrets. macOS notarization runs when `CEFARI_ENABLE_NOTARIZATION` is set to `true`.
+
 ## Signing
 
 Sign a packaged artifact with:
@@ -61,3 +63,5 @@ cefari make-update ARCHIVE --url URL --version VERSION
 The command signs `ARCHIVE` through `cargo-codesign codesign update`, then writes `dist/update/update.json`. The JSON follows the response shape consumed by `cargo-packager-updater`: a release `version` with per-target `url` and `signature` entries.
 
 Use `--target`, `--key-env`, and `--output-dir` when CI needs explicit platform keys, signing-key environment names, or output locations.
+
+The release workflow downloads the native package artifacts, archives each platform package, runs `cefari make-update` for each platform target, uploads generated update metadata, and publishes native packages, update archives, signatures, and `update.json` files to the GitHub release for tag builds. `UPDATE_SIGNING_KEY` must be configured as a repository secret for update artifact generation.

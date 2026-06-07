@@ -145,5 +145,9 @@ jobs:
         run: |
           test -f .ci/cefari-cli-dist/cefari || test -f .ci/cefari-cli-dist/cefari.exe
           grep -q '"desktop_binary": "cefari-desktop"' .ci/cefari-sample/dist/package/manifest.json
-          ! grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json
-          ! grep -q 'cefari-cli-dist' .ci/cefari-sample/dist/package/manifest.json
+          if grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json; then
+            exit 1
+          fi
+          if grep -q 'cefari-cli-dist' .ci/cefari-sample/dist/package/manifest.json; then
+            exit 1
+          fi

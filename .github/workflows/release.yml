@@ -1,0 +1,201 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to publish.
+        required: true
+        type: string
+      update_base_url:
+        description: Public base URL where release packages will be hosted.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  native-packages:
+    name: Native Package (${{ matrix.target.name }})
+    runs-on: ${{ matrix.target.os }}
+    env:
+      CEFARI_ENABLE_SIGNING: ${{ secrets.CEFARI_ENABLE_SIGNING }}
+      CEFARI_ENABLE_NOTARIZATION: ${{ secrets.CEFARI_ENABLE_NOTARIZATION }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: macos
+            os: macos-latest
+            sign_platform: macos
+          - name: linux
+            os: ubuntu-latest
+            sign_platform: linux
+          - name: windows
+            os: windows-latest
+            sign_platform: windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install CEF build tools on macOS
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
+
+      - name: Install CEF build tools on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Install CEF build tools on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+          choco install ninja -y
+
+      - name: Install release tools
+        run: |
+          cargo install cargo-packager --version 0.11.8 --locked
+          cargo install cargo-codesign --version 0.4.2 --locked
+
+      - name: Build cefari CLI
+        run: cargo build -p cefari-cli --release
+
+      - name: Create release sample project
+        run: cargo run -p cefari-cli -- init .release/cefari-sample --name "Cefari Release Sample"
+
+      - name: Build release sample project
+        run: cargo run -p cefari-cli -- build .release/cefari-sample
+
+      - name: Package release sample project
+        run: cargo run -p cefari-cli -- package .release/cefari-sample
+
+      - name: Sign package artifacts
+        if: env.CEFARI_ENABLE_SIGNING == 'true'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          artifacts=(.release/cefari-sample/dist/package/output/*)
+          for artifact in "${artifacts[@]}"; do
+            cargo run -p cefari-cli -- codesign "$artifact" --platform "${{ matrix.target.sign_platform }}"
+          done
+
+      - name: Notarize macOS package artifacts
+        if: runner.os == 'macOS' && env.CEFARI_ENABLE_NOTARIZATION == 'true'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          artifacts=(.release/cefari-sample/dist/package/output/*.app .release/cefari-sample/dist/package/output/*.dmg)
+          for artifact in "${artifacts[@]}"; do
+            cargo run -p cefari-cli -- notarize "$artifact"
+          done
+
+      - name: Collect release package artifacts
+        shell: bash
+        run: |
+          mkdir -p .release/artifacts/${{ matrix.target.name }}
+          cp .release/cefari-sample/dist/package/manifest.json .release/artifacts/${{ matrix.target.name }}/package-manifest.json
+          cp .release/cefari-sample/dist/package/cargo-packager.toml .release/artifacts/${{ matrix.target.name }}/cargo-packager.toml
+          cp -R .release/cefari-sample/dist/package/output/. .release/artifacts/${{ matrix.target.name }}/
+
+      - name: Upload native package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-package-${{ matrix.target.name }}
+          path: .release/artifacts/${{ matrix.target.name }}
+          if-no-files-found: error
+
+  update-artifacts:
+    name: Update Artifacts
+    needs: native-packages
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-codesign
+        run: cargo install cargo-codesign --version 0.4.2 --locked
+
+      - name: Download native package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-package-*
+          path: .release/native-packages
+          merge-multiple: false
+
+      - name: Resolve release metadata
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.version }}"
+            base_url="${{ inputs.update_base_url }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+            base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          fi
+
+          echo "CEFARI_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "CEFARI_UPDATE_BASE_URL=$base_url" >> "$GITHUB_ENV"
+
+      - name: Generate update artifacts
+        shell: bash
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          mkdir -p .release/update
+          shopt -s nullglob
+          for package_dir in .release/native-packages/native-package-*; do
+            package_name="$(basename "$package_dir" | sed 's/^native-package-//')"
+            archive=".release/update/${package_name}.zip"
+            (cd "$package_dir" && zip -r "$GITHUB_WORKSPACE/$archive" .)
+            cargo run -p cefari-cli -- make-update "$archive" \
+              --url "${CEFARI_UPDATE_BASE_URL}/$(basename "$archive")" \
+              --version "$CEFARI_RELEASE_VERSION" \
+              --target "$package_name" \
+              --output-dir ".release/update/$package_name"
+          done
+
+      - name: Upload update artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-artifacts
+          path: .release/update
+          if-no-files-found: error
+
+      - name: Publish GitHub release artifacts
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes "Cefari $GITHUB_REF_NAME" || true
+          files=()
+          while IFS= read -r -d '' file; do
+            files+=("$file")
+          done < <(find .release/native-packages .release/update -type f -print0)
+
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "no release files found"
+            exit 1
+          fi
+
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
