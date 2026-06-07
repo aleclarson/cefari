@@ -21,6 +21,8 @@ Docs were checked against:
 - `crates/cefari-core/src/ipc.rs` and `crates/cefari-core/bindings/ipc.ts`
 - `crates/cefari-desktop/src/desktop_bridge.rs`, `desktop_ipc.rs`,
   `desktop_menu.rs`, `desktop_tray.rs`, and `desktop_notifications.rs`
+- `packages/cefari-app/src/mod.ts`, namespace wrapper modules, and
+  `packages/cefari-app/tests/cefari_app_test.ts`
 
 ## Command Evidence
 

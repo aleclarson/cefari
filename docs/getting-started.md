@@ -62,7 +62,7 @@ For Vite and custom frontend commands, see
 [Develop Locally](guides/development.md).
 
 For frontend TypeScript code that calls native Cefari actions, see
-[TypeScript App Guide](guides/typescript.md).
+[TypeScript App Guide](typescript/index.md).
 
 ## Build And Package
 
@@ -94,7 +94,7 @@ see [Automated Deployment](guides/deployment.md).
 
 - [Cefari CSS Contract](css-contract.md): opt-in drag-region utility classes.
 - [Cefari IPC Protocol](ipc.md): typed Rust-to-CEF native action protocol.
-- [TypeScript App Guide](guides/typescript.md): task-oriented `@cefari/app`
+- [TypeScript App Guide](typescript/index.md): task-oriented `@cefari/app`
   usage from frontend code.
 - [Desktop Notifications](notifications.md): runtime-owned OS notification
   boundary.

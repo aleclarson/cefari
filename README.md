@@ -26,6 +26,8 @@ The repository is split into:
   artifacts and package assembly.
 - [Native Capabilities](docs/guides/native-capabilities.md): use Rust-owned
   window, menu, tray, notification, and IPC surfaces.
+- [TypeScript App Guide](docs/typescript/index.md): use `@cefari/app` from
+  frontend code.
 - [Cefari CSS Contract](docs/css-contract.md): opt in to custom titlebar drag
   regions.
 

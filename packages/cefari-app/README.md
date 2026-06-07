@@ -4,7 +4,7 @@
 `window.cefari` bridge.
 
 For task-oriented frontend usage, see the
-[TypeScript App Guide](../../docs/guides/typescript.md).
+[TypeScript App Guide](../../docs/typescript/index.md).
 
 The package re-exports the Specta-generated IPC types from Rust and layers
 promise-based namespaces on top:

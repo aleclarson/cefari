@@ -28,4 +28,5 @@ The desktop bridge installs `window.cefari` only for trusted packaged app origin
 
 The trusted main-frame bridge bootstrap also installs Cefari's default CSS contract for drag regions. See [Cefari CSS Contract](css-contract.md).
 
-For task-oriented guidance, see [Native Capabilities](guides/native-capabilities.md).
+For task-oriented guidance, see [Native Capabilities](guides/native-capabilities.md)
+and the [`@cefari/app` TypeScript guide](typescript/index.md).
