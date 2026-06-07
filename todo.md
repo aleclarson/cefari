@@ -2,7 +2,16 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 17 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
+Nesting audit: 17 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current child-task breakdown is:
+
+- 3 under native shell implementation.
+- 2 under desktop integration.
+- 1 under build orchestration.
+- 1 under package assembly.
+- 1 under CI coverage.
+- 4 under release automation.
+- 3 under desktop runtime behavior verification.
+- 2 under package and update behavior verification.
 
 ## 1. Establish The Workspace
 
