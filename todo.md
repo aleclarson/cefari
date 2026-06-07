@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 31 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
+Nesting audit: 29 currently unchecked checklist items are dependent child tasks of a larger deliverable, not standalone project goals. This count includes unfinished indented checklist items only; completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks.
 
 ## 1. Establish The Workspace
 
@@ -79,9 +79,9 @@ Nesting audit: 31 currently unchecked checklist items are dependent child tasks 
 - [ ] Integrate runtime operations.
   - [ ] Wire update check and install flow through `cefari-core`.
   - [ ] Wire daemon service install/start/stop/status behavior through `cefari-core`.
-- [ ] Guard desktop-only boundaries.
-  - [ ] Add smoke tests or compile-time checks for desktop-only dependency placement.
-  - [ ] Confirm Tao and CEF dependencies are not introduced into `cefari-core` or `cefari-cli`.
+- [x] Guard desktop-only boundaries.
+  - [x] Add smoke tests or compile-time checks for desktop-only dependency placement.
+  - [x] Confirm Tao and CEF dependencies are not introduced into `cefari-core` or `cefari-cli`.
 
 ## 4. Build `cefari-cli`
 
