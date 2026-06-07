@@ -1,0 +1,94 @@
+name: Cefari Release
+description: Build, package, optionally sign/notarize, create update artifacts, and upload Cefari app releases.
+
+inputs:
+  project-path:
+    description: Path to the Cefari project containing cefari.toml.
+    required: false
+    default: "."
+  mode:
+    description: Release mode. Use release for production artifacts and prerelease for preview artifacts.
+    required: false
+    default: "release"
+  targets:
+    description: Comma-separated target platform list, such as macos-aarch64,windows-x86_64,linux-x86_64.
+    required: false
+    default: ""
+  release-version:
+    description: Version advertised in package and update metadata.
+    required: true
+  release-tag:
+    description: Git tag to attach release assets to. Defaults to the current ref name when omitted by the implementation.
+    required: false
+    default: ""
+  release-name:
+    description: Human-readable GitHub release name.
+    required: false
+    default: ""
+  create-github-release:
+    description: Whether the action should create or update the GitHub release.
+    required: false
+    default: "true"
+  upload-artifacts:
+    description: Whether packaged release assets should be uploaded to GitHub Actions artifacts.
+    required: false
+    default: "true"
+  artifact-name:
+    description: GitHub Actions artifact name prefix.
+    required: false
+    default: "cefari-release"
+  signing-platform:
+    description: Signing platform passed to cefari codesign when signing is enabled. Defaults to the runner platform.
+    required: false
+    default: ""
+  signing-config:
+    description: Optional path to sign.toml for cargo-codesign.
+    required: false
+    default: ""
+  notarize:
+    description: Whether macOS notarization should run after signing.
+    required: false
+    default: "false"
+  update-url-base:
+    description: Public download URL prefix used when generating update metadata.
+    required: false
+    default: ""
+  update-target:
+    description: Updater target key. Defaults to cefari-cli's platform-derived target when omitted.
+    required: false
+    default: ""
+  update-format:
+    description: Updater package format. Defaults from update-target when omitted.
+    required: false
+    default: ""
+  update-key-env:
+    description: Environment variable name containing the update signing key.
+    required: false
+    default: "UPDATE_SIGNING_KEY"
+
+outputs:
+  package-dir:
+    description: Directory containing the prepared package assembly.
+    value: ${{ steps.release.outputs.package-dir }}
+  update-dir:
+    description: Directory containing generated update metadata and signatures when update generation runs.
+    value: ${{ steps.release.outputs.update-dir }}
+  artifact-dir:
+    description: Directory containing upload-ready release artifacts.
+    value: ${{ steps.release.outputs.artifact-dir }}
+  release-mode:
+    description: Effective release mode.
+    value: ${{ steps.release.outputs.release-mode }}
+
+runs:
+  using: composite
+  steps:
+    - id: release
+      shell: bash
+      run: |
+        echo "package-dir=${{ inputs.project-path }}/dist/package" >> "$GITHUB_OUTPUT"
+        echo "update-dir=${{ inputs.project-path }}/dist/update" >> "$GITHUB_OUTPUT"
+        echo "artifact-dir=${{ inputs.project-path }}/dist" >> "$GITHUB_OUTPUT"
+        echo "release-mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+        echo "The Cefari release action interface is defined, but implementation is handled by a later sprint task." >&2
+        exit 1

@@ -1,0 +1,39 @@
+name: Cefari Release Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Release mode.
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - prerelease
+      version:
+        description: Release version.
+        required: true
+
+jobs:
+  release:
+    name: Cefari release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cefari-release
+        with:
+          project-path: templates/vite-react-basic
+          mode: ${{ inputs.mode }}
+          release-version: ${{ inputs.version }}
+          release-tag: ${{ github.ref_name }}
+          targets: macos-aarch64
+          create-github-release: "true"
+          upload-artifacts: "true"
+          update-key-env: UPDATE_SIGNING_KEY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
