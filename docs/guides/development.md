@@ -44,10 +44,10 @@ bind an available local port itself.
 For command syntax, see [Project Commands](../cli/project.md). For all
 frontend manifest fields, see [`[frontend]`](../config/frontend.md).
 
-## Vite React Template
+## Vite React Example
 
-The checked-in Vite React template lives at `templates/vite-react-basic/`. It
-uses `@cefari/app` for typed frontend access to native Cefari actions.
+The Vite React example project lives at `templates/vite-react-basic/`. It uses
+`@cefari/app` for typed frontend access to native Cefari actions.
 
 Install workspace dependencies:
 
@@ -61,9 +61,9 @@ Run it with the installed Cefari CLI:
 cefari dev templates/vite-react-basic
 ```
 
-The template is a Deno workspace with `frontend/` and `daemon/` members. Its
-Cefari manifest uses `deno task` commands so the template can run through the
-installed `cefari` CLI.
+The example is a Deno workspace with `frontend/` and `daemon/` members. Its
+Cefari manifest uses `deno task` commands so it can run through the installed
+`cefari` CLI.
 
 ## Built-In CSS For Custom Titlebars
 

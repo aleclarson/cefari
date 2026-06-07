@@ -81,19 +81,3 @@ whose code is `unsupported`.
   `service`, `tray`, `notifications`, `fs`, and `files`.
 - [Events And Errors](events-and-errors.md): typed event subscriptions,
   low-level event logging, thrown errors, and result-style helpers.
-- [Raw IPC And Type Sync](raw-ipc.md): raw `invoke`, generated types, bridge
-  shape, reserved commands, and Rust-to-TypeScript sync.
-
-## Source Of Truth
-
-The TypeScript wrapper source owns API behavior:
-
-- `packages/cefari-app/src/mod.ts` owns public exports.
-- `packages/cefari-app/src/*.ts` owns namespace wrapper behavior.
-- `crates/cefari-core/src/ipc.rs` owns the IPC protocol.
-- `crates/cefari-core/bindings/ipc.ts` and
-  `packages/cefari-app/src/ipc.ts` own generated TypeScript IPC types.
-
-Do not copy exact generated type signatures into prose docs unless a user needs
-to understand a stable concept. Prefer importing generated types in examples so
-compiler checks catch drift.

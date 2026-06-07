@@ -97,14 +97,7 @@ see [Automated Deployment](guides/deployment.md).
 - [`cefari.toml` Reference](config/index.md): project manifest fields and
   validation rules.
 - [Cefari CSS Contract](css-contract.md): opt-in drag-region utility classes.
-- [Cefari IPC Protocol](ipc.md): typed Rust-to-CEF native action protocol.
 - [TypeScript App Guide](typescript/index.md): task-oriented `@cefari/app`
   usage from frontend code.
 - [Notification Behavior](notifications.md): runtime-owned OS notification
   boundary.
-
-## Claim Verification
-
-The docs were checked against the current source layout, CLI definitions,
-template manifests, GitHub Action metadata, and workflow files. See
-[Documentation Verification](verification.md) for the evidence used.

@@ -16,13 +16,11 @@ The desktop runtime owns:
 - daemon service status and lifecycle helpers
 - OS notification setup
 
-## IPC Contract
+## TypeScript APIs
 
-Cefari's typed IPC payloads are defined in Rust and exported to TypeScript with
-Specta. See [Cefari IPC Protocol](../ipc.md).
-
-Frontend code should use `@cefari/app` for ergonomic wrappers around the
-generated TypeScript types instead of inventing stringly typed native commands.
+Frontend code should use `@cefari/app` for native desktop capabilities instead
+of inventing stringly typed native commands. See the
+[TypeScript App Guide](../typescript/index.md).
 
 ## Notifications
 

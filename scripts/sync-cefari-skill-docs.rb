@@ -6,11 +6,19 @@ require "fileutils"
 ROOT = File.expand_path("..", __dir__)
 SOURCE_DIR = File.join(ROOT, "docs")
 TARGET_DIR = File.join(ROOT, "skills", "cefari", "docs")
+EXCLUDED_FILES = [
+  "architecture.md",
+  "ipc.md",
+  "runtime/notifications.md",
+  "typescript/raw-ipc.md",
+  "verification.md",
+].freeze
 
 def relative_files(root)
   Dir.glob(File.join(root, "**", "*"), File::FNM_DOTMATCH)
     .select { |path| File.file?(path) }
     .map { |path| path.delete_prefix("#{root}/") }
+    .reject { |path| EXCLUDED_FILES.include?(path) }
     .sort
 end
 
@@ -58,7 +66,11 @@ when ["--check"]
 when []
   FileUtils.rm_rf(TARGET_DIR)
   FileUtils.mkdir_p(TARGET_DIR)
-  FileUtils.cp_r(Dir.glob(File.join(SOURCE_DIR, "*")), TARGET_DIR)
+  relative_files(SOURCE_DIR).each do |path|
+    target = File.join(TARGET_DIR, path)
+    FileUtils.mkdir_p(File.dirname(target))
+    FileUtils.cp(File.join(SOURCE_DIR, path), target)
+  end
 else
   warn "usage: #{$PROGRAM_NAME} [--check]"
   exit 2

@@ -1,26 +1,25 @@
 ---
 name: cefari
-description: Use when working on Cefari app projects, templates, release workflows, packaging, daemon behavior, troubleshooting, or Cefari repo conventions; use this skill as the entrypoint to task-specific references and copied docs.
+description: Use when building Cefari app projects, configuring cefari.toml, using the Cefari CLI, packaging apps, adding native capabilities, release workflows, or troubleshooting app builds; use this skill as the entrypoint to app-developer references and copied docs.
 ---
 
 # Cefari
 
-Use this skill as a signpost. The reference files contain repo-specific agent
-guidance. The copied docs contain the full product documentation.
+Use this skill as a signpost for Cefari app development. The reference files
+contain app-focused guidance. The copied docs contain app-developer product
+documentation.
 
 ## Task References
 
-- Project creation, `cefari init`, generated structure, and template alignment:
+- Project creation, `cefari init`, and generated app structure:
   [project-creation.md](references/project-creation.md)
-- Template changes under `templates/`:
-  [template-authoring.md](references/template-authoring.md)
 - Release workflows, GitHub Actions, signing, notarization, and updates:
   [release-workflows.md](references/release-workflows.md)
-- Build, package, native metadata, and release artifacts:
+- Build, package, and release artifacts:
   [packaging.md](references/packaging.md)
 - Daemon execution, packaging, and service management:
   [daemon-behavior.md](references/daemon-behavior.md)
-- Troubleshooting, verification, and focused test selection:
+- Troubleshooting app development, builds, packaging, and workflows:
   [troubleshooting.md](references/troubleshooting.md)
 
 ## Docs Map
@@ -41,26 +40,16 @@ guidance. The copied docs contain the full product documentation.
   [guides/build-and-package.md](docs/guides/build-and-package.md),
   [guides/deployment.md](docs/guides/deployment.md),
   [guides/native-capabilities.md](docs/guides/native-capabilities.md)
-- TypeScript APIs and IPC:
+- TypeScript APIs:
   [typescript/index.md](docs/typescript/index.md),
   [typescript/namespaces.md](docs/typescript/namespaces.md),
-  [typescript/raw-ipc.md](docs/typescript/raw-ipc.md),
-  [typescript/events-and-errors.md](docs/typescript/events-and-errors.md),
-  [ipc.md](docs/ipc.md)
-- Architecture and runtime boundaries:
-  [architecture.md](docs/architecture.md),
-  [runtime/notifications.md](docs/runtime/notifications.md),
+  [typescript/events-and-errors.md](docs/typescript/events-and-errors.md)
+- Native behavior:
   [notifications.md](docs/notifications.md)
 - Release action and workflow example:
   [release-action.md](docs/release-action.md),
   [examples/cefari-release-workflow.yml](docs/examples/cefari-release-workflow.yml)
-- Verification and CSS contract:
-  [verification.md](docs/verification.md),
-  [css-contract.md](docs/css-contract.md)
+- CSS contract: [css-contract.md](docs/css-contract.md)
 
-The [docs](docs/) directory is generated from the repository root `docs/`
-directory by `scripts/sync-cefari-skill-docs.rb`. Treat root `docs/` as the
-source of truth. Use `rg` over this copied docs tree when a task needs
-complete CLI, config, workflow, TypeScript, architecture, or runtime details.
-
-Keep Cefari runtime behavior in runtime crates and developer orchestration in `cefari-cli`. Prefer existing repository patterns over new abstractions.
+Use `rg` over [docs](docs/) when a task needs complete CLI, config, workflow,
+TypeScript, packaging, or native app capability details.

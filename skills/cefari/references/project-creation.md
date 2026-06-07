@@ -1,16 +1,16 @@
 # Project Creation
 
-Use this reference when changing `cefari init`, `cefari.toml`, or generated
-project structure. For product behavior, read:
+Use this reference when creating or adjusting a Cefari app project. For product
+behavior, read:
 
 - [docs/guides/scaffolding.md](../docs/guides/scaffolding.md)
 - [docs/cli/project.md](../docs/cli/project.md)
 - [docs/config/index.md](../docs/config/index.md)
 - [docs/config/app.md](../docs/config/app.md)
 
-## Agent Notes
+## App Notes
 
-- If generated files are intended to match templates, update both the init path
-  and checked-in templates in the same change.
-- Prefer parser tests for config contracts and integration tests for generated
-  project contents.
+- Prefer `cefari init` for new apps, then edit `cefari.toml` rather than
+  recreating generated structure by hand.
+- Use `[app].name` for display text and `[app].project_name` for stable
+  machine-readable output names.

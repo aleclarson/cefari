@@ -1,16 +1,15 @@
 # Packaging
 
-Use this reference when changing `cefari build`, `cefari package`, native
-packaging metadata, or release artifacts. For product behavior, read:
+Use this reference when building, packaging, or inspecting Cefari app release
+artifacts. For product behavior, read:
 
 - [docs/guides/build-and-package.md](../docs/guides/build-and-package.md)
 - [docs/cli/project.md](../docs/cli/project.md)
 - [docs/config/package.md](../docs/config/package.md)
-- [docs/architecture.md](../docs/architecture.md)
 
-## Agent Notes
+## App Notes
 
-- Keep build/package orchestration in `cefari-cli`; keep reusable runtime helpers
-  in `cefari-core`.
-- When packaging behavior changes, update root `docs/` first and rerun
-  `scripts/sync-cefari-skill-docs.rb`.
+- Run `cefari build` before `cefari package` when package inputs are missing or
+  stale.
+- Check `build/frontend`, `build/daemon`, `build/desktop`, and `dist/package`
+  when diagnosing missing artifacts.
