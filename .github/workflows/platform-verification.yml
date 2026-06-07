@@ -136,6 +136,7 @@ jobs:
           CEFARI_SERVICE_SMOKE_APPLICATION: service-smoke-${{ github.run_id }}-${{ matrix.target.name }}
           CEFARI_SERVICE_SMOKE_PROGRAM: ${{ runner.os == 'Windows' && inputs.windows_service_smoke_program || '' }}
           CEFARI_SERVICE_SMOKE_ARGS: ${{ runner.os == 'Windows' && inputs.windows_service_smoke_args || '' }}
+          CEFARI_KEEP_SERVICE_SMOKE: ${{ runner.os == 'Windows' && '1' || '' }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" && -z "${CEFARI_SERVICE_SMOKE_PROGRAM:-}" ]]; then
             export CEFARI_SERVICE_SMOKE_PROGRAM="${SYSTEMROOT}\\System32\\PING.EXE"
