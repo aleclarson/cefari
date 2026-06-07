@@ -100,6 +100,7 @@ Desktop dependencies:
 muda = "0.19.2"       # native menus
 tray-icon = "0.24.0"  # tray/menu-bar icon
 open = "5.3.5"        # opening external links/files from Rust
+user-notify = "0.4.2" # OS notifications from the desktop runtime
 ```
 
 ### `cefari-cli`
@@ -189,6 +190,7 @@ Project packages use the app's machine-readable `project_name` from `cefari.toml
 | `service-manager`                  | `cefari-core` runtime dependency                              |
 | `tao` / `cef`                      | `cefari-desktop` only                                         |
 | `muda` / `tray-icon`               | `cefari-desktop` dependencies                                 |
+| `user-notify`                      | `cefari-desktop`; Cefari-owned notification abstraction        |
 | `download-cef`                     | `cefari-cli`; prepares CEF before build/package steps          |
 | `clap`                             | `cefari-cli` only                                             |
 

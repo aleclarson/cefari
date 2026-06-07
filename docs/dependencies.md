@@ -30,8 +30,11 @@ Allowed current runtime dependencies:
 - `muda`
 - `tray-icon`
 - `open`
+- `user-notify`
 
-The `cef` dependency is optional until CEF initialization is implemented and verified. Making it required is tracked in `todo.md`.
+`user-notify` is kept in `cefari-desktop` because OS notification delivery depends on the shipped app bundle/windowing environment and must not be pulled into CLI-only code.
+
+The `cef` dependency is optional until CEF initialization is implemented and verified.
 
 ## CLI
 

@@ -10,6 +10,7 @@ const DESKTOP_ONLY_DEPENDENCIES: &[&str] = &[
     "single-instance",
     "tao",
     "tray-icon",
+    "user-notify",
 ];
 
 #[test]

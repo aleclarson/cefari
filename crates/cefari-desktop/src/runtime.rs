@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use cefari_core::{
-    CefariConfig, CefariServiceSpec, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
+    AppConfig, CefariConfig, CefariServiceSpec, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
     check_for_update, install_service, install_update, load_config, service_manager,
     service_status, start_service, stop_service,
 };
@@ -57,6 +57,10 @@ impl RuntimeOperations {
             install_update(&update)?;
         }
         Ok(state)
+    }
+
+    pub fn app_config(&self) -> &AppConfig {
+        &self.config.app
     }
 
     pub fn daemon_service_spec(&self) -> CefariServiceSpec {

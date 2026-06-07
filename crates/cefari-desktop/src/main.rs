@@ -14,6 +14,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 
 mod desktop_cef;
 mod desktop_menu;
+mod desktop_notifications;
 mod desktop_tray;
 mod desktop_ui;
 mod external;
@@ -46,19 +47,25 @@ fn run() -> Result<()> {
     #[cfg(not(feature = "cef"))]
     let cef_runtime = desktop_cef::initialize();
 
+    let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
+    let desktop_notifier =
+        desktop_notifications::DesktopNotifier::from_app_config(runtime_operations.app_config())?;
+    let notifications_app_id = desktop_notifier.app_id().to_owned();
+    let update_state = runtime_operations.update_check_config();
+    let shell_ui = desktop_ui::ShellUi::load(&paths)?;
+
     let guards = RuntimeGuards {
         _instance: instance,
         _log_guard: log_guard,
+        _desktop_notifier: desktop_notifier,
         cef_runtime,
     };
-    let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
-    let update_state = runtime_operations.update_check_config();
-    let shell_ui = desktop_ui::ShellUi::load(&paths)?;
 
     info!(
         config = %paths.config_file.display(),
         updates_configured = update_state.is_configured(),
         daemon = %runtime_operations.daemon_service_spec().program.display(),
+        notifications_app_id,
         ui_entry = %shell_ui.entry_path.display(),
         ui_diagnostic = shell_ui.is_diagnostic(),
         "cefari desktop startup"
@@ -69,6 +76,7 @@ fn run() -> Result<()> {
 struct RuntimeGuards {
     _instance: SingleInstance,
     _log_guard: WorkerGuard,
+    _desktop_notifier: desktop_notifications::DesktopNotifier,
     cef_runtime: desktop_cef::CefRuntime,
 }
 
