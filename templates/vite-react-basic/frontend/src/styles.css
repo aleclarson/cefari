@@ -54,3 +54,8 @@ p {
   font-size: 1rem;
   line-height: 1.6;
 }
+
+.status {
+  color: #1b6b4a;
+  font-weight: 700;
+}

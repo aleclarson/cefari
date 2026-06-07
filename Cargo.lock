@@ -635,6 +635,7 @@ dependencies = [
  "muda",
  "open",
  "raw-window-handle",
+ "serde_json",
  "single-instance",
  "tao",
  "tracing",

@@ -2,6 +2,8 @@
 
 This is a minimal Cefari project template that uses a Deno workspace with Vite and React for the frontend.
 
+The frontend includes a typed `invokeCefari` wrapper over `window.cefari.invoke`. In ordinary browser preview it returns a typed `unsupported` response; inside trusted Cefari pages it uses the native bridge.
+
 Run it from the repository root with the local Cefari build:
 
 ```bash

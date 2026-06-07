@@ -16,6 +16,7 @@ use tao::{
 use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 
+mod desktop_bridge;
 mod desktop_cef;
 mod desktop_ipc;
 mod desktop_menu;

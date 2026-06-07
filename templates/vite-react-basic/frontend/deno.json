@@ -8,6 +8,7 @@
   "tasks": {
     "dev": "vite",
     "build": "vite build",
+    "check": "deno check src/cefari.ts",
     "preview": "vite preview"
   }
 }

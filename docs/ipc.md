@@ -21,3 +21,7 @@ All responses use a request `id` and a typed `outcome`. Error responses use expl
 ## Dispatcher Boundary
 
 `cefari-desktop` routes native menu, tray, window, update, service, logs, and external URL actions through the typed dispatcher. CEF transport should call that same dispatcher instead of adding a separate native-action path.
+
+## Bridge Policy
+
+The desktop bridge installs `window.cefari` only for trusted packaged app origins and allowed localhost development origins. Requests from other origins receive a typed `denied` response. Unknown command tags receive `unknownCommand`, malformed requests receive `invalidCommand`, and reserved but unavailable commands receive `unsupported`.
