@@ -20,6 +20,10 @@ When `cargo-packager` is available on `PATH`, the CLI invokes it with the genera
 
 CEF resources are resolved from `build/cef/resources/`, which is prepared by `cefari build` and recorded in `build/cef/manifest.json`. The current manifest still marks the source as `pending-download` until the large CEF binary download step is implemented.
 
+CI runs package assembly on macOS, Linux, and Windows. Those jobs create a sample Cefari project, run `cefari build`, run `cefari package`, verify the generated frontend, daemon, CEF preparation, package metadata, and confirm the `cefari` CLI binary is built separately from desktop package metadata.
+
+Native installer validation is still separate from package assembly validation and remains blocked on downloaded CEF binaries and real package contents.
+
 ## Signing
 
 Sign a packaged artifact with:

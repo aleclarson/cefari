@@ -50,3 +50,49 @@ jobs:
         run: |
           cargo packager --help
           cargo codesign --help
+
+  package-assembly:
+    name: Package Assembly (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build cefari CLI
+        run: cargo build -p cefari-cli
+
+      - name: Create sample project
+        run: cargo run -p cefari-cli -- init .ci/cefari-sample --name "CI Package Sample"
+
+      - name: Build sample project
+        run: cargo run -p cefari-cli -- build .ci/cefari-sample
+
+      - name: Package sample project metadata
+        run: cargo run -p cefari-cli -- package .ci/cefari-sample
+
+      - name: Verify assembled package inputs
+        shell: bash
+        run: |
+          test -f .ci/cefari-sample/build/frontend/index.html
+          test -f .ci/cefari-sample/build/daemon/main.ts
+          test -d .ci/cefari-sample/build/cef/resources
+          test -f .ci/cefari-sample/build/cef/manifest.json
+          test -f .ci/cefari-sample/dist/package/cargo-packager.toml
+          test -f .ci/cefari-sample/dist/package/manifest.json
+          grep -q "build/cef/resources" .ci/cefari-sample/dist/package/manifest.json
+
+      - name: Verify CLI is distributed separately
+        shell: bash
+        run: |
+          test -f target/debug/cefari || test -f target/debug/cefari.exe

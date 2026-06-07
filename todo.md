@@ -138,11 +138,13 @@ Nesting audit: 19 currently unchecked checklist items are dependent child tasks 
 - [ ] Add CI coverage.
   - [x] Add CI steps for formatting, linting, testing, and workspace builds.
   - [x] Add CI steps that install or provide `cargo-packager` and `cargo-codesign`.
-  - [ ] Add platform-specific packaging jobs.
+  - [x] Add platform-specific package assembly jobs.
+  - [ ] Add platform-specific native installer packaging jobs once CEF binaries are included.
 - [ ] Add release automation.
   - [ ] Add signing and notarization jobs for supported platforms.
   - [ ] Add update artifact generation and publishing jobs.
-  - [ ] Verify release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF resources, and generated app artifacts.
+  - [x] Verify package assembly contains generated UI, daemon, CEF preparation metadata, and separate CLI output in CI.
+  - [ ] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.
   - [ ] Verify `cefari-cli` is built, versioned, and distributed separately from desktop app packages.
 
 ## 6. Keep Dependencies Honest
