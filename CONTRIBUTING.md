@@ -143,6 +143,62 @@ deno install --config templates/vite-react-basic/deno.json
 deno task --config templates/vite-react-basic/deno.json build:frontend
 ```
 
+## Verify With The Vite React Template
+
+Use `templates/vite-react-basic/` as the first real-project check for changes
+that affect app scaffolding, `cefari.toml`, frontend dev servers, daemon
+startup, desktop runtime behavior, IPC, packaging, release assembly, or
+`@cefari/app`. The template is checked into this repository, so it exercises the
+same project shape users get without requiring a separate app clone.
+
+Install its Deno workspace dependencies:
+
+```bash
+deno install --config templates/vite-react-basic/deno.json
+```
+
+Run its frontend build directly when your change touches template frontend code,
+the Deno workspace, or `@cefari/app` imports:
+
+```bash
+deno task --config templates/vite-react-basic/deno.json build:frontend
+```
+
+Run it through the local Cefari CLI when your change touches `cefari dev`, the
+desktop shell, daemon launch, native bridge behavior, ports, or the development
+origin policy:
+
+```bash
+cargo run -p cefari-cli -- dev templates/vite-react-basic
+```
+
+If you installed the local CLI, the equivalent command is:
+
+```bash
+cefari dev templates/vite-react-basic
+```
+
+Build and package the template when your change touches build output, daemon
+compilation, CEF resource handling, package metadata, or release assembly:
+
+```bash
+cargo run -p cefari-cli -- build templates/vite-react-basic
+cargo run -p cefari-cli -- package templates/vite-react-basic
+```
+
+Use release mode for packaging changes that depend on optimized binaries:
+
+```bash
+cargo run -p cefari-cli -- build templates/vite-react-basic --release
+cargo run -p cefari-cli -- package templates/vite-react-basic --release
+```
+
+Clean generated template artifacts after verification:
+
+```bash
+cargo run -p cefari-cli -- clean templates/vite-react-basic
+```
+
 When Rust IPC types change, keep the generated TypeScript declarations in sync:
 
 ```bash
