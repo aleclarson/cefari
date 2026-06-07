@@ -1,9 +1,23 @@
-# Cefari Architecture Boundary
+# Architecture Boundary
 
-Cefari is split into runtime code and developer tooling.
+Cefari keeps shipped runtime code separate from developer and release tooling.
 
-- `cefari-core` is the reusable runtime library for paths, config, resource lookup, logging inputs, update helpers, service helpers, and shared IPC contract types.
-- `cefari-desktop` is the shipped desktop app binary. It owns the Tao window, CEF initialization, single-instance locking, runtime logging setup, native menus, tray integration, OS notification wiring, update flow wiring, and daemon service wiring.
-- `cefari-cli` is the separately distributed developer tool. It owns project creation, development orchestration, frontend and daemon builds, desktop builds, packaging, signing, notarization, update artifact generation, and diagnostics.
+## Crates
 
-Runtime crates must not depend on CLI-only orchestration code. The CLI must not introduce Tao or CEF into runtime libraries.
+- `cefari-core`: reusable runtime library for config, paths, resources, logging inputs, update helpers, service helpers, and shared IPC contract types.
+- `cefari-desktop`: shipped desktop runtime. It owns windowing, CEF startup, native menus, tray integration, notifications, runtime logging setup, and native action dispatch.
+- `cefari-cli`: developer tool distributed separately from Cefari apps. It owns scaffolding, dev orchestration, frontend and daemon builds, desktop builds, package assembly, signing, notarization, update artifact generation, diagnostics, and cleanup.
+
+## Boundary Rules
+
+- Runtime crates must not depend on CLI-only orchestration.
+- `cefari-core` must not own windowing, CEF startup, native menu/tray setup, or CLI command parsing.
+- `cefari-cli` should not pull desktop windowing or browser runtime responsibilities into developer tooling.
+- Shared behavior that both Rust runtime and frontend code need should be expressed as a stable contract, such as the Specta-generated IPC types.
+
+## Related Guides
+
+- [Scaffold An App](guides/scaffolding.md)
+- [Develop Locally](guides/development.md)
+- [Build And Package](guides/build-and-package.md)
+- [Native Capabilities](guides/native-capabilities.md)

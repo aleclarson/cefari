@@ -2,6 +2,8 @@
 
 The Cefari release action lives at `.github/actions/cefari-release` and is intended to be the shared release entry point for Cefari app templates.
 
+For step-by-step setup, see [Automated Deployment](guides/deployment.md).
+
 ## Interface
 
 The action accepts a Cefari project path, release mode, target platforms, signing/notarization options, update metadata inputs, and artifact upload controls. The full machine-readable contract is in `.github/actions/cefari-release/action.yml`.

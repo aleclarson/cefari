@@ -26,4 +26,6 @@ All responses use a request `id` and a typed `outcome`. Error responses use expl
 
 The desktop bridge installs `window.cefari` only for trusted packaged app origins and allowed localhost development origins. Requests from other origins receive a typed `denied` response. Unknown command tags receive `unknownCommand`, malformed requests receive `invalidCommand`, and reserved but unavailable commands receive `unsupported`.
 
-The trusted main-frame bridge bootstrap also installs Cefari's default CSS contract for drag regions. See [css-contract.md](css-contract.md).
+The trusted main-frame bridge bootstrap also installs Cefari's default CSS contract for drag regions. See [Cefari CSS Contract](css-contract.md).
+
+For task-oriented guidance, see [Native Capabilities](guides/native-capabilities.md).

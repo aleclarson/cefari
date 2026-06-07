@@ -22,3 +22,5 @@ Drag regions are opt-in. Cefari does not automatically make headers, navbars, ti
 Use `cefari-drag` on the exact region that should move the window. Use `cefari-no-drag` on interactive descendants that must keep normal pointer behavior. Buttons, inputs, textareas, selects, and links inside a `cefari-drag` region default to no-drag.
 
 The stylesheet is installed by the trusted main-frame bridge bootstrap and prepended as `#cefari-default-styles`, so app CSS can override it when needed.
+
+See [Develop Locally](guides/development.md) for template usage and [Native Capabilities](guides/native-capabilities.md) for the broader native surface.

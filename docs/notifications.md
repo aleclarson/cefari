@@ -2,7 +2,7 @@
 
 Cefari desktop notifications are routed through `cefari-desktop`, not through `cefari-cli` or `cefari-core`.
 
-The desktop crate owns a small Cefari wrapper around `user-notify`. App code should call the Cefari notification abstraction rather than constructing `user-notify` requests directly. That keeps permission checks, fallback behavior, and future IPC exposure behind one runtime boundary.
+The desktop crate owns a small Cefari wrapper around `user-notify`. App code should call the Cefari notification abstraction rather than constructing `user-notify` requests directly. That keeps permission checks, fallback behavior, and IPC exposure behind one runtime boundary.
 
 ## Startup Behavior
 
@@ -27,3 +27,5 @@ The wrapper checks notification permission before sending. If the OS reports tha
 ## Dependency Boundary
 
 `user-notify` is a `cefari-desktop` dependency only. It must not be added to `cefari-core` or `cefari-cli`.
+
+See [Native Capabilities](guides/native-capabilities.md) for the broader Rust-owned desktop surface.
