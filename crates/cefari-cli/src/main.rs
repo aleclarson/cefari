@@ -7,6 +7,10 @@ use std::{
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
+mod project;
+
+use project::ProjectConfig;
+
 #[derive(Debug, Parser)]
 #[command(name = "cefari")]
 #[command(about = "Create, develop, build, package, sign, and release Cefari apps.")]
@@ -136,6 +140,19 @@ fn info() {
     println!("cefari-cli {}", env!("CARGO_PKG_VERSION"));
     println!("target os: {}", std::env::consts::OS);
     println!("target arch: {}", std::env::consts::ARCH);
+
+    match ProjectConfig::load_from_dir(".") {
+        Ok(project) => {
+            println!("project: {}", project.app.name);
+            println!("identifier: {}", project.app.identifier);
+        }
+        Err(project::LoadProjectError::Missing { .. }) => {
+            println!("project: not found");
+        }
+        Err(error) => {
+            println!("project: invalid ({error})");
+        }
+    }
 }
 
 fn print_tool_status(tool: &str) {
@@ -207,7 +224,7 @@ mod tests {
 
     use clap::Parser;
 
-    use super::{Cli, Command, identifier_slug, init_project};
+    use super::{Cli, Command, ProjectConfig, identifier_slug, init_project};
 
     #[test]
     fn parses_planned_commands() {
@@ -242,6 +259,11 @@ mod tests {
         assert!(root.join("frontend/index.html").exists());
         assert!(root.join("daemon/main.ts").exists());
         assert!(root.join("README.md").exists());
+
+        let project = ProjectConfig::load_from_dir(&root).expect("generated manifest should parse");
+        assert_eq!(project.app.name, "Example App");
+        assert_eq!(project.frontend.dist, "frontend/dist");
+        assert_eq!(project.daemon.entry, "daemon/main.ts");
 
         fs::remove_dir_all(root).expect("temp project should be removable");
     }

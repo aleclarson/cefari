@@ -151,6 +151,7 @@ xshell = "0.3.0-pre.2"
 duct = "1.1.1"
 camino = "1.2.2"
 serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.18"
 toml = "1.1.2"
 ```
 

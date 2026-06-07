@@ -90,6 +90,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
 - [ ] Implement project creation.
   - [x] Implement `cefari init`.
   - [x] Define the generated Cefari project layout.
+  - [x] Add typed parsing for generated `cefari.toml` manifests.
   - [x] Add template files for frontend, daemon, desktop config, and package metadata.
   - [x] Add fixture-based tests for generated project scaffolds.
 - [ ] Implement development orchestration.
@@ -113,6 +114,7 @@ This task list is derived from [README.md](README.md). It treats the architectur
 - [ ] Implement diagnostics.
   - [x] Implement `cefari doctor`.
   - [x] Implement `cefari info`.
+  - [x] Include generated project manifest details in `cefari info`.
   - [x] Report when external tools such as `cargo-packager` or `cargo-codesign` are missing.
 - [ ] Test CLI behavior.
   - [x] Add parser tests for planned commands.

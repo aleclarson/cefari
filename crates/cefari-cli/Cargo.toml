@@ -17,9 +17,9 @@ camino.workspace = true
 clap = { workspace = true, features = ["derive"] }
 duct.workspace = true
 serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
 toml.workspace = true
 xshell.workspace = true
 
 [lints]
 workspace = true
-
