@@ -2,7 +2,7 @@
 
 This task list is derived from [README.md](README.md). It treats the architecture plan as a sequence of larger implementation tracks, with child tasks nested under the work they belong to.
 
-Nesting audit: 148 of the 195 checklist entries are already nested child tasks under larger work items. Of the remaining unfinished work, 2 unchecked checklist entries are dependent child tasks rather than standalone project goals, and they sit under 2 unfinished parent tasks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
+Nesting audit: 148 of the 195 checklist entries are already nested child tasks under larger work items. Honest answer: 2 of the remaining unchecked checklist entries should be treated as nested children of bigger tasks, not as standalone project goals. Both are dependent verification leaves under their existing parent tracks. Completed historical children stay nested for traceability, and open decisions remain top-level because they can unblock multiple tracks. The current unfinished child-task breakdown is:
 
 - 1 under release automation.
 - 1 under desktop runtime behavior verification.
@@ -158,6 +158,7 @@ Nesting audit: 148 of the 195 checklist entries are already nested child tasks u
   - [x] Add CI native package payload extraction and verification for fixture-CEF packages on macOS, Linux, and Windows.
   - [x] Add a manual platform verification workflow for release-profile native packages with downloaded CEF on macOS, Linux, and Windows.
   - [ ] Verify native release packages contain `cefari-desktop`, `cefari-core` runtime code, CEF binaries/resources, and generated app artifacts.
+    - Evidence needed before this parent can close: successful payload inspection for release-profile native packages on macOS, Linux, and Windows, not just local macOS or fixture-CEF CI packages.
   - [x] Verify `cefari-cli` is built, versioned, and distributed separately from desktop app packages.
 
 ## 6. Keep Dependencies Honest
@@ -210,6 +211,7 @@ Nesting audit: 148 of the 195 checklist entries are already nested child tasks u
   - [x] Allow native service lifecycle smoke verification to use caller-provided service fixture binaries and arguments.
   - [x] Add a manual platform verification workflow for native service lifecycle smoke runs on supported runners.
   - [ ] Service management operations are verified on each supported platform.
+    - Evidence needed before this parent can close: successful native lifecycle smoke results for macOS, Linux, and Windows, including a Windows-service-aware fixture for Windows.
 - [x] Verify package and update behavior.
   - [x] A packaged app contains the expected runtime, CEF, UI, and daemon artifacts.
   - [x] An update artifact can be generated and consumed by the runtime update flow.
