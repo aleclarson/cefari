@@ -55,5 +55,5 @@ The repository is split into:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo run -p cefari-cli -- --help
+cefari --help
 ```

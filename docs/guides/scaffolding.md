@@ -3,7 +3,7 @@
 Use `cefari init` to create a minimal Cefari project:
 
 ```bash
-cargo run -p cefari-cli -- init my-cefari-app --name "My Cefari App"
+cefari init my-cefari-app --name "My Cefari App"
 ```
 
 If no path is supplied, the CLI creates `./cefari-app`.
@@ -22,7 +22,8 @@ The command refuses to overwrite an existing path.
 
 ## Project Name Rules
 
-`[app].project_name` is the stable machine name for generated executables. It must be lowercase and contain only `a-z`, `0-9`, and `-`.
+`[app].project_name` is the stable machine name for generated executables. It
+must be lowercase and contain only `a-z`, `0-9`, and `-`.
 
 Cefari uses that value for build outputs:
 
@@ -50,8 +51,11 @@ entry = "daemon/main.ts"
 product_name = "My Cefari App"
 ```
 
-Add `frontend.build_command` and `frontend.dev_command` when a framework owns frontend builds or dev serving. See [Develop Locally](development.md) for Vite.
+Add `frontend.build_command` and `frontend.dev_command` when a framework owns
+frontend builds or dev serving. See [Develop Locally](development.md) for Vite.
 
 ## Generated Agent Skill
 
-`cefari init` copies the Cefari skill into `.agents/skills/cefari/`. That skill is a signpost to task-oriented Cefari reference documents for agents working inside generated apps.
+`cefari init` copies the Cefari skill into `.agents/skills/cefari/`. That skill
+is a signpost to task-oriented Cefari reference documents for agents working
+inside generated apps.

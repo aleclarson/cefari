@@ -3,7 +3,7 @@
 Run a project in development:
 
 ```bash
-cargo run -p cefari-cli -- dev PATH
+cefari dev PATH
 ```
 
 If `PATH` is omitted, Cefari uses the current directory.
@@ -35,7 +35,7 @@ dev_port = 5173
 `{port}` is replaced with the selected frontend port. Override it from the CLI:
 
 ```bash
-cargo run -p cefari-cli -- dev PATH --frontend-port 5273
+cefari dev PATH --frontend-port 5273
 ```
 
 Use `--frontend-port 0` only with the built-in static server, where Cefari can
@@ -52,15 +52,15 @@ Install workspace dependencies:
 deno install --config templates/vite-react-basic/deno.json
 ```
 
-Run it with the local Cefari build:
+Run it with the installed Cefari CLI:
 
 ```bash
-cargo run -p cefari-cli -- dev templates/vite-react-basic
+cefari dev templates/vite-react-basic
 ```
 
 The template is a Deno workspace with `frontend/` and `daemon/` members. Its
-Cefari manifest uses `deno task` commands so the template can run from the
-repository-local Cefari build.
+Cefari manifest uses `deno task` commands so the template can run through the
+installed `cefari` CLI.
 
 ## Built-In CSS For Custom Titlebars
 

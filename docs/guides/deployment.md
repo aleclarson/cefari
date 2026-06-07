@@ -1,6 +1,7 @@
 # Automated Deployment
 
-Cefari release automation is split between the local CLI, a composite GitHub Action, and template workflow files.
+Cefari release automation is split between the local CLI, a composite GitHub
+Action, and template workflow files.
 
 ## Shared Release Action
 
@@ -10,7 +11,8 @@ The shared action lives at:
 .github/actions/cefari-release/action.yml
 ```
 
-It validates release inputs, then delegates to Cefari CLI commands for build, package, signing, notarization, update metadata, and GitHub release upload.
+It validates release inputs, then delegates to Cefari CLI commands for build,
+package, signing, notarization, update metadata, and GitHub release upload.
 
 Required input:
 
@@ -46,7 +48,8 @@ The Vite React template includes:
 - `templates/vite-react-basic/.github/workflows/release.yml`
 - `templates/vite-react-basic/.github/workflows/prerelease.yml`
 
-The production workflow runs for `v*` tags and manual dispatch. The prerelease workflow runs manually and includes a `dry_run` input.
+The production workflow runs for `v*` tags and manual dispatch. The prerelease
+workflow runs manually and includes a `dry_run` input.
 
 Both workflows call the repository-local Cefari release action with:
 
@@ -55,11 +58,14 @@ project-path: templates/vite-react-basic
 targets: macos-aarch64
 ```
 
-Copy these workflow files and `.github/actions/cefari-release/` into a generated project, then adjust `project-path`, target platforms, signing configuration, and update URLs for that repository.
+Copy these workflow files and `.github/actions/cefari-release/` into a generated
+project, then adjust `project-path`, target platforms, signing configuration,
+and update URLs for that repository.
 
 ## Dry-Run A Release
 
-Use the prerelease workflow's `dry_run` input, or run the action script locally with action-like environment variables:
+Use the prerelease workflow's `dry_run` input, or run the action script locally
+with action-like environment variables:
 
 ```bash
 GITHUB_OUTPUT=/tmp/cefari-release-output.txt \
@@ -72,30 +78,32 @@ CEFARI_DRY_RUN=true \
 .github/actions/cefari-release/release.sh
 ```
 
-Dry-run mode prints the planned build, package, signing, notarization, update, and GitHub release commands without executing the release steps.
+Dry-run mode prints the planned build, package, signing, notarization, update,
+and GitHub release commands without executing the release steps.
 
 ## Signing And Notarization
 
 Sign a packaged artifact:
 
 ```bash
-cargo run -p cefari-cli -- codesign ARTIFACT
+cefari codesign ARTIFACT
 ```
 
 Notarize a signed macOS `.app` bundle or `.dmg`:
 
 ```bash
-cargo run -p cefari-cli -- notarize ARTIFACT
+cefari notarize ARTIFACT
 ```
 
-Use `--config PATH` to point at a `sign.toml` when the signing tool needs explicit configuration.
+Use `--config PATH` to point at a `sign.toml` when the signing tool needs
+explicit configuration.
 
 ## Update Metadata
 
 Generate update metadata:
 
 ```bash
-cargo run -p cefari-cli -- make-update ARCHIVE --url URL --version VERSION
+cefari make-update ARCHIVE --url URL --version VERSION
 ```
 
 Useful options:
@@ -114,4 +122,5 @@ Release jobs that publish real artifacts need:
 - `GITHUB_TOKEN` permissions for release and artifact operations
 - signing identities and passwords for platform signing
 - Apple notarization credentials for macOS notarization
-- `UPDATE_SIGNING_KEY` or the env var named by `update-key-env` when update metadata is generated
+- `UPDATE_SIGNING_KEY` or the env var named by `update-key-env` when update
+  metadata is generated

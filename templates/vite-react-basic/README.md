@@ -11,18 +11,18 @@ For custom titlebars, apply `cefari-drag` only to regions that should move the
 window. Use `cefari-no-drag` on interactive descendants that must keep normal
 pointer behavior.
 
-Run it from the repository root with the local Cefari build:
+Run it from the repository root with an installed `cefari` CLI:
 
 ```bash
 deno install --config templates/vite-react-basic/deno.json
-cargo run -p cefari-cli -- dev templates/vite-react-basic
+cefari dev templates/vite-react-basic
 ```
 
 Build it with:
 
 ```bash
 deno install --config templates/vite-react-basic/deno.json
-cargo run -p cefari-cli -- build templates/vite-react-basic
+cefari build templates/vite-react-basic
 ```
 
 ## Release Workflows
@@ -38,7 +38,7 @@ This template includes production and prerelease workflow stubs in
 Both workflows use the repository-local action path
 `./.github/actions/cefari-release` and set
 `project-path: templates/vite-react-basic` so this checked-in template can be
-validated against the local Cefari build.
+validated with the installed `cefari` CLI.
 
 Expected secrets and variables:
 

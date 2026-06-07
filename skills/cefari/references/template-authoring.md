@@ -4,14 +4,16 @@ Use this reference when changing files under `templates/`.
 
 ## Template Rules
 
-- Every checked-in template should be runnable with the local Cefari build.
+- Every checked-in template should be runnable with an installed `cefari` CLI.
 - Prefer commands that work from the repository root.
-- Keep template config aligned with `cefari init` output unless the template intentionally demonstrates a different setup.
+- Keep template config aligned with `cefari init` output unless the template
+  intentionally demonstrates a different setup.
 - For Deno workspaces, keep root, frontend, and daemon tasks coherent.
 
 ## Frontend
 
-- Frontend dev servers should be declared through `cefari.toml` using `frontend.dev_command` and `frontend.dev_port`.
+- Frontend dev servers should be declared through `cefari.toml` using
+  `frontend.dev_command` and `frontend.dev_port`.
 - Frontend build output should match `frontend.dist`.
 
 ## Release Workflows
