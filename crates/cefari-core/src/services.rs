@@ -1,3 +1,5 @@
+#[cfg(windows)]
+use std::process::Command;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -207,17 +209,49 @@ pub fn service_status(
     manager: &dyn ServiceManager,
     spec: &CefariServiceSpec,
 ) -> Result<ServiceStatus> {
-    manager
+    let status = manager
         .status(spec.status_context())
         .map_err(|source| Error::ServiceManager {
             operation: ServiceOperation::Status.as_str(),
             source,
-        })
+        })?;
+
+    #[cfg(windows)]
+    if matches!(status, ServiceStatus::Stopped(_)) && windows_service_is_running(&spec.label) {
+        return Ok(ServiceStatus::Running);
+    }
+
+    Ok(status)
 }
 
 #[must_use]
 pub fn program_exists(path: impl AsRef<Path>) -> bool {
     path.as_ref().is_file()
+}
+
+#[cfg(windows)]
+fn windows_service_is_running(label: &ServiceLabel) -> bool {
+    let output = Command::new("sc.exe")
+        .arg("query")
+        .arg(label.to_qualified_name())
+        .output();
+
+    let Ok(output) = output else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+
+    parse_windows_sc_query_running(&String::from_utf8_lossy(&output.stdout))
+}
+
+#[cfg(any(windows, test))]
+fn parse_windows_sc_query_running(output: &str) -> bool {
+    output.lines().any(|line| {
+        let line = line.trim();
+        line.starts_with("STATE") && line.contains("RUNNING")
+    })
 }
 
 #[cfg(test)]
@@ -292,6 +326,29 @@ mod tests {
         let current_exe = std::env::current_exe().expect("current test executable should resolve");
         assert!(program_exists(current_exe));
         assert!(!program_exists("/definitely/not/a/cefari-daemon"));
+    }
+
+    #[test]
+    fn parses_windows_running_sc_query_status() {
+        let output = r"
+SERVICE_NAME: dev.cefari.service-smoke
+        TYPE               : 10  WIN32_OWN_PROCESS
+        STATE              : 4  RUNNING
+                                (STOPPABLE, NOT_PAUSABLE, ACCEPTS_SHUTDOWN)
+";
+
+        assert!(super::parse_windows_sc_query_running(output));
+    }
+
+    #[test]
+    fn rejects_windows_stopped_sc_query_status() {
+        let output = r"
+SERVICE_NAME: dev.cefari.service-smoke
+        TYPE               : 10  WIN32_OWN_PROCESS
+        STATE              : 1  STOPPED
+";
+
+        assert!(!super::parse_windows_sc_query_running(output));
     }
 
     #[test]
