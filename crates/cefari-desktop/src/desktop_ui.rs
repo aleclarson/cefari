@@ -32,6 +32,11 @@ impl ShellUi {
     pub fn is_diagnostic(&self) -> bool {
         matches!(self.state, ShellUiState::DiagnosticFallback { .. })
     }
+
+    pub fn url(&self) -> String {
+        std::env::var("CEFARI_FRONTEND_URL")
+            .unwrap_or_else(|_| format!("file://{}", self.entry_path.display()))
+    }
 }
 
 fn load_from_candidates(

@@ -37,6 +37,7 @@ pub fn dev_project(project_dir: &Path, frontend_port: Option<u16>) -> Result<()>
 
 struct DevProcesses {
     frontend: Option<StaticDevServer>,
+    frontend_url: Option<String>,
     children: Vec<NamedChild>,
 }
 
@@ -44,6 +45,7 @@ impl DevProcesses {
     fn new() -> Self {
         Self {
             frontend: None,
+            frontend_url: None,
             children: Vec::new(),
         }
     }
@@ -58,13 +60,16 @@ impl DevProcesses {
             let child = spawn_frontend_command(project_dir, command, port)?;
             self.children
                 .push(NamedChild::new("frontend dev server", child));
+            self.frontend_url = Some(format!("http://127.0.0.1:{port}"));
             println!("frontend dev server: http://127.0.0.1:{port}");
             return Ok(());
         }
 
         let frontend_dir = project_dir.join("frontend");
         let frontend = StaticDevServer::start(&frontend_dir, port)?;
-        println!("frontend dev server: http://{}", frontend.address());
+        let frontend_url = format!("http://{}", frontend.address());
+        println!("frontend dev server: {frontend_url}");
+        self.frontend_url = Some(frontend_url);
         self.frontend = Some(frontend);
         Ok(())
     }
@@ -97,12 +102,16 @@ impl DevProcesses {
     }
 
     fn spawn_desktop(&mut self) -> Result<()> {
+        let frontend_url = self.frontend_url.as_deref();
         let child = Command::new("cargo")
             .arg("run")
             .arg("--manifest-path")
             .arg(workspace_manifest())
             .arg("-p")
             .arg("cefari-desktop")
+            .arg("--features")
+            .arg("cef")
+            .envs(frontend_url.map(|url| ("CEFARI_FRONTEND_URL", url)))
             .stdin(Stdio::null())
             .spawn()
             .context("failed to start Rust desktop app for cefari dev")?;

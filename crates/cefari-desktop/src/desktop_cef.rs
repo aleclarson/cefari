@@ -3,6 +3,8 @@ mod imp {
     use std::ptr;
 
     use anyhow::{Context, Result};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use tao::window::Window;
     use tracing::info;
 
     pub struct CefRuntime {
@@ -41,6 +43,39 @@ mod imp {
             Ok(Self { initialized: true })
         }
 
+        pub fn create_browser(&self, window: &Window, url: &str) -> Result<()> {
+            if !self.initialized {
+                anyhow::bail!("CEF is not initialized");
+            }
+
+            let handle = native_window_handle(window)?;
+            let size = window.inner_size();
+            let bounds = cef::Rect {
+                x: 0,
+                y: 0,
+                width: i32::try_from(size.width).unwrap_or(i32::MAX),
+                height: i32::try_from(size.height).unwrap_or(i32::MAX),
+            };
+            let window_info = cef::WindowInfo::default().set_as_child(handle, &bounds);
+            let settings = cef::BrowserSettings::default();
+            let url = cef::CefString::from(url);
+            let created = cef::browser_host_create_browser(
+                Some(&window_info),
+                None,
+                Some(&url),
+                Some(&settings),
+                None,
+                None,
+            );
+
+            if created != 1 {
+                anyhow::bail!("CEF browser creation returned {created}");
+            }
+
+            info!("CEF browser created");
+            Ok(())
+        }
+
         pub fn pump_message_loop(&self) {
             if self.initialized {
                 cef::do_message_loop_work();
@@ -60,6 +95,24 @@ mod imp {
 
     pub fn initialize() -> Result<CefRuntime> {
         CefRuntime::initialize().context("failed to initialize CEF")
+    }
+
+    fn native_window_handle(window: &Window) -> Result<cef::sys::cef_window_handle_t> {
+        match window
+            .window_handle()
+            .context("failed to get native window handle")?
+            .as_raw()
+        {
+            #[cfg(target_os = "macos")]
+            RawWindowHandle::AppKit(handle) => Ok(handle.ns_view.as_ptr().cast()),
+            #[cfg(target_os = "windows")]
+            RawWindowHandle::Win32(handle) => {
+                Ok(handle.hwnd.get() as cef::sys::cef_window_handle_t)
+            }
+            #[cfg(all(unix, not(target_os = "macos")))]
+            RawWindowHandle::Xlib(handle) => Ok(handle.window as cef::sys::cef_window_handle_t),
+            other => anyhow::bail!("unsupported native window handle for CEF: {other:?}"),
+        }
     }
 }
 
@@ -85,6 +138,14 @@ mod imp {
         pub fn initialize() -> Self {
             info!("CEF feature disabled; skipping CEF initialization");
             Self { enabled: false }
+        }
+
+        pub fn create_browser(
+            &self,
+            _window: &tao::window::Window,
+            _url: &str,
+        ) -> anyhow::Result<()> {
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
         }
 
         pub fn pump_message_loop(&self) {

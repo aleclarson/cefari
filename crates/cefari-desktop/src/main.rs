@@ -114,6 +114,10 @@ fn run_native_shell(
 
     let window = create_main_window(&event_loop)?;
     apply_ui_diagnostic_state(&window, shell_ui);
+    guards
+        .cef_runtime
+        .create_browser(&window, &shell_ui.url())
+        .context("failed to create CEF browser")?;
     let menu = desktop_menu::DesktopMenu::new()?;
     menu.install();
 
