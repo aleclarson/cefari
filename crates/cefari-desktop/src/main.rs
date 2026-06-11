@@ -100,7 +100,7 @@ enum UserEvent {
 }
 
 fn run_native_shell(
-    guards: RuntimeGuards,
+    mut guards: RuntimeGuards,
     paths: RuntimePaths,
     runtime_operations: runtime::RuntimeOperations,
     shell_ui: &desktop_ui::ShellUi,
