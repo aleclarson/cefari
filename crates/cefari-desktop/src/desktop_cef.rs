@@ -1,6 +1,6 @@
 #[cfg(feature = "cef")]
 mod imp {
-    use std::ptr;
+    use std::{cell::RefCell, ptr, rc::Rc};
 
     use anyhow::{Context, Result};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -9,18 +9,22 @@ mod imp {
 
     use cef::rc::Rc as _;
     use cef::{
-        Client, ImplClient, ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler,
-        ImplProcessMessage as _, ImplRenderHandler, ImplRequest as _, ImplRequestHandler,
-        LifeSpanHandler, LoadHandler, RenderHandler, RequestHandler, WrapClient,
-        WrapLifeSpanHandler, WrapLoadHandler, WrapRenderHandler, WrapRequestHandler, wrap_client,
-        wrap_life_span_handler, wrap_load_handler, wrap_render_handler, wrap_request_handler,
+        Client, ImplBrowser as _, ImplBrowserHost as _, ImplClient, ImplFrame as _,
+        ImplLifeSpanHandler, ImplLoadHandler, ImplProcessMessage as _, ImplRenderHandler,
+        ImplRequest as _, ImplRequestHandler, LifeSpanHandler, LoadHandler, RenderHandler,
+        RequestHandler, WrapClient, WrapLifeSpanHandler, WrapLoadHandler, WrapRenderHandler,
+        WrapRequestHandler, wrap_client, wrap_life_span_handler, wrap_load_handler,
+        wrap_render_handler, wrap_request_handler,
     };
 
     pub struct CefRuntime {
         initialized: bool,
+        #[allow(dead_code)]
+        state: SharedBrowserState,
         client: cef::Client,
     }
 
+    #[allow(dead_code)]
     impl CefRuntime {
         pub fn initialize() -> Result<Self> {
             let args = cef::args::Args::new();
@@ -49,10 +53,13 @@ mod imp {
                 anyhow::bail!("CEF initialization returned {initialized}");
             }
 
+            let state = SharedBrowserState::default();
+
             info!("CEF initialized");
             Ok(Self {
                 initialized: true,
-                client: CefariCefClient::build(),
+                state: state.clone(),
+                client: CefariCefClient::build(state),
             })
         }
 
@@ -89,11 +96,121 @@ mod imp {
             Ok(())
         }
 
+        pub fn has_browser(&self) -> bool {
+            self.state.has_browser()
+        }
+
+        pub fn browser_identifier(&self) -> Result<i32> {
+            self.state
+                .active_browser()
+                .map(|browser| browser.identifier())
+        }
+
+        pub fn reload_browser(&self) -> Result<()> {
+            let browser = self.state.active_browser()?;
+            browser.reload();
+            Ok(())
+        }
+
+        pub fn focus_browser(&self, focused: bool) -> Result<()> {
+            let host = self.browser_host()?;
+            host.set_focus(i32::from(focused));
+            Ok(())
+        }
+
+        pub fn close_browser(&self, force_close: bool) -> Result<()> {
+            let host = self.browser_host()?;
+            host.close_browser(i32::from(force_close));
+            Ok(())
+        }
+
+        pub fn notify_browser_resized(&self) -> Result<()> {
+            let host = self.browser_host()?;
+            host.was_resized();
+            Ok(())
+        }
+
+        pub fn notify_browser_screen_info_changed(&self) -> Result<()> {
+            let host = self.browser_host()?;
+            host.notify_screen_info_changed();
+            Ok(())
+        }
+
+        pub fn notify_browser_move_or_resize_started(&self) -> Result<()> {
+            let host = self.browser_host()?;
+            host.notify_move_or_resize_started();
+            Ok(())
+        }
+
         pub fn pump_message_loop(&self) {
             if self.initialized {
                 cef::do_message_loop_work();
             }
         }
+
+        fn browser_host(&self) -> Result<cef::BrowserHost> {
+            let browser = self.state.active_browser()?;
+            browser
+                .host()
+                .with_context(|| format!("CEF browser {} has no host", browser.identifier()))
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct SharedBrowserState(Rc<RefCell<BrowserState>>);
+
+    #[allow(dead_code)]
+    impl SharedBrowserState {
+        fn has_browser(&self) -> bool {
+            self.0.borrow().main_browser.is_some()
+        }
+
+        fn active_browser(&self) -> Result<cef::Browser> {
+            self.0
+                .borrow()
+                .main_browser
+                .clone()
+                .context("CEF main browser is not available")
+        }
+
+        fn browser_created(&self, browser: &cef::Browser) {
+            let identifier = browser.identifier();
+            let is_popup = browser.is_popup() != 0;
+            let mut state = self.0.borrow_mut();
+
+            if state.main_browser.is_none() && !is_popup {
+                state.main_browser = Some(browser.clone());
+                info!(identifier, "CEF main browser retained");
+            } else {
+                debug!(
+                    identifier,
+                    is_popup,
+                    has_main_browser = state.main_browser.is_some(),
+                    "CEF browser created outside main-browser retention"
+                );
+            }
+        }
+
+        fn browser_closing(&self, browser: &cef::Browser) {
+            let identifier = browser.identifier();
+            let mut state = self.0.borrow_mut();
+            let should_clear = state
+                .main_browser
+                .as_ref()
+                .is_some_and(|main_browser| main_browser.identifier() == identifier);
+
+            if should_clear {
+                state.main_browser = None;
+                info!(identifier, "CEF main browser released");
+            } else {
+                debug!(identifier, "CEF non-main browser closing");
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct BrowserState {
+        main_browser: Option<cef::Browser>,
     }
 
     wrap_client! {
@@ -140,9 +257,9 @@ mod imp {
     }
 
     impl CefariCefClient {
-        fn build() -> cef::Client {
+        fn build(state: SharedBrowserState) -> cef::Client {
             Self::new(
-                CefariLifeSpanHandler::new(),
+                CefariLifeSpanHandler::new(state),
                 CefariLoadHandler::new(),
                 CefariRenderHandler::new(),
                 CefariRequestHandler::new(),
@@ -151,10 +268,15 @@ mod imp {
     }
 
     wrap_life_span_handler! {
-        struct CefariLifeSpanHandler;
+        struct CefariLifeSpanHandler {
+            state: SharedBrowserState,
+        }
 
         impl LifeSpanHandler {
-            fn on_after_created(&self, _browser: Option<&mut cef::Browser>) {
+            fn on_after_created(&self, browser: Option<&mut cef::Browser>) {
+                if let Some(browser) = browser {
+                    self.state.browser_created(browser);
+                }
                 info!("CEF browser lifecycle created");
             }
 
@@ -163,7 +285,10 @@ mod imp {
                 0
             }
 
-            fn on_before_close(&self, _browser: Option<&mut cef::Browser>) {
+            fn on_before_close(&self, browser: Option<&mut cef::Browser>) {
+                if let Some(browser) = browser {
+                    self.state.browser_closing(browser);
+                }
                 info!("CEF browser lifecycle closing");
             }
         }
@@ -360,6 +485,28 @@ mod imp {
             other => anyhow::bail!("unsupported native window handle for CEF: {other:?}"),
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::SharedBrowserState;
+
+        #[test]
+        fn empty_browser_state_reports_missing_browser() {
+            let state = SharedBrowserState::default();
+
+            assert!(!state.has_browser());
+            let error = match state.active_browser() {
+                Ok(_) => panic!("empty state should not return a browser"),
+                Err(error) => error,
+            };
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("CEF main browser is not available")
+            );
+        }
+    }
 }
 
 #[cfg(feature = "cef")]
@@ -380,6 +527,7 @@ mod imp {
         enabled: bool,
     }
 
+    #[allow(dead_code)]
     impl CefRuntime {
         pub fn initialize() -> Self {
             info!("CEF feature disabled; skipping CEF initialization");
@@ -391,6 +539,38 @@ mod imp {
             _window: &tao::window::Window,
             _url: &str,
         ) -> anyhow::Result<()> {
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+        }
+
+        pub fn has_browser(&self) -> bool {
+            false
+        }
+
+        pub fn browser_identifier(&self) -> anyhow::Result<i32> {
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+        }
+
+        pub fn reload_browser(&self) -> anyhow::Result<()> {
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+        }
+
+        pub fn focus_browser(&self, _focused: bool) -> anyhow::Result<()> {
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+        }
+
+        pub fn close_browser(&self, _force_close: bool) -> anyhow::Result<()> {
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+        }
+
+        pub fn notify_browser_resized(&self) -> anyhow::Result<()> {
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+        }
+
+        pub fn notify_browser_screen_info_changed(&self) -> anyhow::Result<()> {
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+        }
+
+        pub fn notify_browser_move_or_resize_started(&self) -> anyhow::Result<()> {
             anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
         }
 
