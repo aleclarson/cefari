@@ -34,7 +34,7 @@ Each finding uses:
 | `cargo test --workspace` | Rust test suite | Pending |
 | `cargo test -p cefari-core` | Core crate tests | Passed |
 | `cargo test -p cefari-desktop` | Desktop crate tests | Passed |
-| `cargo test -p cefari-cli` | CLI crate tests | Pending |
+| `cargo test -p cefari-cli` | CLI crate tests | Failed |
 | `deno task --cwd packages/cefari-app check` | TypeScript package type check | Pending |
 | `deno task --cwd packages/cefari-app test` | TypeScript package tests | Pending |
 | `deno task --cwd templates/vite-react-basic/frontend check` | Template frontend type check | Pending |
@@ -70,6 +70,30 @@ Each finding uses:
 - `Suggested next step`: Add CEF integration for script injection and request/event transport, then cover it with an integration or lower-level unit test that proves the bridge is connected outside `desktop_bridge.rs` tests.
 - `Verification notes`: `rg` found no production references wiring the bridge into the CEF runtime. `cargo test -p cefari-desktop` passed because tests cover the isolated bridge dispatcher, not browser integration.
 
+### SS-003: The CLI crate does not compile because a bundled skill reference is missing
+
+- `Severity`: High
+- `Status`: Confirmed
+- `Confidence`: High
+- `Area`: CLI, project scaffolding, test/build health
+- `Files`: `crates/cefari-cli/src/lib.rs`, `skills/cefari/references/`, `templates/vite-react-basic/.agents/skills/cefari/references/template-authoring.md`
+- `Evidence`: `crates/cefari-cli/src/lib.rs` includes `../../../skills/cefari/references/template-authoring.md` in `CEFARI_SKILL_FILES`, but `skills/cefari/references/` does not contain that file. The file exists only under `templates/vite-react-basic/.agents/skills/cefari/references/template-authoring.md`.
+- `Impact`: `cargo test -p cefari-cli`, `cargo run -p cefari-cli`, and any workspace validation that compiles `cefari-cli` fail before tests or commands can run. The `cefari init` scaffolder also cannot embed the intended complete skill bundle from the root skill source.
+- `Suggested next step`: Restore `skills/cefari/references/template-authoring.md` or remove the include and adjust scaffold expectations, then rerun the CLI and workspace test suites.
+- `Verification notes`: `cargo test -p cefari-cli` failed with `couldn't read crates/cefari-cli/src/../../../skills/cefari/references/template-authoring.md`.
+
+### SS-004: CLI-generated TOML and JSON can be invalid for names or manifest fields containing special characters
+
+- `Severity`: Medium
+- `Status`: Risk
+- `Confidence`: High
+- `Area`: CLI scaffolding and package metadata
+- `Files`: `crates/cefari-cli/src/lib.rs`, `crates/cefari-cli/src/package.rs`, `crates/cefari-cli/src/cef.rs`
+- `Evidence`: `init_project` writes `cefari.toml` with `format!` interpolation for `name = "{display_name}"` and `product_name = "{display_name}"` without TOML escaping. `PackageManifest::to_json` and `CefPreparationManifest::to_json` build JSON strings manually; `PackageManifest::to_json` interpolates `product_name`, `identifier`, and paths without JSON escaping. Tests only cover simple names and then parse generated JSON in the simple case.
+- `Impact`: A valid user-provided display/product name or path containing quotes, backslashes, newlines, or other JSON/TOML-significant characters can generate invalid project manifests or package manifests, breaking `cefari init`, `cefari package`, release automation, or downstream tooling that parses `dist/package/manifest.json`.
+- `Suggested next step`: Use `toml::to_string_pretty` or a typed serializable struct for `cefari.toml`, and use `serde_json` for all JSON manifest generation.
+- `Verification notes`: Source-confirmed by manual string construction. A targeted reproduction could not run through the CLI because SS-003 currently prevents compiling `cefari-cli`.
+
 ## Reviewed Areas With No Findings
 
 - `crates/cefari-core/src/config.rs`: config serialization, defaults, unknown-field rejection, and save/load error mapping reviewed with no findings.
@@ -84,12 +108,18 @@ Each finding uses:
 - `crates/cefari-desktop/src/desktop_menu.rs` and `crates/cefari-desktop/src/desktop_tray.rs`: menu/tray command mapping reviewed with no findings.
 - `crates/cefari-desktop/src/desktop_notifications.rs`: native notification setup/request modeling reviewed with no findings; notification IPC remains intentionally unsupported in current docs.
 - `crates/cefari-desktop/src/desktop_ui.rs` and `crates/cefari-desktop/src/external.rs`: resource loading fallback, diagnostic view escaping, and external URL scheme filtering reviewed with no additional findings.
+- `crates/cefari-cli/src/project.rs`: project manifest parsing, required sections, default frontend port, and `project_name` validation reviewed with no additional findings.
+- `crates/cefari-cli/src/dev.rs`: dev process orchestration, static frontend server, daemon logging setup, and shutdown behavior reviewed with no findings beyond the previously recorded desktop CEF/bridge issues.
+- `crates/cefari-cli/src/build.rs`: frontend/daemon/desktop artifact assembly reviewed with no additional findings beyond SS-001.
+- `crates/cefari-cli/src/package.rs`, `crates/cefari-cli/src/cef.rs`, and `crates/cefari-cli/src/release.rs`: packaging, CEF preparation, signing, notarization, and update metadata flows reviewed with no additional findings beyond SS-004.
+- `crates/cefari-cli/src/logs.rs` and `crates/cefari-cli/src/clean.rs`: log reading/following and generated artifact cleanup reviewed with no findings.
 
 ## Validation Summary
 
 - `cargo test -p cefari-core`: passed. This ran 31 unit tests and doc tests successfully; the `native_service_lifecycle_smoke` integration test remains ignored by design because it installs and starts a native OS service.
 - `cargo test -p cefari-desktop`: passed. This ran 30 unit tests successfully.
 - `cargo check -p cefari-desktop --features cef`: passed.
+- `cargo test -p cefari-cli`: failed before running tests because `skills/cefari/references/template-authoring.md` is missing while `crates/cefari-cli/src/lib.rs` includes it.
 
 ## Skipped Or Limited Checks
 
