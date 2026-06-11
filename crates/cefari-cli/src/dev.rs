@@ -103,14 +103,9 @@ impl DevProcesses {
 
     fn spawn_desktop(&mut self) -> Result<()> {
         let frontend_url = self.frontend_url.as_deref();
-        let child = Command::new("cargo")
-            .arg("run")
-            .arg("--manifest-path")
-            .arg(workspace_manifest())
-            .arg("-p")
-            .arg("cefari-desktop")
-            .arg("--features")
-            .arg("cef")
+        let mut command = Command::new("cargo");
+        configure_desktop_run_command(&mut command);
+        let child = command
             .envs(frontend_url.map(|url| ("CEFARI_FRONTEND_URL", url)))
             .stdin(Stdio::null())
             .spawn()
@@ -163,6 +158,15 @@ impl DevProcesses {
             child.stop();
         }
     }
+}
+
+fn configure_desktop_run_command(command: &mut Command) {
+    command
+        .arg("run")
+        .arg("--manifest-path")
+        .arg(workspace_manifest())
+        .arg("-p")
+        .arg("cefari-desktop");
 }
 
 impl Drop for DevProcesses {
@@ -435,7 +439,10 @@ mod tests {
         time::{Duration, Instant},
     };
 
-    use super::{StaticDevServer, request_path, static_file_path, substitute_frontend_port};
+    use super::{
+        StaticDevServer, configure_desktop_run_command, request_path, static_file_path,
+        substitute_frontend_port,
+    };
 
     #[test]
     fn extracts_request_path() {
@@ -461,6 +468,20 @@ mod tests {
             substitute_frontend_port("--port={port}", 5174),
             std::ffi::OsString::from("--port=5174")
         );
+    }
+
+    #[test]
+    fn desktop_run_command_targets_desktop_crate_without_features() {
+        let mut command = std::process::Command::new("cargo");
+
+        configure_desktop_run_command(&mut command);
+
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(args.windows(2).any(|args| args == ["-p", "cefari-desktop"]));
+        assert!(!args.iter().any(|arg| arg == "--features"));
     }
 
     #[test]
