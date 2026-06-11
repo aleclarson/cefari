@@ -35,10 +35,10 @@ Each finding uses:
 | `cargo test -p cefari-core` | Core crate tests | Passed |
 | `cargo test -p cefari-desktop` | Desktop crate tests | Passed |
 | `cargo test -p cefari-cli` | CLI crate tests | Failed |
-| `deno task --cwd packages/cefari-app check` | TypeScript package type check | Pending |
-| `deno task --cwd packages/cefari-app test` | TypeScript package tests | Pending |
-| `deno task --cwd templates/vite-react-basic/frontend check` | Template frontend type check | Pending |
-| `deno task --cwd templates/vite-react-basic/frontend build` | Template frontend build | Pending |
+| `deno task --cwd packages/cefari-app check` | TypeScript package type check | Passed |
+| `deno task --cwd packages/cefari-app test` | TypeScript package tests | Passed |
+| `deno task --cwd templates/vite-react-basic/frontend check` | Template frontend type check | Passed |
+| `deno task --cwd templates/vite-react-basic/frontend build` | Template frontend build | Passed |
 | `actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/*.yml docs/examples/cefari-release-workflow.yml` | Workflow syntax | Pending |
 | `shellcheck scripts/extract-native-package-payload.sh .github/actions/cefari-release/release.sh` | Shell script diagnostics | Pending |
 | `ruby -c scripts/sync-cefari-skill-docs.rb` | Ruby syntax check | Pending |
@@ -113,6 +113,10 @@ Each finding uses:
 - `crates/cefari-cli/src/build.rs`: frontend/daemon/desktop artifact assembly reviewed with no additional findings beyond SS-001.
 - `crates/cefari-cli/src/package.rs`, `crates/cefari-cli/src/cef.rs`, and `crates/cefari-cli/src/release.rs`: packaging, CEF preparation, signing, notarization, and update metadata flows reviewed with no additional findings beyond SS-004.
 - `crates/cefari-cli/src/logs.rs` and `crates/cefari-cli/src/clean.rs`: log reading/following and generated artifact cleanup reviewed with no findings.
+- `packages/cefari-app/src/transport.ts`, `results.ts`, and namespace wrappers: bridge availability handling, typed result extraction, event filtering, errors, shell/window/update/service/tray/notification wrappers, and exported API shape reviewed with no additional findings beyond the runtime bridge issue in SS-002.
+- `packages/cefari-app/src/fs.ts` and `files.ts`: file API encoding, JSON helpers, object URL creation, app-data access, and result mapping reviewed with no findings.
+- `packages/cefari-app/tests/cefari_app_test.ts`: package tests cover unavailable bridge behavior, namespace command wrapping, typed event filters, and typed IPC failures; reviewed with no findings.
+- `templates/vite-react-basic/`: Deno workspace config, Vite frontend, React app, daemon entrypoint, `cefari.toml`, and template workflows were reviewed with no additional findings beyond source/runtime issues already recorded.
 
 ## Validation Summary
 
@@ -120,6 +124,10 @@ Each finding uses:
 - `cargo test -p cefari-desktop`: passed. This ran 30 unit tests successfully.
 - `cargo check -p cefari-desktop --features cef`: passed.
 - `cargo test -p cefari-cli`: failed before running tests because `skills/cefari/references/template-authoring.md` is missing while `crates/cefari-cli/src/lib.rs` includes it.
+- `deno task --cwd packages/cefari-app check`: passed.
+- `deno task --cwd packages/cefari-app test`: passed, 4 tests.
+- `deno task --cwd templates/vite-react-basic/frontend check`: passed.
+- `deno task --cwd templates/vite-react-basic/frontend build`: passed. Generated `templates/vite-react-basic/frontend/dist` and `templates/vite-react-basic/node_modules` were removed after validation to keep the worktree clean.
 
 ## Skipped Or Limited Checks
 
