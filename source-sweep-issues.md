@@ -39,10 +39,11 @@ Each finding uses:
 | `deno task --cwd packages/cefari-app test` | TypeScript package tests | Passed |
 | `deno task --cwd templates/vite-react-basic/frontend check` | Template frontend type check | Passed |
 | `deno task --cwd templates/vite-react-basic/frontend build` | Template frontend build | Passed |
-| `actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/*.yml docs/examples/cefari-release-workflow.yml` | Workflow syntax | Pending |
-| `shellcheck scripts/extract-native-package-payload.sh .github/actions/cefari-release/release.sh` | Shell script diagnostics | Pending |
-| `ruby -c scripts/sync-cefari-skill-docs.rb` | Ruby syntax check | Pending |
-| `ruby -c scripts/verify-native-package-payload.rb` | Ruby syntax check | Pending |
+| `actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/*.yml docs/examples/cefari-release-workflow.yml` | Workflow syntax | Passed |
+| `shellcheck scripts/extract-native-package-payload.sh .github/actions/cefari-release/release.sh` | Shell script diagnostics | Passed |
+| `ruby -c scripts/sync-cefari-skill-docs.rb` | Ruby syntax check | Passed |
+| `ruby -c scripts/verify-native-package-payload.rb` | Ruby syntax check | Passed |
+| `scripts/sync-cefari-skill-docs.rb --check` | Skill docs mirror sync | Failed |
 
 ## Findings
 
@@ -94,6 +95,30 @@ Each finding uses:
 - `Suggested next step`: Use `toml::to_string_pretty` or a typed serializable struct for `cefari.toml`, and use `serde_json` for all JSON manifest generation.
 - `Verification notes`: Source-confirmed by manual string construction. A targeted reproduction could not run through the CLI because SS-003 currently prevents compiling `cefari-cli`.
 
+### SS-005: The checked-in Cefari skill docs mirror is stale
+
+- `Severity`: Medium
+- `Status`: Documentation Drift
+- `Confidence`: High
+- `Area`: Skill docs, CLI documentation, automation
+- `Files`: `docs/cli/index.md`, `docs/cli/diagnostics.md`, `skills/cefari/docs/cli/index.md`, `skills/cefari/docs/cli/diagnostics.md`, `scripts/sync-cefari-skill-docs.rb`
+- `Evidence`: `scripts/sync-cefari-skill-docs.rb --check` failed and reported stale files under `skills/cefari/docs`. The root CLI docs list `cefari logs` in `docs/cli/index.md` and document the command, options, and log streams in `docs/cli/diagnostics.md`; the mirrored skill docs omit the `logs` entry and the entire `cefari logs` section.
+- `Impact`: Agents or users relying on the bundled Cefari skill docs receive incomplete CLI guidance and may miss the supported log inspection workflow.
+- `Suggested next step`: Run `scripts/sync-cefari-skill-docs.rb` after deciding whether the current root docs are authoritative, then commit the mirrored skill doc updates.
+- `Verification notes`: `ruby -c scripts/sync-cefari-skill-docs.rb` passed. `scripts/sync-cefari-skill-docs.rb --check` failed specifically because `skills/cefari/docs/cli/diagnostics.md` and `skills/cefari/docs/cli/index.md` are stale.
+
+### SS-006: Public docs describe the desktop bridge as runtime-installed before the CEF runtime wires it
+
+- `Severity`: Medium
+- `Status`: Documentation Drift
+- `Confidence`: High
+- `Area`: Documentation, template guidance, desktop runtime
+- `Files`: `docs/ipc.md`, `docs/typescript/raw-ipc.md`, `docs/css-contract.md`, `templates/vite-react-basic/README.md`, `crates/cefari-desktop/src/desktop_bridge.rs`, `crates/cefari-desktop/src/desktop_cef.rs`
+- `Evidence`: `docs/ipc.md` says the desktop bridge installs `window.cefari` for trusted origins and installs the default CSS contract. `docs/typescript/raw-ipc.md` says the desktop runtime installs `window.cefari` for trusted packaged and localhost origins. Template guidance also describes native bridge usage inside trusted Cefari pages. This conflicts with SS-002: source search found the bridge script and dispatcher integration only in isolated bridge tests and TypeScript consumers, while `desktop_cef.rs` creates the browser with no CEF client or handler to inject the bridge or forward JavaScript messages.
+- `Impact`: Application developers can follow the docs and template guidance, write against `@cefari/app`, and still receive an unavailable bridge in the actual desktop shell.
+- `Suggested next step`: Either wire the bridge into the CEF runtime and keep the docs as intended behavior, or revise the docs/template guidance to describe the feature as not yet implemented.
+- `Verification notes`: Source review and `rg` reference checks support the same root runtime gap recorded in SS-002; this finding records the separate documentation and template drift.
+
 ## Reviewed Areas With No Findings
 
 - `crates/cefari-core/src/config.rs`: config serialization, defaults, unknown-field rejection, and save/load error mapping reviewed with no findings.
@@ -117,6 +142,10 @@ Each finding uses:
 - `packages/cefari-app/src/fs.ts` and `files.ts`: file API encoding, JSON helpers, object URL creation, app-data access, and result mapping reviewed with no findings.
 - `packages/cefari-app/tests/cefari_app_test.ts`: package tests cover unavailable bridge behavior, namespace command wrapping, typed event filters, and typed IPC failures; reviewed with no findings.
 - `templates/vite-react-basic/`: Deno workspace config, Vite frontend, React app, daemon entrypoint, `cefari.toml`, and template workflows were reviewed with no additional findings beyond source/runtime issues already recorded.
+- `.github/actions/cefari-release/action.yml` and `.github/actions/cefari-release/release.sh`: release action inputs, script validation, and command flow reviewed with no standalone findings beyond SS-001 and SS-003, which currently affect its `cefari build` and `cefari package` steps.
+- `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/platform-verification.yml`, `templates/vite-react-basic/.github/workflows/*.yml`, and `docs/examples/cefari-release-workflow.yml`: workflow syntax and validation coverage reviewed with no additional findings beyond failures already captured by SS-003 and SS-005.
+- `scripts/extract-native-package-payload.sh`, `scripts/sync-cefari-skill-docs.rb`, and `scripts/verify-native-package-payload.rb`: path handling, payload checks, and syntax reviewed with no script implementation findings. The sync script correctly reported the stale skill mirror in SS-005.
+- `docs/` and `skills/cefari/`: documentation set reviewed against current source behavior with no additional findings beyond SS-005, SS-006, and source issues already recorded.
 
 ## Validation Summary
 
@@ -128,6 +157,11 @@ Each finding uses:
 - `deno task --cwd packages/cefari-app test`: passed, 4 tests.
 - `deno task --cwd templates/vite-react-basic/frontend check`: passed.
 - `deno task --cwd templates/vite-react-basic/frontend build`: passed. Generated `templates/vite-react-basic/frontend/dist` and `templates/vite-react-basic/node_modules` were removed after validation to keep the worktree clean.
+- `actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/*.yml docs/examples/cefari-release-workflow.yml`: passed.
+- `shellcheck scripts/extract-native-package-payload.sh .github/actions/cefari-release/release.sh`: passed.
+- `ruby -c scripts/sync-cefari-skill-docs.rb`: passed.
+- `ruby -c scripts/verify-native-package-payload.rb`: passed.
+- `scripts/sync-cefari-skill-docs.rb --check`: failed because `skills/cefari/docs/cli/diagnostics.md` and `skills/cefari/docs/cli/index.md` are stale relative to the root docs.
 
 ## Skipped Or Limited Checks
 
