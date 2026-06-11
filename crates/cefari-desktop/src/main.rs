@@ -124,6 +124,9 @@ fn run_native_shell(
         .set_bridge_ipc_sender(Arc::new(TaoBridgeIpcSender {
             event_proxy: event_loop.create_proxy(),
         }));
+    guards
+        .cef_runtime
+        .set_app_scheme_resource_dir(shell_ui.app_resource_dir().to_path_buf());
 
     let window = create_main_window(&event_loop)?;
     apply_ui_diagnostic_state(&window, shell_ui);

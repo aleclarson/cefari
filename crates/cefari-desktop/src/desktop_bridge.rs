@@ -149,11 +149,7 @@ impl BridgeOriginPolicy {
 
     pub fn for_dev_port(dev_port: u16) -> Self {
         Self {
-            trusted_packaged_origins: vec![
-                "cefari://app".to_owned(),
-                "app://cefari".to_owned(),
-                "file://".to_owned(),
-            ],
+            trusted_packaged_origins: vec!["cefari://app".to_owned(), "app://cefari".to_owned()],
             allowed_dev_origins: vec![
                 format!("http://127.0.0.1:{dev_port}"),
                 format!("http://localhost:{dev_port}"),
@@ -162,12 +158,13 @@ impl BridgeOriginPolicy {
     }
 
     pub fn is_trusted_origin(&self, origin: &str) -> bool {
-        self.trusted_packaged_origins.iter().any(|trusted| {
-            origin == trusted || trusted == "file://" && origin.starts_with("file://")
-        }) || self
-            .allowed_dev_origins
+        self.trusted_packaged_origins
             .iter()
             .any(|trusted| origin == trusted)
+            || self
+                .allowed_dev_origins
+                .iter()
+                .any(|trusted| origin == trusted)
     }
 
     pub fn bridge_script_for_origin(&self, origin: &str) -> Option<&'static str> {
@@ -519,7 +516,7 @@ mod tests {
         let policy = BridgeOriginPolicy::for_dev_port(5173);
 
         assert!(policy.is_trusted_origin("cefari://app"));
-        assert!(policy.is_trusted_origin("file:///Applications/Test.app/index.html"));
+        assert!(!policy.is_trusted_origin("file:///Applications/Test.app/index.html"));
         assert!(policy.is_trusted_origin("http://127.0.0.1:5173"));
         assert!(!policy.is_trusted_origin("http://127.0.0.1:5174"));
         assert!(!policy.is_trusted_origin("https://example.test"));

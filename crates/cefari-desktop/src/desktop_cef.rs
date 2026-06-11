@@ -2,6 +2,7 @@
 mod imp {
     use std::{
         cell::RefCell,
+        path::PathBuf,
         ptr,
         rc::Rc,
         sync::{Arc, Mutex},
@@ -18,21 +19,25 @@ mod imp {
         MessageRouterBrowserSideHandlerCallbacks, MessageRouterConfig, MessageRouterRendererSide,
         MessageRouterRendererSideHandlerCallbacks, RendererSideRouter,
     };
+    use cef::wrapper::stream_resource_handler::StreamResourceHandler;
     use cef::{
         App, Client, DownloadHandler, ImplApp, ImplBrowser as _, ImplBrowserHost as _, ImplClient,
         ImplDownloadHandler, ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler,
         ImplProcessMessage as _, ImplRenderHandler, ImplRenderProcessHandler, ImplRequest as _,
-        ImplRequestHandler, LifeSpanHandler, LoadHandler, RenderHandler, RenderProcessHandler,
-        RequestHandler, WrapApp, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
-        WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler, WrapRequestHandler, wrap_app,
-        wrap_client, wrap_download_handler, wrap_life_span_handler, wrap_load_handler,
-        wrap_render_handler, wrap_render_process_handler, wrap_request_handler,
+        ImplRequestHandler, ImplResourceRequestHandler, ImplSchemeRegistrar as _, LifeSpanHandler,
+        LoadHandler, RenderHandler, RenderProcessHandler, RequestHandler, ResourceRequestHandler,
+        SchemeOptions, WrapApp, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
+        WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler, WrapRequestHandler,
+        WrapResourceRequestHandler, wrap_app, wrap_client, wrap_download_handler,
+        wrap_life_span_handler, wrap_load_handler, wrap_render_handler,
+        wrap_render_process_handler, wrap_request_handler, wrap_resource_request_handler,
     };
 
     use crate::desktop_bridge::{
         BridgeOriginPolicy, NavigationDecision, NavigationPolicy, NavigationSurface,
         denied_response_json, origin_from_url,
     };
+    use crate::desktop_ui::{CEFARI_APP_SCHEME, resolve_app_scheme_resource};
     use crate::external;
 
     pub struct CefRuntime {
@@ -43,6 +48,7 @@ mod imp {
         app: cef::App,
         client: cef::Client,
         bridge_ipc: SharedBridgeIpcState,
+        app_scheme: SharedAppSchemeState,
     }
 
     pub type CefBridgeIpcCallback = Arc<Mutex<dyn BrowserSideCallback>>;
@@ -100,6 +106,7 @@ mod imp {
 
             let state = SharedBrowserState::default();
             let bridge_ipc = SharedBridgeIpcState::default();
+            let app_scheme = SharedAppSchemeState::default();
             let bridge_origin_policy = BridgeOriginPolicy::from_environment();
             let navigation_policy = NavigationPolicy::new(bridge_origin_policy.clone());
             let browser_router =
@@ -122,8 +129,10 @@ mod imp {
                     bridge_origin_policy,
                     navigation_policy,
                     browser_router,
+                    app_scheme.clone(),
                 ),
                 bridge_ipc,
+                app_scheme,
             })
         }
 
@@ -214,6 +223,10 @@ mod imp {
 
         pub fn set_bridge_ipc_sender(&self, sender: Arc<dyn BridgeIpcSender>) {
             self.bridge_ipc.set_sender(sender);
+        }
+
+        pub fn set_app_scheme_resource_dir(&self, resource_dir: PathBuf) {
+            self.app_scheme.set_resource_dir(resource_dir);
         }
 
         fn browser_host(&self) -> Result<cef::BrowserHost> {
@@ -307,6 +320,38 @@ mod imp {
         sender: Option<Arc<dyn BridgeIpcSender>>,
     }
 
+    #[derive(Clone, Default)]
+    struct SharedAppSchemeState(Arc<Mutex<AppSchemeState>>);
+
+    impl SharedAppSchemeState {
+        fn set_resource_dir(&self, resource_dir: PathBuf) {
+            if let Ok(mut state) = self.0.lock() {
+                state.resource_dir = Some(resource_dir);
+            }
+        }
+
+        fn resource_handler_for_url(&self, url: &str) -> Option<cef::ResourceHandler> {
+            let resource_dir = self
+                .0
+                .lock()
+                .ok()
+                .and_then(|state| state.resource_dir.clone())?;
+            let resource = resolve_app_scheme_resource(&resource_dir, url)?;
+            let path = resource.path.to_string_lossy();
+            let stream =
+                cef::stream_reader_create_for_file(Some(&cef::CefString::from(path.as_ref())))?;
+            Some(StreamResourceHandler::new_with_stream(
+                resource.mime_type.to_owned(),
+                stream,
+            ))
+        }
+    }
+
+    #[derive(Default)]
+    struct AppSchemeState {
+        resource_dir: Option<PathBuf>,
+    }
+
     fn bridge_router_config() -> MessageRouterConfig {
         MessageRouterConfig {
             js_query_function: "__CEFARI_IPC_QUERY__".to_owned(),
@@ -321,6 +366,13 @@ mod imp {
         }
 
         impl App {
+            fn on_register_custom_schemes(
+                &self,
+                registrar: Option<&mut cef::SchemeRegistrar>,
+            ) {
+                register_app_scheme(registrar);
+            }
+
             fn render_process_handler(&self) -> Option<cef::RenderProcessHandler> {
                 Some(self.render_process_handler.clone())
             }
@@ -330,6 +382,30 @@ mod imp {
     impl CefariApp {
         fn build(router_config: MessageRouterConfig) -> cef::App {
             Self::new(CefariRenderProcessHandler::build(router_config))
+        }
+    }
+
+    fn register_app_scheme(registrar: Option<&mut cef::SchemeRegistrar>) {
+        let Some(registrar) = registrar else {
+            warn!("CEF app scheme registrar was unavailable");
+            return;
+        };
+        let scheme = cef::CefString::from(CEFARI_APP_SCHEME);
+        let options = (SchemeOptions::STANDARD.get_raw()
+            | SchemeOptions::LOCAL.get_raw()
+            | SchemeOptions::SECURE.get_raw()
+            | SchemeOptions::CORS_ENABLED.get_raw()
+            | SchemeOptions::FETCH_ENABLED.get_raw())
+            as ::std::os::raw::c_int;
+        let registered = registrar.add_custom_scheme(Some(&scheme), options);
+        if registered == 1 {
+            info!(scheme = CEFARI_APP_SCHEME, "registered CEF app scheme");
+        } else {
+            warn!(
+                scheme = CEFARI_APP_SCHEME,
+                result = registered,
+                "failed to register CEF app scheme"
+            );
         }
     }
 
@@ -457,6 +533,7 @@ mod imp {
             origin_policy: BridgeOriginPolicy,
             navigation_policy: NavigationPolicy,
             browser_router: Arc<BrowserSideRouter>,
+            app_scheme: SharedAppSchemeState,
         ) -> cef::Client {
             Self::new(
                 browser_router.clone(),
@@ -468,7 +545,12 @@ mod imp {
                 ),
                 CefariLoadHandler::new(),
                 CefariRenderHandler::new(),
-                CefariRequestHandler::new(origin_policy, navigation_policy, browser_router),
+                CefariRequestHandler::new(
+                    origin_policy,
+                    navigation_policy,
+                    browser_router,
+                    app_scheme,
+                ),
             )
         }
     }
@@ -647,9 +729,40 @@ mod imp {
             origin_policy: BridgeOriginPolicy,
             navigation_policy: NavigationPolicy,
             browser_router: Arc<BrowserSideRouter>,
+            app_scheme: SharedAppSchemeState,
         }
 
         impl RequestHandler {
+            fn resource_request_handler(
+                &self,
+                _browser: Option<&mut cef::Browser>,
+                _frame: Option<&mut cef::Frame>,
+                request: Option<&mut cef::Request>,
+                is_navigation: ::std::os::raw::c_int,
+                is_download: ::std::os::raw::c_int,
+                request_initiator: Option<&cef::CefString>,
+                disable_default_handling: Option<&mut ::std::os::raw::c_int>,
+            ) -> Option<ResourceRequestHandler> {
+                let url = request_url(request);
+                if !url.starts_with("cefari://") {
+                    return None;
+                }
+
+                if let Some(disable_default_handling) = disable_default_handling {
+                    *disable_default_handling = 1;
+                }
+                debug!(
+                    url,
+                    is_navigation = is_navigation != 0,
+                    is_download = is_download != 0,
+                    request_initiator = %optional_cef_string(request_initiator),
+                    "handling CEF app-scheme resource request"
+                );
+                Some(CefariAppResourceRequestHandler::new(
+                    self.app_scheme.clone(),
+                ))
+            }
+
             fn on_before_browse(
                 &self,
                 browser: Option<&mut cef::Browser>,
@@ -760,6 +873,28 @@ mod imp {
                     inject_bridge_script(&self.origin_policy, &mut frame);
                 }
                 debug!("CEF document available in main frame");
+            }
+        }
+    }
+
+    wrap_resource_request_handler! {
+        struct CefariAppResourceRequestHandler {
+            app_scheme: SharedAppSchemeState,
+        }
+
+        impl ResourceRequestHandler {
+            fn resource_handler(
+                &self,
+                _browser: Option<&mut cef::Browser>,
+                _frame: Option<&mut cef::Frame>,
+                request: Option<&mut cef::Request>,
+            ) -> Option<cef::ResourceHandler> {
+                let url = request_url(request);
+                let handler = self.app_scheme.resource_handler_for_url(&url);
+                if handler.is_none() {
+                    warn!(url, "CEF app-scheme resource was not found or was denied");
+                }
+                handler
             }
         }
     }
@@ -1004,6 +1139,8 @@ pub fn initialize() -> anyhow::Result<CefRuntime> {
 
 #[cfg(not(feature = "cef"))]
 mod imp {
+    use std::path::PathBuf;
+
     use tracing::info;
 
     pub struct CefRuntime {
@@ -1062,6 +1199,8 @@ mod imp {
                 unreachable!("CEF cannot be enabled without the cef feature");
             }
         }
+
+        pub fn set_app_scheme_resource_dir(&self, _resource_dir: PathBuf) {}
     }
 }
 
