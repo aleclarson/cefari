@@ -258,12 +258,77 @@ fn run_event_loop(
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                if let Err(error) = guards.cef_runtime.close_browser(false) {
+                    debug!(%error, "CEF browser close skipped or failed");
+                }
                 window = None;
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                log_cef_lifecycle_result(
+                    guards.cef_runtime.notify_browser_resized(),
+                    "resized CEF browser after Tao window resize",
+                );
+                debug!(
+                    width = size.width,
+                    height = size.height,
+                    "Tao window resized"
+                );
+            }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::ScaleFactorChanged {
+                        scale_factor,
+                        new_inner_size,
+                    },
+                ..
+            } => {
+                log_cef_lifecycle_result(
+                    guards.cef_runtime.notify_browser_screen_info_changed(),
+                    "notified CEF browser of screen info change",
+                );
+                log_cef_lifecycle_result(
+                    guards.cef_runtime.notify_browser_resized(),
+                    "resized CEF browser after Tao scale-factor change",
+                );
+                debug!(
+                    scale_factor,
+                    width = new_inner_size.width,
+                    height = new_inner_size.height,
+                    "Tao window scale factor changed"
+                );
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Moved(position),
+                ..
+            } => {
+                log_cef_lifecycle_result(
+                    guards.cef_runtime.notify_browser_move_or_resize_started(),
+                    "notified CEF browser of Tao window move",
+                );
+                debug!(x = position.x, y = position.y, "Tao window moved");
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Focused(focused),
+                ..
+            } => {
+                log_cef_lifecycle_result(
+                    guards.cef_runtime.focus_browser(focused),
+                    "updated CEF browser focus",
+                );
             }
             Event::WindowEvent {
                 event: WindowEvent::Destroyed,
                 ..
             } => {
+                if guards.cef_runtime.has_browser() {
+                    log_cef_lifecycle_result(
+                        guards.cef_runtime.close_browser(true),
+                        "force-closed CEF browser after Tao window destruction",
+                    );
+                }
                 *control_flow = ControlFlow::Exit;
             }
             Event::MainEventsCleared => {
@@ -319,6 +384,13 @@ fn run_event_loop(
             _ => {}
         }
     });
+}
+
+fn log_cef_lifecycle_result(result: Result<()>, success_message: &'static str) {
+    match result {
+        Ok(()) => debug!("{success_message}"),
+        Err(error) => debug!(%error, "{success_message} skipped or failed"),
+    }
 }
 
 #[cfg(feature = "cef")]
