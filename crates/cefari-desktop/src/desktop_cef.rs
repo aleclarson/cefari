@@ -1,7 +1,115 @@
+use std::path::{Path, PathBuf};
+
+use cefari_core::{PackageFormat, RuntimePaths, packaged_resources_dir};
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+const CEF_RESOURCES_DIR_ENV: &str = "CEFARI_CEF_RESOURCES_DIR";
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CefRuntimePathConfig {
+    cache_path: PathBuf,
+    root_cache_path: PathBuf,
+    log_file: PathBuf,
+    browser_subprocess_path: PathBuf,
+    resources_dir_path: Option<PathBuf>,
+    locales_dir_path: Option<PathBuf>,
+    framework_dir_path: Option<PathBuf>,
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+fn resolve_cef_runtime_paths(paths: &RuntimePaths) -> CefRuntimePathConfig {
+    cef_runtime_path_config(
+        paths,
+        cef_resource_dir_candidates(paths),
+        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("cefari-desktop")),
+    )
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+fn cef_runtime_path_config(
+    paths: &RuntimePaths,
+    resource_candidates: Vec<PathBuf>,
+    browser_subprocess_path: PathBuf,
+) -> CefRuntimePathConfig {
+    let resources_dir_path = resource_candidates
+        .into_iter()
+        .find(|candidate| candidate.join("archive.json").is_file());
+    let locales_dir_path = resources_dir_path
+        .as_ref()
+        .map(|resources_dir| resources_dir.join("locales"))
+        .filter(|locales_dir| locales_dir.is_dir());
+    let framework_dir_path = resources_dir_path
+        .as_ref()
+        .and_then(|resources_dir| cef_framework_dir(resources_dir));
+    let root_cache_path = paths.cache_dir.join("cef");
+
+    CefRuntimePathConfig {
+        cache_path: root_cache_path.join("profile"),
+        root_cache_path,
+        log_file: paths.log_dir.join("cef.log"),
+        browser_subprocess_path,
+        resources_dir_path,
+        locales_dir_path,
+        framework_dir_path,
+    }
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+fn cef_resource_dir_candidates(paths: &RuntimePaths) -> Vec<PathBuf> {
+    let mut candidates = std::env::var_os(CEF_RESOURCES_DIR_ENV)
+        .map(PathBuf::from)
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    candidates.extend(platform_package_formats().iter().filter_map(|format| {
+        packaged_resources_dir(*format)
+            .ok()
+            .map(|resources_dir| resources_dir.join("cef"))
+    }));
+    candidates.push(paths.resource_dir.join("cef"));
+    candidates
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+fn cef_framework_dir(resources_dir: &Path) -> Option<PathBuf> {
+    let framework_dir = resources_dir.join("Chromium Embedded Framework.framework");
+    framework_dir.is_dir().then_some(framework_dir)
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+#[cfg(target_os = "macos")]
+fn platform_package_formats() -> &'static [PackageFormat] {
+    &[PackageFormat::App, PackageFormat::Dmg]
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+#[cfg(target_os = "windows")]
+fn platform_package_formats() -> &'static [PackageFormat] {
+    &[PackageFormat::Nsis, PackageFormat::Wix]
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn platform_package_formats() -> &'static [PackageFormat] {
+    &[
+        PackageFormat::Deb,
+        PackageFormat::AppImage,
+        PackageFormat::Pacman,
+    ]
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+fn platform_package_formats() -> &'static [PackageFormat] {
+    &[]
+}
+
 #[cfg(feature = "cef")]
 mod imp {
     use std::{
         cell::RefCell,
+        fs,
         path::PathBuf,
         ptr,
         rc::Rc,
@@ -40,6 +148,8 @@ mod imp {
     };
     use crate::desktop_ui::{CEFARI_APP_SCHEME, resolve_app_scheme_resource};
     use crate::external;
+
+    use super::{CefRuntimePathConfig, resolve_cef_runtime_paths};
 
     pub struct CefRuntime {
         initialized: bool,
@@ -81,8 +191,10 @@ mod imp {
 
     #[allow(dead_code)]
     impl CefRuntime {
-        pub fn initialize() -> Result<Self> {
+        pub fn initialize(paths: &cefari_core::RuntimePaths) -> Result<Self> {
             let args = cef::args::Args::new();
+            let runtime_paths = resolve_cef_runtime_paths(paths);
+            prepare_cef_runtime_dirs(&runtime_paths)?;
             let router_config = bridge_router_config();
             let message_pump = SharedMessagePumpState::default();
             let mut app = CefariApp::build(router_config.clone(), message_pump.clone());
@@ -94,11 +206,8 @@ mod imp {
                 std::process::exit(subprocess_exit);
             }
 
-            let settings = cef::Settings {
-                no_sandbox: 1,
-                external_message_pump: 1,
-                ..Default::default()
-            };
+            let settings = cef_settings(&runtime_paths);
+            log_cef_runtime_paths(&runtime_paths);
 
             let initialized = cef::initialize(
                 Some(args.as_main_args()),
@@ -247,6 +356,71 @@ mod imp {
                 .host()
                 .with_context(|| format!("CEF browser {} has no host", browser.identifier()))
         }
+    }
+
+    fn cef_settings(runtime_paths: &CefRuntimePathConfig) -> cef::Settings {
+        let mut settings = cef::Settings {
+            no_sandbox: 1,
+            external_message_pump: 1,
+            browser_subprocess_path: cef_string_from_path(&runtime_paths.browser_subprocess_path),
+            cache_path: cef_string_from_path(&runtime_paths.cache_path),
+            root_cache_path: cef_string_from_path(&runtime_paths.root_cache_path),
+            log_file: cef_string_from_path(&runtime_paths.log_file),
+            ..Default::default()
+        };
+
+        if let Some(resources_dir_path) = &runtime_paths.resources_dir_path {
+            settings.resources_dir_path = cef_string_from_path(resources_dir_path);
+        }
+        if let Some(locales_dir_path) = &runtime_paths.locales_dir_path {
+            settings.locales_dir_path = cef_string_from_path(locales_dir_path);
+        }
+        if let Some(framework_dir_path) = &runtime_paths.framework_dir_path {
+            settings.framework_dir_path = cef_string_from_path(framework_dir_path);
+        }
+
+        settings
+    }
+
+    fn cef_string_from_path(path: &std::path::Path) -> cef::CefString {
+        cef::CefString::from(path.to_string_lossy().as_ref())
+    }
+
+    fn prepare_cef_runtime_dirs(runtime_paths: &CefRuntimePathConfig) -> Result<()> {
+        fs::create_dir_all(&runtime_paths.cache_path).with_context(|| {
+            format!(
+                "failed to create CEF cache directory at {}",
+                runtime_paths.cache_path.display()
+            )
+        })?;
+        if let Some(log_dir) = runtime_paths.log_file.parent() {
+            fs::create_dir_all(log_dir).with_context(|| {
+                format!(
+                    "failed to create CEF log directory at {}",
+                    log_dir.display()
+                )
+            })?;
+        }
+        Ok(())
+    }
+
+    fn log_cef_runtime_paths(runtime_paths: &CefRuntimePathConfig) {
+        info!(
+            cache_path = %runtime_paths.cache_path.display(),
+            root_cache_path = %runtime_paths.root_cache_path.display(),
+            log_file = %runtime_paths.log_file.display(),
+            browser_subprocess_path = %runtime_paths.browser_subprocess_path.display(),
+            resources_dir_path = %display_optional_path(&runtime_paths.resources_dir_path),
+            locales_dir_path = %display_optional_path(&runtime_paths.locales_dir_path),
+            framework_dir_path = %display_optional_path(&runtime_paths.framework_dir_path),
+            "resolved CEF runtime paths"
+        );
+    }
+
+    fn display_optional_path(path: &Option<PathBuf>) -> String {
+        path.as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "<unset>".to_owned())
     }
 
     #[derive(Clone, Default)]
@@ -1148,8 +1322,8 @@ mod imp {
         }
     }
 
-    pub fn initialize() -> Result<CefRuntime> {
-        CefRuntime::initialize().context("failed to initialize CEF")
+    pub fn initialize(paths: &cefari_core::RuntimePaths) -> Result<CefRuntime> {
+        CefRuntime::initialize(paths).context("failed to initialize CEF")
     }
 
     fn native_window_handle(window: &Window) -> Result<cef::sys::cef_window_handle_t> {
@@ -1197,8 +1371,8 @@ mod imp {
 pub use imp::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime, MessagePumpScheduler};
 
 #[cfg(feature = "cef")]
-pub fn initialize() -> anyhow::Result<CefRuntime> {
-    let runtime = imp::initialize()?;
+pub fn initialize(paths: &cefari_core::RuntimePaths) -> anyhow::Result<CefRuntime> {
+    let runtime = imp::initialize(paths)?;
     tracing::info!("CEF runtime prepared");
     Ok(runtime)
 }
@@ -1215,7 +1389,7 @@ mod imp {
 
     #[allow(dead_code)]
     impl CefRuntime {
-        pub fn initialize() -> Self {
+        pub fn initialize(_paths: &cefari_core::RuntimePaths) -> Self {
             info!("CEF feature disabled; skipping CEF initialization");
             Self { enabled: false }
         }
@@ -1274,8 +1448,104 @@ mod imp {
 pub use imp::CefRuntime;
 
 #[cfg(not(feature = "cef"))]
-pub fn initialize() -> CefRuntime {
-    let runtime = CefRuntime::initialize();
+pub fn initialize(paths: &cefari_core::RuntimePaths) -> CefRuntime {
+    let runtime = CefRuntime::initialize(paths);
     tracing::info!("CEF runtime prepared");
     runtime
+}
+
+#[cfg(test)]
+mod path_tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use cefari_core::RuntimePaths;
+
+    use super::cef_runtime_path_config;
+
+    #[test]
+    fn derives_runtime_cache_log_and_subprocess_paths() {
+        let root = temp_dir("runtime-paths");
+        let paths = test_paths(&root);
+        let subprocess = root.join("bin/cefari-desktop");
+
+        let config = cef_runtime_path_config(&paths, Vec::new(), subprocess.clone());
+
+        assert_eq!(config.cache_path, root.join("cache/cef/profile"));
+        assert_eq!(config.root_cache_path, root.join("cache/cef"));
+        assert_eq!(config.log_file, root.join("data/logs/cef.log"));
+        assert_eq!(config.browser_subprocess_path, subprocess);
+        assert!(config.resources_dir_path.is_none());
+        assert!(config.locales_dir_path.is_none());
+        assert!(config.framework_dir_path.is_none());
+
+        if root.exists() {
+            fs::remove_dir_all(root).expect("temp dir should be removable");
+        }
+    }
+
+    #[test]
+    fn selects_first_valid_cef_resource_candidate() {
+        let root = temp_dir("resource-candidates");
+        let missing = root.join("missing-cef");
+        let resources = root.join("resources-cef");
+        fs::create_dir_all(resources.join("locales")).expect("locales dir should exist");
+        fs::create_dir_all(resources.join("Chromium Embedded Framework.framework"))
+            .expect("framework dir should exist");
+        fs::write(resources.join("archive.json"), "{}").expect("archive metadata should exist");
+        let paths = test_paths(&root);
+
+        let config = cef_runtime_path_config(
+            &paths,
+            vec![missing, resources.clone()],
+            root.join("cefari-desktop"),
+        );
+
+        assert_eq!(config.resources_dir_path, Some(resources.clone()));
+        assert_eq!(config.locales_dir_path, Some(resources.join("locales")));
+        assert_eq!(
+            config.framework_dir_path,
+            Some(resources.join("Chromium Embedded Framework.framework"))
+        );
+
+        fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    #[test]
+    fn resolves_runtime_resource_dir_as_fallback_candidate() {
+        let root = temp_dir("runtime-fallback");
+        let paths = test_paths(&root);
+        let cef_dir = paths.resource_dir.join("cef");
+        fs::create_dir_all(&cef_dir).expect("CEF resource dir should exist");
+        fs::write(cef_dir.join("archive.json"), "{}").expect("archive metadata should exist");
+
+        let config = cef_runtime_path_config(&paths, vec![cef_dir.clone()], root.join("desktop"));
+
+        assert_eq!(config.resources_dir_path, Some(cef_dir));
+
+        fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    fn test_paths(root: &Path) -> RuntimePaths {
+        RuntimePaths {
+            config_dir: root.join("config"),
+            config_file: root.join("config/cefari.json"),
+            data_dir: root.join("data"),
+            cache_dir: root.join("cache"),
+            log_dir: root.join("data/logs"),
+            resource_dir: root.join("data/resources"),
+            update_dir: root.join("data/updates"),
+        }
+    }
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("cefari-desktop-cef-{label}-{suffix}"))
+    }
 }

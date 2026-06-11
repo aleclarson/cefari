@@ -52,6 +52,9 @@ executable.
 
 `cefari build` prepares CEF resources as part of the build. The package step
 expects those resources and archive metadata to exist under `build/cef/`.
+Native packages include the prepared CEF resource directory as the package
+resource target `cef`; at runtime, Cefari uses that directory for CEF resources,
+locales when present, and platform framework files when present.
 
 For deterministic tests or CI fixtures, `CEFARI_CEF_RESOURCES_DIR` may point at
 a pre-populated resources directory that contains `archive.json`.

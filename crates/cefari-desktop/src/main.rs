@@ -57,10 +57,10 @@ fn run() -> Result<()> {
     let log_guards = init_logging(&paths)?;
 
     #[cfg(feature = "cef")]
-    let cef_runtime = desktop_cef::initialize()?;
+    let cef_runtime = desktop_cef::initialize(&paths)?;
 
     #[cfg(not(feature = "cef"))]
-    let cef_runtime = desktop_cef::initialize();
+    let cef_runtime = desktop_cef::initialize(&paths);
 
     let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
     let desktop_notifier =
