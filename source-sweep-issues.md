@@ -29,9 +29,10 @@ Each finding uses:
 
 | Command | Purpose | Result |
 | --- | --- | --- |
-| `cargo fmt --all --check` | Rust formatting | Pending |
-| `cargo clippy --workspace --all-targets -- -D warnings` | Rust linting | Pending |
-| `cargo test --workspace` | Rust test suite | Pending |
+| `cargo fmt --all --check` | Rust formatting | Passed |
+| `cargo check --workspace` | Rust workspace compile check | Failed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Rust linting | Failed |
+| `cargo test --workspace` | Rust test suite | Failed |
 | `cargo test -p cefari-core` | Core crate tests | Passed |
 | `cargo test -p cefari-desktop` | Desktop crate tests | Passed |
 | `cargo test -p cefari-cli` | CLI crate tests | Failed |
@@ -119,6 +120,18 @@ Each finding uses:
 - `Suggested next step`: Either wire the bridge into the CEF runtime and keep the docs as intended behavior, or revise the docs/template guidance to describe the feature as not yet implemented.
 - `Verification notes`: Source review and `rg` reference checks support the same root runtime gap recorded in SS-002; this finding records the separate documentation and template drift.
 
+### SS-007: Workspace clippy fails on the default desktop no-CEF implementation
+
+- `Severity`: Low
+- `Status`: Confirmed
+- `Confidence`: High
+- `Area`: Desktop runtime, CI lint health
+- `Files`: `crates/cefari-desktop/src/desktop_cef.rs`
+- `Evidence`: `cargo clippy --workspace --all-targets -- -D warnings` reported `clippy::unused_self` for the default-feature `CefRuntime::create_browser(&self, ...)` implementation in the non-CEF module. The method always bails and does not read `self`.
+- `Impact`: A strict workspace clippy gate fails even after accounting for the CLI compile blocker in SS-003, so CI or local pre-merge validation cannot currently use the documented `-D warnings` lint command successfully.
+- `Suggested next step`: Either make the non-CEF method use `self` meaningfully, change it to an associated function behind a matching abstraction, or add a narrow allow if keeping the method signature aligned with the CEF-enabled implementation is intentional.
+- `Verification notes`: Observed during the final `cargo clippy --workspace --all-targets -- -D warnings` run. The same command also failed on SS-003.
+
 ## Reviewed Areas With No Findings
 
 - `crates/cefari-core/src/config.rs`: config serialization, defaults, unknown-field rejection, and save/load error mapping reviewed with no findings.
@@ -149,6 +162,10 @@ Each finding uses:
 
 ## Validation Summary
 
+- `cargo fmt --all --check`: passed.
+- `cargo check --workspace`: failed because `skills/cefari/references/template-authoring.md` is missing while `crates/cefari-cli/src/lib.rs` includes it.
+- `cargo clippy --workspace --all-targets -- -D warnings`: failed because of SS-003 and because `crates/cefari-desktop/src/desktop_cef.rs` triggers `clippy::unused_self` in the default no-CEF implementation.
+- `cargo test --workspace`: failed before running the full workspace suite because of SS-003.
 - `cargo test -p cefari-core`: passed. This ran 31 unit tests and doc tests successfully; the `native_service_lifecycle_smoke` integration test remains ignored by design because it installs and starts a native OS service.
 - `cargo test -p cefari-desktop`: passed. This ran 30 unit tests successfully.
 - `cargo check -p cefari-desktop --features cef`: passed.
@@ -166,3 +183,17 @@ Each finding uses:
 ## Skipped Or Limited Checks
 
 - `crates/cefari-core/tests/service_lifecycle.rs::native_service_lifecycle_smoke` was not run because it is explicitly ignored and requires a disposable host for native service installation/start/stop verification.
+- End-to-end release workflows, signing, notarization, update publishing, and packaged application launch were not run because they require platform-specific runners, secrets, release artifacts, and a compiling CLI; SS-003 prevents the current CLI from compiling.
+- A live desktop GUI launch was not run during this inventory sprint. Source and compile checks were used instead; SS-001 and SS-002 identify the main runtime launch risks found by inspection.
+
+## Environment Constraints
+
+- The sweep ran on macOS in the local Codex worktree at `/Users/alec/.codex/worktrees/4f1a/cefari`.
+- Networked release, signing, notarization, package publishing, and native service lifecycle checks were treated as out of scope for local validation.
+- Build output directories such as `target`, template `node_modules`, and template `dist` were excluded from source review.
+
+## Open Questions
+
+- Should no-CEF desktop builds be supported as a first-class runtime mode, or should all user-facing build/package paths require the `cef` feature?
+- Should the documented `window.cefari` bridge behavior be treated as intended behavior to implement next, or should public docs be revised until CEF integration exists?
+- Should the root docs or mirrored skill docs be considered authoritative when the sync check fails?
