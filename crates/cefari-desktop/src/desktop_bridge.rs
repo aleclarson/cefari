@@ -201,6 +201,109 @@ fn dev_port_from_url(url: &str) -> Option<u16> {
     port.parse().ok()
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum NavigationSurface {
+    MainFrame,
+    SubFrame,
+    Popup,
+    OpenUrlFromTab,
+    Download,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum NavigationDecision {
+    Allow,
+    OpenExternally,
+    Deny,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NavigationPolicyDecision {
+    pub decision: NavigationDecision,
+    pub reason: &'static str,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NavigationPolicy {
+    bridge_origin_policy: BridgeOriginPolicy,
+}
+
+impl NavigationPolicy {
+    pub fn new(bridge_origin_policy: BridgeOriginPolicy) -> Self {
+        Self {
+            bridge_origin_policy,
+        }
+    }
+
+    pub fn from_environment() -> Self {
+        Self::new(BridgeOriginPolicy::from_environment())
+    }
+
+    pub fn decide(&self, surface: NavigationSurface, url: &str) -> NavigationPolicyDecision {
+        match surface {
+            NavigationSurface::SubFrame => NavigationPolicyDecision::allow("subframe navigation"),
+            NavigationSurface::Download => NavigationPolicyDecision::deny("downloads are disabled"),
+            NavigationSurface::MainFrame => self.decide_main_frame(url),
+            NavigationSurface::Popup | NavigationSurface::OpenUrlFromTab => {
+                self.decide_external_surface(url)
+            }
+        }
+    }
+
+    fn decide_main_frame(&self, url: &str) -> NavigationPolicyDecision {
+        if self.is_trusted_url(url) {
+            return NavigationPolicyDecision::allow("trusted app navigation");
+        }
+
+        if is_supported_external_url(url) {
+            return NavigationPolicyDecision::open_externally("external main-frame navigation");
+        }
+
+        NavigationPolicyDecision::deny("untrusted main-frame navigation")
+    }
+
+    fn decide_external_surface(&self, url: &str) -> NavigationPolicyDecision {
+        if is_supported_external_url(url) {
+            NavigationPolicyDecision::open_externally("external URL surface")
+        } else {
+            NavigationPolicyDecision::deny("unsupported external URL")
+        }
+    }
+
+    fn is_trusted_url(&self, url: &str) -> bool {
+        origin_from_url(url)
+            .as_deref()
+            .is_some_and(|origin| self.bridge_origin_policy.is_trusted_origin(origin))
+    }
+}
+
+impl NavigationPolicyDecision {
+    fn allow(reason: &'static str) -> Self {
+        Self {
+            decision: NavigationDecision::Allow,
+            reason,
+        }
+    }
+
+    fn open_externally(reason: &'static str) -> Self {
+        Self {
+            decision: NavigationDecision::OpenExternally,
+            reason,
+        }
+    }
+
+    fn deny(reason: &'static str) -> Self {
+        Self {
+            decision: NavigationDecision::Deny,
+            reason,
+        }
+    }
+}
+
+fn is_supported_external_url(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://") || url.starts_with("mailto:")
+}
+
 pub struct CefariBridge {
     origin_policy: BridgeOriginPolicy,
 }
@@ -313,7 +416,7 @@ mod tests {
 
     use super::{
         BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CEFARI_DEFAULT_STYLES, CefariBridge,
-        origin_from_url,
+        NavigationDecision, NavigationPolicy, NavigationSurface, origin_from_url,
     };
     use crate::desktop_ipc::NativeShellContext;
 
@@ -468,6 +571,60 @@ mod tests {
         assert!(CEFARI_BRIDGE_SCRIPT.contains(".cefari-drag button"));
         assert!(!CEFARI_BRIDGE_SCRIPT.contains("header {"));
         assert!(!CEFARI_BRIDGE_SCRIPT.contains("nav {"));
+    }
+
+    #[test]
+    fn navigation_policy_allows_trusted_main_frame_loads() {
+        let policy = NavigationPolicy::new(BridgeOriginPolicy::for_dev_port(5173));
+
+        let decision = policy.decide(NavigationSurface::MainFrame, "http://127.0.0.1:5173");
+
+        assert_eq!(decision.decision, NavigationDecision::Allow);
+    }
+
+    #[test]
+    fn navigation_policy_opens_external_main_frame_links_outside_cef() {
+        let policy = NavigationPolicy::new(BridgeOriginPolicy::for_dev_port(5173));
+
+        let decision = policy.decide(NavigationSurface::MainFrame, "https://example.test/docs");
+
+        assert_eq!(decision.decision, NavigationDecision::OpenExternally);
+    }
+
+    #[test]
+    fn navigation_policy_denies_unsupported_main_frame_schemes() {
+        let policy = NavigationPolicy::new(BridgeOriginPolicy::for_dev_port(5173));
+
+        let decision = policy.decide(NavigationSurface::MainFrame, "custom://example/path");
+
+        assert_eq!(decision.decision, NavigationDecision::Deny);
+    }
+
+    #[test]
+    fn navigation_policy_opens_supported_popups_externally() {
+        let policy = NavigationPolicy::new(BridgeOriginPolicy::for_dev_port(5173));
+
+        let decision = policy.decide(NavigationSurface::Popup, "mailto:hello@example.test");
+
+        assert_eq!(decision.decision, NavigationDecision::OpenExternally);
+    }
+
+    #[test]
+    fn navigation_policy_denies_downloads() {
+        let policy = NavigationPolicy::new(BridgeOriginPolicy::for_dev_port(5173));
+
+        let decision = policy.decide(NavigationSurface::Download, "https://example.test/file.zip");
+
+        assert_eq!(decision.decision, NavigationDecision::Deny);
+    }
+
+    #[test]
+    fn navigation_policy_allows_subframe_navigation_without_bridge_trust() {
+        let policy = NavigationPolicy::new(BridgeOriginPolicy::for_dev_port(5173));
+
+        let decision = policy.decide(NavigationSurface::SubFrame, "https://example.test/frame");
+
+        assert_eq!(decision.decision, NavigationDecision::Allow);
     }
 
     #[test]

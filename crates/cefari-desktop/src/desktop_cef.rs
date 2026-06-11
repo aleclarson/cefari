@@ -19,16 +19,21 @@ mod imp {
         MessageRouterRendererSideHandlerCallbacks, RendererSideRouter,
     };
     use cef::{
-        App, Client, ImplApp, ImplBrowser as _, ImplBrowserHost as _, ImplClient, ImplFrame as _,
-        ImplLifeSpanHandler, ImplLoadHandler, ImplProcessMessage as _, ImplRenderHandler,
-        ImplRenderProcessHandler, ImplRequest as _, ImplRequestHandler, LifeSpanHandler,
-        LoadHandler, RenderHandler, RenderProcessHandler, RequestHandler, WrapApp, WrapClient,
-        WrapLifeSpanHandler, WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler,
-        WrapRequestHandler, wrap_app, wrap_client, wrap_life_span_handler, wrap_load_handler,
+        App, Client, DownloadHandler, ImplApp, ImplBrowser as _, ImplBrowserHost as _, ImplClient,
+        ImplDownloadHandler, ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler,
+        ImplProcessMessage as _, ImplRenderHandler, ImplRenderProcessHandler, ImplRequest as _,
+        ImplRequestHandler, LifeSpanHandler, LoadHandler, RenderHandler, RenderProcessHandler,
+        RequestHandler, WrapApp, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
+        WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler, WrapRequestHandler, wrap_app,
+        wrap_client, wrap_download_handler, wrap_life_span_handler, wrap_load_handler,
         wrap_render_handler, wrap_render_process_handler, wrap_request_handler,
     };
 
-    use crate::desktop_bridge::{BridgeOriginPolicy, denied_response_json, origin_from_url};
+    use crate::desktop_bridge::{
+        BridgeOriginPolicy, NavigationDecision, NavigationPolicy, NavigationSurface,
+        denied_response_json, origin_from_url,
+    };
+    use crate::external;
 
     pub struct CefRuntime {
         initialized: bool,
@@ -95,12 +100,14 @@ mod imp {
 
             let state = SharedBrowserState::default();
             let bridge_ipc = SharedBridgeIpcState::default();
+            let bridge_origin_policy = BridgeOriginPolicy::from_environment();
+            let navigation_policy = NavigationPolicy::new(bridge_origin_policy.clone());
             let browser_router =
                 <BrowserSideRouter as MessageRouterBrowserSide>::new(router_config);
             browser_router.add_handler(
                 Arc::new(CefariBridgeIpcHandler::new(
                     bridge_ipc.clone(),
-                    BridgeOriginPolicy::from_environment(),
+                    bridge_origin_policy.clone(),
                 )),
                 false,
             );
@@ -112,7 +119,8 @@ mod imp {
                 app,
                 client: CefariCefClient::build(
                     state,
-                    BridgeOriginPolicy::from_environment(),
+                    bridge_origin_policy,
+                    navigation_policy,
                     browser_router,
                 ),
                 bridge_ipc,
@@ -387,6 +395,7 @@ mod imp {
     wrap_client! {
         struct CefariCefClient {
             browser_router: Arc<BrowserSideRouter>,
+            download_handler: cef::DownloadHandler,
             life_span_handler: cef::LifeSpanHandler,
             load_handler: cef::LoadHandler,
             render_handler: cef::RenderHandler,
@@ -408,6 +417,10 @@ mod imp {
 
             fn request_handler(&self) -> Option<cef::RequestHandler> {
                 Some(self.request_handler.clone())
+            }
+
+            fn download_handler(&self) -> Option<cef::DownloadHandler> {
+                Some(self.download_handler.clone())
             }
 
             fn on_process_message_received(
@@ -442,15 +455,62 @@ mod imp {
         fn build(
             state: SharedBrowserState,
             origin_policy: BridgeOriginPolicy,
+            navigation_policy: NavigationPolicy,
             browser_router: Arc<BrowserSideRouter>,
         ) -> cef::Client {
             Self::new(
                 browser_router.clone(),
-                CefariLifeSpanHandler::new(state, browser_router.clone()),
+                CefariDownloadHandler::new(navigation_policy.clone()),
+                CefariLifeSpanHandler::new(
+                    state,
+                    browser_router.clone(),
+                    navigation_policy.clone(),
+                ),
                 CefariLoadHandler::new(),
                 CefariRenderHandler::new(),
-                CefariRequestHandler::new(origin_policy, browser_router),
+                CefariRequestHandler::new(origin_policy, navigation_policy, browser_router),
             )
+        }
+    }
+
+    wrap_download_handler! {
+        struct CefariDownloadHandler {
+            navigation_policy: NavigationPolicy,
+        }
+
+        impl DownloadHandler {
+            fn can_download(
+                &self,
+                _browser: Option<&mut cef::Browser>,
+                url: Option<&cef::CefString>,
+                request_method: Option<&cef::CefString>,
+            ) -> ::std::os::raw::c_int {
+                let url = optional_cef_string(url);
+                let decision = self
+                    .navigation_policy
+                    .decide(NavigationSurface::Download, &url);
+                warn!(
+                    url,
+                    request_method = %optional_cef_string(request_method),
+                    reason = decision.reason,
+                    "denied CEF download"
+                );
+                0
+            }
+
+            fn on_before_download(
+                &self,
+                _browser: Option<&mut cef::Browser>,
+                _download_item: Option<&mut cef::DownloadItem>,
+                suggested_name: Option<&cef::CefString>,
+                _callback: Option<&mut cef::BeforeDownloadCallback>,
+            ) -> ::std::os::raw::c_int {
+                warn!(
+                    suggested_name = %optional_cef_string(suggested_name),
+                    "denied CEF download before start"
+                );
+                1
+            }
         }
     }
 
@@ -458,9 +518,44 @@ mod imp {
         struct CefariLifeSpanHandler {
             state: SharedBrowserState,
             browser_router: Arc<BrowserSideRouter>,
+            navigation_policy: NavigationPolicy,
         }
 
         impl LifeSpanHandler {
+            fn on_before_popup(
+                &self,
+                _browser: Option<&mut cef::Browser>,
+                _frame: Option<&mut cef::Frame>,
+                popup_id: ::std::os::raw::c_int,
+                target_url: Option<&cef::CefString>,
+                target_frame_name: Option<&cef::CefString>,
+                target_disposition: cef::WindowOpenDisposition,
+                user_gesture: ::std::os::raw::c_int,
+                _popup_features: Option<&cef::PopupFeatures>,
+                _window_info: Option<&mut cef::WindowInfo>,
+                _client: Option<&mut Option<cef::Client>>,
+                _settings: Option<&mut cef::BrowserSettings>,
+                _extra_info: Option<&mut Option<cef::DictionaryValue>>,
+                no_javascript_access: Option<&mut ::std::os::raw::c_int>,
+            ) -> ::std::os::raw::c_int {
+                if let Some(no_javascript_access) = no_javascript_access {
+                    *no_javascript_access = 1;
+                }
+                let target_url = optional_cef_string(target_url);
+                handle_navigation_decision(
+                    &self.navigation_policy,
+                    NavigationSurface::Popup,
+                    &target_url,
+                    "CEF popup",
+                    &[
+                        ("popup_id", popup_id.to_string()),
+                        ("target_frame", optional_cef_string(target_frame_name)),
+                        ("disposition", format!("{target_disposition:?}")),
+                        ("user_gesture", (user_gesture != 0).to_string()),
+                    ],
+                )
+            }
+
             fn on_after_created(&self, browser: Option<&mut cef::Browser>) {
                 if let Some(browser) = browser {
                     self.state.browser_created(browser);
@@ -550,6 +645,7 @@ mod imp {
     wrap_request_handler! {
         struct CefariRequestHandler {
             origin_policy: BridgeOriginPolicy,
+            navigation_policy: NavigationPolicy,
             browser_router: Arc<BrowserSideRouter>,
         }
 
@@ -562,18 +658,67 @@ mod imp {
                 user_gesture: ::std::os::raw::c_int,
                 is_redirect: ::std::os::raw::c_int,
             ) -> ::std::os::raw::c_int {
+                let is_main_frame = frame
+                    .as_ref()
+                    .is_some_and(|frame| frame.is_main() != 0);
+                let current_frame_url = frame
+                    .as_ref()
+                    .map(|frame| cef::CefString::from(&frame.url()).to_string())
+                    .unwrap_or_default();
+                let target_url = request_url(request);
                 self.browser_router.on_before_browse(
                     browser.as_deref().cloned(),
                     frame.as_deref().cloned(),
                 );
+                let surface = if is_main_frame {
+                    NavigationSurface::MainFrame
+                } else {
+                    NavigationSurface::SubFrame
+                };
+                let policy_result = handle_navigation_decision(
+                    &self.navigation_policy,
+                    surface,
+                    &target_url,
+                    "CEF navigation",
+                    &[
+                        ("frame_url", current_frame_url.clone()),
+                        ("user_gesture", (user_gesture != 0).to_string()),
+                        ("is_redirect", (is_redirect != 0).to_string()),
+                    ],
+                );
+                if policy_result != 0 {
+                    return policy_result;
+                }
                 debug!(
-                    frame_url = %frame_url(frame),
-                    request_url = %request_url(request),
+                    frame_url = %current_frame_url,
+                    request_url = %target_url,
                     user_gesture = user_gesture != 0,
                     is_redirect = is_redirect != 0,
                     "CEF navigation requested"
                 );
                 0
+            }
+
+            fn on_open_urlfrom_tab(
+                &self,
+                _browser: Option<&mut cef::Browser>,
+                frame: Option<&mut cef::Frame>,
+                target_url: Option<&cef::CefString>,
+                target_disposition: cef::WindowOpenDisposition,
+                user_gesture: ::std::os::raw::c_int,
+            ) -> ::std::os::raw::c_int {
+                let target_url = optional_cef_string(target_url);
+                handle_navigation_decision(
+                    &self.navigation_policy,
+                    NavigationSurface::OpenUrlFromTab,
+                    &target_url,
+                    "CEF open-url-from-tab",
+                    &[
+                        ("frame_url", frame_url(frame)),
+                        ("disposition", format!("{target_disposition:?}")),
+                        ("user_gesture", (user_gesture != 0).to_string()),
+                    ],
+                )
             }
 
             fn on_render_view_ready(&self, _browser: Option<&mut cef::Browser>) {
@@ -710,6 +855,59 @@ mod imp {
         message
             .map(|message| cef::CefString::from(&message.name()).to_string())
             .unwrap_or_default()
+    }
+
+    fn handle_navigation_decision(
+        policy: &NavigationPolicy,
+        surface: NavigationSurface,
+        url: &str,
+        operation: &str,
+        details: &[(&str, String)],
+    ) -> ::std::os::raw::c_int {
+        let decision = policy.decide(surface, url);
+        match decision.decision {
+            NavigationDecision::Allow => {
+                debug!(url, surface = ?surface, reason = decision.reason, operation, "allowed CEF navigation");
+                0
+            }
+            NavigationDecision::OpenExternally => {
+                match external::open_external_url(url) {
+                    Ok(()) => {
+                        info!(
+                            url,
+                            surface = ?surface,
+                            reason = decision.reason,
+                            operation,
+                            details = ?details,
+                            "opened CEF navigation externally"
+                        );
+                    }
+                    Err(error) => {
+                        warn!(
+                            url,
+                            surface = ?surface,
+                            reason = decision.reason,
+                            operation,
+                            details = ?details,
+                            %error,
+                            "failed to open CEF navigation externally"
+                        );
+                    }
+                }
+                1
+            }
+            NavigationDecision::Deny => {
+                warn!(
+                    url,
+                    surface = ?surface,
+                    reason = decision.reason,
+                    operation,
+                    details = ?details,
+                    "denied CEF navigation"
+                );
+                1
+            }
+        }
     }
 
     fn inject_bridge_script(origin_policy: &BridgeOriginPolicy, frame: &mut cef::Frame) {
