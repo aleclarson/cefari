@@ -3,7 +3,7 @@
 This page records the evidence used to keep the documentation grounded in the
 current repository state.
 
-Last checked: 2026-06-07.
+Last checked: 2026-06-11.
 
 ## Source Evidence
 
@@ -44,6 +44,36 @@ cargo test -p cefari-desktop
 deno task --cwd packages/cefari-app check
 deno task --cwd packages/cefari-app test
 ```
+
+## Live CEF Smoke
+
+Run the live CEF smoke only on a machine with a GUI session and extracted CEF
+resources:
+
+```bash
+CEFARI_LIVE_CEF_SMOKE=1 \
+CEFARI_CEF_RESOURCES_DIR=/path/to/build/cef/resources \
+scripts/cef-live-smoke.sh
+```
+
+When `CEFARI_LIVE_CEF_SMOKE` is not set, the command exits successfully with a
+skip message so CI can include it without requiring local CEF binaries. When it
+does run, the script:
+
+- builds `cefari-desktop` with `--features cef`
+- creates a minimal fixture frontend under `.tmp/cef-live-smoke/resources`
+- loads that fixture through `cefari://app/index.html` by setting
+  `CEFARI_RESOURCE_DIR`
+- verifies in page JavaScript that `window.cefari` exists
+- invokes harmless native IPC commands: `updateState`, `reloadUi`, and
+  `windowSetTitle`
+- captures process stdout and stderr under `.tmp/cef-live-smoke/`
+- exits the desktop process through `CEFARI_SMOKE_EXIT_AFTER_MS`
+
+The fixture reloads once and then sets the native window title to
+`Cefari Smoke PASS`. A local human run should verify that title appears before
+the process exits. A nonzero process exit status, missing CEF resources, missing
+GUI availability, or a watchdog timeout fails the smoke.
 
 The docs intentionally avoid listing dependency versions, exhaustive internal
 module details, or CI behavior that is not present in the current repository

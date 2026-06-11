@@ -10,6 +10,7 @@ use cefari_core::{PackageFormat, RuntimePaths, packaged_resources_dir, resolve_r
 pub const CEFARI_APP_SCHEME: &str = "cefari";
 #[cfg_attr(not(feature = "cef"), allow(dead_code))]
 pub const CEFARI_APP_HOST: &str = "app";
+pub const CEFARI_RESOURCE_DIR_ENV: &str = "CEFARI_RESOURCE_DIR";
 pub const CEFARI_APP_ORIGIN: &str = "cefari://app";
 pub const UI_ENTRY_RESOURCE: &str = "frontend/index.html";
 
@@ -23,6 +24,7 @@ pub struct ShellUi {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ShellUiState {
+    ResourceOverride,
     PackagedResource,
     RuntimeResourceFallback,
     DiagnosticFallback { reason: String },
@@ -153,17 +155,32 @@ fn load_from_candidates(
 }
 
 fn candidate_resource_dirs(paths: &RuntimePaths) -> Vec<ResourceCandidate> {
-    let mut candidates = platform_package_formats()
-        .iter()
-        .filter_map(|format| {
-            packaged_resources_dir(*format)
-                .ok()
-                .map(|dir| ResourceCandidate {
-                    state: ShellUiState::PackagedResource,
-                    dir,
-                })
+    candidate_resource_dirs_with_override(
+        paths,
+        std::env::var_os(CEFARI_RESOURCE_DIR_ENV).map(PathBuf::from),
+    )
+}
+
+fn candidate_resource_dirs_with_override(
+    paths: &RuntimePaths,
+    override_dir: Option<PathBuf>,
+) -> Vec<ResourceCandidate> {
+    let mut candidates = override_dir
+        .map(|dir| ResourceCandidate {
+            state: ShellUiState::ResourceOverride,
+            dir,
         })
+        .into_iter()
         .collect::<Vec<_>>();
+
+    candidates.extend(platform_package_formats().iter().filter_map(|format| {
+        packaged_resources_dir(*format)
+            .ok()
+            .map(|dir| ResourceCandidate {
+                state: ShellUiState::PackagedResource,
+                dir,
+            })
+    }));
 
     candidates.push(ResourceCandidate {
         state: ShellUiState::RuntimeResourceFallback,
@@ -322,8 +339,8 @@ mod tests {
 
     use super::{
         CEFARI_APP_ORIGIN, ResourceCandidate, ShellUiState, UI_ENTRY_RESOURCE,
-        diagnose_app_scheme_resource, diagnostic_view_html, load_from_candidates,
-        resolve_app_scheme_resource,
+        candidate_resource_dirs_with_override, diagnose_app_scheme_resource, diagnostic_view_html,
+        load_from_candidates, resolve_app_scheme_resource,
     };
 
     #[test]
@@ -366,6 +383,28 @@ mod tests {
         assert!(ui.entry_path.exists());
 
         fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    #[test]
+    fn resource_dir_override_is_first_candidate() {
+        let root = temp_dir("resource-override");
+        let paths = test_paths(&root);
+        let override_dir = root.join("override-resources");
+
+        let candidates = candidate_resource_dirs_with_override(&paths, Some(override_dir.clone()));
+
+        assert_eq!(
+            candidates.first().map(|candidate| &candidate.state),
+            Some(&ShellUiState::ResourceOverride)
+        );
+        assert_eq!(
+            candidates.first().map(|candidate| &candidate.dir),
+            Some(&override_dir)
+        );
+
+        if root.exists() {
+            fs::remove_dir_all(root).expect("temp dir should be removable");
+        }
     }
 
     #[test]

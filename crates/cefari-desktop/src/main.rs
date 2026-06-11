@@ -1,10 +1,11 @@
+#[cfg(feature = "cef")]
+use std::sync::Arc;
 use std::{
     fs,
     process::{Command, ExitCode},
+    thread,
+    time::{Duration, Instant},
 };
-#[cfg(feature = "cef")]
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use cefari_core::{
@@ -40,6 +41,7 @@ const MAIN_WINDOW_WIDTH: f64 = 1200.0;
 const MAIN_WINDOW_HEIGHT: f64 = 800.0;
 const MIN_WINDOW_WIDTH: f64 = 800.0;
 const MIN_WINDOW_HEIGHT: f64 = 560.0;
+const CEFARI_SMOKE_EXIT_AFTER_MS_ENV: &str = "CEFARI_SMOKE_EXIT_AFTER_MS";
 
 fn main() -> ExitCode {
     match run() {
@@ -100,6 +102,7 @@ struct RuntimeGuards {
 enum UserEvent {
     Menu(muda::MenuEvent),
     Tray(tray_icon::TrayIconEvent),
+    SmokeExit,
     #[cfg(feature = "cef")]
     BridgeIpc(desktop_cef::CefBridgeIpcRequest),
     #[cfg(feature = "cef")]
@@ -113,6 +116,7 @@ fn run_native_shell(
     shell_ui: &desktop_ui::ShellUi,
 ) -> Result<()> {
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    schedule_smoke_exit_if_requested(&event_loop);
     let event_proxy = event_loop.create_proxy();
     muda::MenuEvent::set_event_handler(Some(move |event| {
         let _ = event_proxy.send_event(UserEvent::Menu(event));
@@ -254,6 +258,10 @@ fn run_event_loop(
                 } else {
                     desktop_tray::log_tray_event(&tray_event);
                 }
+            }
+            Event::UserEvent(UserEvent::SmokeExit) => {
+                info!("CEF live smoke requested timed desktop shutdown");
+                *control_flow = ControlFlow::Exit;
             }
             #[cfg(feature = "cef")]
             Event::UserEvent(UserEvent::BridgeIpc(request)) => {
@@ -407,6 +415,25 @@ fn run_event_loop(
         }
         apply_cef_message_pump_control_flow(&cef_message_pump_deadline, control_flow);
     });
+}
+
+fn schedule_smoke_exit_if_requested(event_loop: &EventLoop<UserEvent>) {
+    let Some(delay) = smoke_exit_delay() else {
+        return;
+    };
+
+    let event_proxy = event_loop.create_proxy();
+    thread::spawn(move || {
+        thread::sleep(delay);
+        let _ = event_proxy.send_event(UserEvent::SmokeExit);
+    });
+}
+
+fn smoke_exit_delay() -> Option<Duration> {
+    std::env::var(CEFARI_SMOKE_EXIT_AFTER_MS_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(Duration::from_millis)
 }
 
 fn log_cef_lifecycle_result(result: Result<()>, success_message: &'static str) {
