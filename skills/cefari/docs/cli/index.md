@@ -8,7 +8,7 @@ projects. These pages are app-developer command references.
 - [Project Commands](project.md): `init`, `dev`, `build`, `package`, and
   `clean`.
 - [Release Commands](release.md): `codesign`, `notarize`, and `make-update`.
-- [Diagnostics Commands](diagnostics.md): `doctor` and `info`.
+- [Diagnostics Commands](diagnostics.md): `doctor`, `info`, and `logs`.
 
 ## Project Path Defaults
 

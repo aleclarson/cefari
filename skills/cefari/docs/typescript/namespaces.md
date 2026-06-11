@@ -110,7 +110,13 @@ switch (state.state) {
     break;
   case "current":
     break;
+  case "checking":
+    break;
   case "available":
+    break;
+  case "applying":
+    break;
+  case "readyToRestart":
     break;
   case "error":
     break;
@@ -127,6 +133,33 @@ if (result.state === "available") {
 }
 ```
 
+Apply the checked update from an explicit user-visible action:
+
+```ts
+const checked = await cefari.updates.check();
+
+if (checked.state === "available") {
+  const applied = await cefari.updates.apply({
+    updateId: checked.updateId,
+  });
+
+  if (applied.restartRequired) {
+    await cefari.updates.restart();
+  }
+}
+```
+
+For a one-shot action, use `applyAndRestart()`:
+
+```ts
+await cefari.updates.applyAndRestart({ updateId: result.updateId });
+```
+
+`apply()` installs the native update that Rust cached from the most recent
+successful `check()`. Frontend code never passes an update URL or signature.
+Some platform installers can terminate or relaunch the current process during
+installation, so app code must not rely on `apply()` always returning.
+
 Subscribe to runtime update state changes:
 
 ```ts
@@ -141,12 +174,10 @@ Current methods:
 
 - `state(): Promise<UpdateStateResult>`
 - `check(): Promise<UpdateCheckResult>`
+- `apply(options?: UpdateApplyOptions): Promise<UpdateApplyResult>`
+- `restart(): Promise<void>`
+- `applyAndRestart(options?: UpdateApplyOptions): Promise<void>`
 - `onStateChanged(handler): Unsubscribe`
-
-The IPC bridge does not currently expose a command to download and install an
-available update, restart the app, or apply an update and restart in one step.
-Rust has update-checking support and a core install helper, but the frontend
-bridge only exposes `updateState` and `updateCheck`.
 
 ## Service
 

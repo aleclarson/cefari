@@ -37,3 +37,30 @@ The command reports:
 When the current directory is not a Cefari project, `info` reports that no
 project was found. When `cefari.toml` exists but is invalid, it reports the
 project as invalid with the parse error.
+
+## `cefari logs`
+
+Print Cefari runtime logs for debugging:
+
+```bash
+cefari logs
+```
+
+The command reads the standard runtime log directory and prints recent entries
+from the built-in streams:
+
+- `app.log`
+- `daemon.log`
+- `rust.log`
+
+Useful options:
+
+```bash
+cefari logs --kind daemon --tail 100
+cefari logs --kind rust --follow
+cefari logs --path
+```
+
+`--kind` accepts `all`, `app`, `daemon`, or `rust`; it defaults to `all`.
+`--tail` limits the number of printed lines per stream and defaults to `200`.
+Use `--tail 0` to print all available entries.

@@ -52,6 +52,16 @@ executable.
 
 `cefari build` prepares CEF resources as part of the build. The package step
 expects those resources and archive metadata to exist under `build/cef/`.
+Native packages include the prepared CEF resource directory as the package
+resource target `cef`; at runtime, Cefari uses that directory for CEF resources,
+locales when present, and platform framework files when present.
+Packaging verifies that the desktop binary used as the CEF subprocess is present,
+that `archive.json` exists, that the CEF resource directory contains runtime
+payload files, and that `cef/locales/` contains at least one locale file.
+
+On macOS, packages that include `Chromium Embedded Framework.framework` must be
+signed and notarized with that framework payload intact. Run `cefari codesign`
+and `cefari notarize` for release artifacts that target macOS.
 
 For deterministic tests or CI fixtures, `CEFARI_CEF_RESOURCES_DIR` may point at
 a pre-populated resources directory that contains `archive.json`.
