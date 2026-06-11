@@ -1,6 +1,11 @@
 #[cfg(feature = "cef")]
 mod imp {
-    use std::{cell::RefCell, ptr, rc::Rc};
+    use std::{
+        cell::RefCell,
+        ptr,
+        rc::Rc,
+        sync::{Arc, Mutex},
+    };
 
     use anyhow::{Context, Result};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -8,30 +13,63 @@ mod imp {
     use tracing::{debug, error, info, warn};
 
     use cef::rc::Rc as _;
+    use cef::wrapper::message_router::{
+        BrowserSideCallback, BrowserSideHandler, BrowserSideRouter, MessageRouterBrowserSide,
+        MessageRouterBrowserSideHandlerCallbacks, MessageRouterConfig, MessageRouterRendererSide,
+        MessageRouterRendererSideHandlerCallbacks, RendererSideRouter,
+    };
     use cef::{
-        Client, ImplBrowser as _, ImplBrowserHost as _, ImplClient, ImplFrame as _,
+        App, Client, ImplApp, ImplBrowser as _, ImplBrowserHost as _, ImplClient, ImplFrame as _,
         ImplLifeSpanHandler, ImplLoadHandler, ImplProcessMessage as _, ImplRenderHandler,
-        ImplRequest as _, ImplRequestHandler, LifeSpanHandler, LoadHandler, RenderHandler,
-        RequestHandler, WrapClient, WrapLifeSpanHandler, WrapLoadHandler, WrapRenderHandler,
-        WrapRequestHandler, wrap_client, wrap_life_span_handler, wrap_load_handler,
-        wrap_render_handler, wrap_request_handler,
+        ImplRenderProcessHandler, ImplRequest as _, ImplRequestHandler, LifeSpanHandler,
+        LoadHandler, RenderHandler, RenderProcessHandler, RequestHandler, WrapApp, WrapClient,
+        WrapLifeSpanHandler, WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler,
+        WrapRequestHandler, wrap_app, wrap_client, wrap_life_span_handler, wrap_load_handler,
+        wrap_render_handler, wrap_render_process_handler, wrap_request_handler,
     };
 
-    use crate::desktop_bridge::{BridgeOriginPolicy, origin_from_url};
+    use crate::desktop_bridge::{BridgeOriginPolicy, denied_response_json, origin_from_url};
 
     pub struct CefRuntime {
         initialized: bool,
         #[allow(dead_code)]
         state: SharedBrowserState,
+        #[allow(dead_code)]
+        app: cef::App,
         client: cef::Client,
+        bridge_ipc: SharedBridgeIpcState,
+    }
+
+    pub type CefBridgeIpcCallback = Arc<Mutex<dyn BrowserSideCallback>>;
+
+    pub struct CefBridgeIpcRequest {
+        pub origin: String,
+        pub request_json: String,
+        pub callback: CefBridgeIpcCallback,
+    }
+
+    impl std::fmt::Debug for CefBridgeIpcRequest {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter
+                .debug_struct("CefBridgeIpcRequest")
+                .field("origin", &self.origin)
+                .field("request_json", &self.request_json)
+                .finish_non_exhaustive()
+        }
+    }
+
+    pub trait BridgeIpcSender: Send + Sync {
+        fn send_bridge_ipc(&self, request: CefBridgeIpcRequest) -> Result<()>;
     }
 
     #[allow(dead_code)]
     impl CefRuntime {
         pub fn initialize() -> Result<Self> {
             let args = cef::args::Args::new();
+            let router_config = bridge_router_config();
+            let mut app = CefariApp::build(router_config.clone());
             let subprocess_exit =
-                cef::execute_process(Some(args.as_main_args()), None, ptr::null_mut());
+                cef::execute_process(Some(args.as_main_args()), Some(&mut app), ptr::null_mut());
 
             if subprocess_exit >= 0 {
                 info!(status = subprocess_exit, "CEF subprocess completed");
@@ -47,7 +85,7 @@ mod imp {
             let initialized = cef::initialize(
                 Some(args.as_main_args()),
                 Some(&settings),
-                None,
+                Some(&mut app),
                 ptr::null_mut(),
             );
 
@@ -56,12 +94,28 @@ mod imp {
             }
 
             let state = SharedBrowserState::default();
+            let bridge_ipc = SharedBridgeIpcState::default();
+            let browser_router =
+                <BrowserSideRouter as MessageRouterBrowserSide>::new(router_config);
+            browser_router.add_handler(
+                Arc::new(CefariBridgeIpcHandler::new(
+                    bridge_ipc.clone(),
+                    BridgeOriginPolicy::from_environment(),
+                )),
+                false,
+            );
 
             info!("CEF initialized");
             Ok(Self {
                 initialized: true,
                 state: state.clone(),
-                client: CefariCefClient::build(state, BridgeOriginPolicy::from_environment()),
+                app,
+                client: CefariCefClient::build(
+                    state,
+                    BridgeOriginPolicy::from_environment(),
+                    browser_router,
+                ),
+                bridge_ipc,
             })
         }
 
@@ -150,6 +204,10 @@ mod imp {
             }
         }
 
+        pub fn set_bridge_ipc_sender(&self, sender: Arc<dyn BridgeIpcSender>) {
+            self.bridge_ipc.set_sender(sender);
+        }
+
         fn browser_host(&self) -> Result<cef::BrowserHost> {
             let browser = self.state.active_browser()?;
             browser
@@ -215,8 +273,120 @@ mod imp {
         main_browser: Option<cef::Browser>,
     }
 
+    #[derive(Clone, Default)]
+    struct SharedBridgeIpcState(Arc<Mutex<BridgeIpcState>>);
+
+    impl SharedBridgeIpcState {
+        fn set_sender(&self, sender: Arc<dyn BridgeIpcSender>) {
+            if let Ok(mut state) = self.0.lock() {
+                state.sender = Some(sender);
+            }
+        }
+
+        fn send(&self, request: CefBridgeIpcRequest) -> Result<()> {
+            let sender = self
+                .0
+                .lock()
+                .ok()
+                .and_then(|state| state.sender.clone())
+                .context("CEF bridge IPC sender is not installed")?;
+            sender.send_bridge_ipc(request)
+        }
+    }
+
+    #[derive(Default)]
+    struct BridgeIpcState {
+        sender: Option<Arc<dyn BridgeIpcSender>>,
+    }
+
+    fn bridge_router_config() -> MessageRouterConfig {
+        MessageRouterConfig {
+            js_query_function: "__CEFARI_IPC_QUERY__".to_owned(),
+            js_cancel_function: "__CEFARI_IPC_QUERY_CANCEL__".to_owned(),
+            ..Default::default()
+        }
+    }
+
+    wrap_app! {
+        struct CefariApp {
+            render_process_handler: cef::RenderProcessHandler,
+        }
+
+        impl App {
+            fn render_process_handler(&self) -> Option<cef::RenderProcessHandler> {
+                Some(self.render_process_handler.clone())
+            }
+        }
+    }
+
+    impl CefariApp {
+        fn build(router_config: MessageRouterConfig) -> cef::App {
+            Self::new(CefariRenderProcessHandler::build(router_config))
+        }
+    }
+
+    wrap_render_process_handler! {
+        struct CefariRenderProcessHandler {
+            router: Arc<RendererSideRouter>,
+        }
+
+        impl RenderProcessHandler {
+            fn on_context_created(
+                &self,
+                browser: Option<&mut cef::Browser>,
+                frame: Option<&mut cef::Frame>,
+                context: Option<&mut cef::V8Context>,
+            ) {
+                self.router.on_context_created(
+                    browser.as_deref().cloned(),
+                    frame.as_deref().cloned(),
+                    context.as_deref().cloned(),
+                );
+                debug!(frame_url = %frame_url(frame), "CEF render context created");
+            }
+
+            fn on_context_released(
+                &self,
+                browser: Option<&mut cef::Browser>,
+                frame: Option<&mut cef::Frame>,
+                context: Option<&mut cef::V8Context>,
+            ) {
+                self.router.on_context_released(
+                    browser.as_deref().cloned(),
+                    frame.as_deref().cloned(),
+                    context.as_deref().cloned(),
+                );
+                debug!(frame_url = %frame_url(frame), "CEF render context released");
+            }
+
+            fn on_process_message_received(
+                &self,
+                browser: Option<&mut cef::Browser>,
+                frame: Option<&mut cef::Frame>,
+                source_process: cef::ProcessId,
+                message: Option<&mut cef::ProcessMessage>,
+            ) -> ::std::os::raw::c_int {
+                i32::from(self.router.on_process_message_received(
+                    browser.as_deref().cloned(),
+                    frame.as_deref().cloned(),
+                    Some(source_process),
+                    message.as_deref().cloned(),
+                ))
+            }
+        }
+    }
+
+    impl CefariRenderProcessHandler {
+        fn build(router_config: MessageRouterConfig) -> cef::RenderProcessHandler {
+            Self::new(<RendererSideRouter as MessageRouterRendererSide>::new(
+                router_config,
+            ))
+        }
+    }
+
     wrap_client! {
         struct CefariCefClient {
+            browser_router: Arc<BrowserSideRouter>,
             life_span_handler: cef::LifeSpanHandler,
             load_handler: cef::LoadHandler,
             render_handler: cef::RenderHandler,
@@ -242,11 +412,21 @@ mod imp {
 
             fn on_process_message_received(
                 &self,
-                _browser: Option<&mut cef::Browser>,
+                browser: Option<&mut cef::Browser>,
                 frame: Option<&mut cef::Frame>,
                 source_process: cef::ProcessId,
                 message: Option<&mut cef::ProcessMessage>,
             ) -> ::std::os::raw::c_int {
+                if self.browser_router.on_process_message_received(
+                    browser.as_deref().cloned(),
+                    frame.as_deref().cloned(),
+                    source_process,
+                    message.as_deref().cloned(),
+                ) {
+                    debug!(message = %message_name(message), "CEF process message handled by bridge router");
+                    return 1;
+                }
+
                 debug!(
                     frame_url = %frame_url(frame),
                     source_process = ?source_process,
@@ -259,12 +439,17 @@ mod imp {
     }
 
     impl CefariCefClient {
-        fn build(state: SharedBrowserState, origin_policy: BridgeOriginPolicy) -> cef::Client {
+        fn build(
+            state: SharedBrowserState,
+            origin_policy: BridgeOriginPolicy,
+            browser_router: Arc<BrowserSideRouter>,
+        ) -> cef::Client {
             Self::new(
-                CefariLifeSpanHandler::new(state),
+                browser_router.clone(),
+                CefariLifeSpanHandler::new(state, browser_router.clone()),
                 CefariLoadHandler::new(),
                 CefariRenderHandler::new(),
-                CefariRequestHandler::new(origin_policy),
+                CefariRequestHandler::new(origin_policy, browser_router),
             )
         }
     }
@@ -272,6 +457,7 @@ mod imp {
     wrap_life_span_handler! {
         struct CefariLifeSpanHandler {
             state: SharedBrowserState,
+            browser_router: Arc<BrowserSideRouter>,
         }
 
         impl LifeSpanHandler {
@@ -288,6 +474,7 @@ mod imp {
             }
 
             fn on_before_close(&self, browser: Option<&mut cef::Browser>) {
+                self.browser_router.on_before_close(browser.as_deref().cloned());
                 if let Some(browser) = browser {
                     self.state.browser_closing(browser);
                 }
@@ -363,17 +550,22 @@ mod imp {
     wrap_request_handler! {
         struct CefariRequestHandler {
             origin_policy: BridgeOriginPolicy,
+            browser_router: Arc<BrowserSideRouter>,
         }
 
         impl RequestHandler {
             fn on_before_browse(
                 &self,
-                _browser: Option<&mut cef::Browser>,
+                browser: Option<&mut cef::Browser>,
                 frame: Option<&mut cef::Frame>,
                 request: Option<&mut cef::Request>,
                 user_gesture: ::std::os::raw::c_int,
                 is_redirect: ::std::os::raw::c_int,
             ) -> ::std::os::raw::c_int {
+                self.browser_router.on_before_browse(
+                    browser.as_deref().cloned(),
+                    frame.as_deref().cloned(),
+                );
                 debug!(
                     frame_url = %frame_url(frame),
                     request_url = %request_url(request),
@@ -403,11 +595,13 @@ mod imp {
 
             fn on_render_process_terminated(
                 &self,
-                _browser: Option<&mut cef::Browser>,
+                browser: Option<&mut cef::Browser>,
                 status: cef::TerminationStatus,
                 error_code: ::std::os::raw::c_int,
                 error_string: Option<&cef::CefString>,
             ) {
+                self.browser_router
+                    .on_render_process_terminated(browser.as_deref().cloned());
                 error!(
                     status = ?status,
                     error_code,
@@ -422,6 +616,63 @@ mod imp {
                 }
                 debug!("CEF document available in main frame");
             }
+        }
+    }
+
+    struct CefariBridgeIpcHandler {
+        bridge_ipc: SharedBridgeIpcState,
+        origin_policy: BridgeOriginPolicy,
+    }
+
+    impl CefariBridgeIpcHandler {
+        fn new(bridge_ipc: SharedBridgeIpcState, origin_policy: BridgeOriginPolicy) -> Self {
+            Self {
+                bridge_ipc,
+                origin_policy,
+            }
+        }
+    }
+
+    impl BrowserSideHandler for CefariBridgeIpcHandler {
+        fn on_query_str(
+            &self,
+            _browser: Option<cef::Browser>,
+            frame: Option<cef::Frame>,
+            _query_id: i64,
+            request: &str,
+            _persistent: bool,
+            callback: Arc<Mutex<dyn BrowserSideCallback>>,
+        ) -> bool {
+            let frame_url = frame
+                .as_ref()
+                .map(|frame| cef::CefString::from(&frame.url()).to_string())
+                .unwrap_or_default();
+            let origin = origin_from_url(&frame_url).unwrap_or_default();
+            if !self.origin_policy.is_trusted_origin(&origin) {
+                let response =
+                    denied_response_json(request, "origin is not allowed to use the Cefari bridge");
+                if let Ok(callback) = callback.lock() {
+                    callback.success_str(&response);
+                }
+                warn!(
+                    frame_url,
+                    origin, "denied CEF bridge IPC from untrusted frame"
+                );
+                return true;
+            }
+
+            if let Err(error) = self.bridge_ipc.send(CefBridgeIpcRequest {
+                origin,
+                request_json: request.to_owned(),
+                callback: callback.clone(),
+            }) {
+                if let Ok(callback) = callback.lock() {
+                    callback.failure(1, &error.to_string());
+                }
+                error!(%error, frame_url, "failed to enqueue CEF bridge IPC request");
+            }
+
+            true
         }
     }
 
@@ -544,7 +795,7 @@ mod imp {
 }
 
 #[cfg(feature = "cef")]
-pub use imp::CefRuntime;
+pub use imp::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime};
 
 #[cfg(feature = "cef")]
 pub fn initialize() -> anyhow::Result<CefRuntime> {

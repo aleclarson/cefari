@@ -2,6 +2,8 @@ use std::{
     fs,
     process::{Command, ExitCode},
 };
+#[cfg(feature = "cef")]
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use cefari_core::{
@@ -97,6 +99,8 @@ struct RuntimeGuards {
 enum UserEvent {
     Menu(muda::MenuEvent),
     Tray(tray_icon::TrayIconEvent),
+    #[cfg(feature = "cef")]
+    BridgeIpc(desktop_cef::CefBridgeIpcRequest),
 }
 
 fn run_native_shell(
@@ -114,6 +118,12 @@ fn run_native_shell(
     tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
         let _ = event_proxy.send_event(UserEvent::Tray(event));
     }));
+    #[cfg(feature = "cef")]
+    guards
+        .cef_runtime
+        .set_bridge_ipc_sender(Arc::new(TaoBridgeIpcSender {
+            event_proxy: event_loop.create_proxy(),
+        }));
 
     let window = create_main_window(&event_loop)?;
     apply_ui_diagnostic_state(&window, shell_ui);
@@ -217,6 +227,30 @@ fn run_event_loop(
                     desktop_tray::log_tray_event(&tray_event);
                 }
             }
+            #[cfg(feature = "cef")]
+            Event::UserEvent(UserEvent::BridgeIpc(request)) => {
+                let mut context = DesktopShellContext {
+                    window: &mut window,
+                    window_title: &mut window_title,
+                    paths: &paths,
+                    runtime_operations: &runtime_operations,
+                    should_exit: false,
+                };
+                let bridge = desktop_bridge::CefariBridge::new(
+                    desktop_bridge::BridgeOriginPolicy::from_environment(),
+                );
+                let response_json = bridge.handle_json_request(
+                    &request.origin,
+                    &request.request_json,
+                    &mut context,
+                );
+                if let Ok(callback) = request.callback.lock() {
+                    callback.success_str(&response_json);
+                }
+                if context.should_exit {
+                    *control_flow = ControlFlow::Exit;
+                }
+            }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
@@ -281,6 +315,20 @@ fn run_event_loop(
             _ => {}
         }
     });
+}
+
+#[cfg(feature = "cef")]
+struct TaoBridgeIpcSender {
+    event_proxy: tao::event_loop::EventLoopProxy<UserEvent>,
+}
+
+#[cfg(feature = "cef")]
+impl desktop_cef::BridgeIpcSender for TaoBridgeIpcSender {
+    fn send_bridge_ipc(&self, request: desktop_cef::CefBridgeIpcRequest) -> Result<()> {
+        self.event_proxy
+            .send_event(UserEvent::BridgeIpc(request))
+            .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
+    }
 }
 
 struct DesktopShellContext<'a> {

@@ -66,6 +66,28 @@ pub const CEFARI_BRIDGE_SCRIPT: &str = r#"
     },
   });
 
+  const postNativeIpc = (request) => new Promise((resolve) => {
+    const query = window.__CEFARI_IPC_QUERY__;
+    if (typeof query !== "function") {
+      resolve(unsupported(request.id, "bridge", "native IPC transport is unavailable"));
+      return;
+    }
+
+    query({
+      request: JSON.stringify(request),
+      onSuccess(response) {
+        try {
+          resolve(JSON.parse(response));
+        } catch (_error) {
+          resolve(unsupported(request.id, "bridge", "native IPC response was invalid"));
+        }
+      },
+      onFailure(_code, message) {
+        resolve(unsupported(request.id, "bridge", message || "native IPC transport failed"));
+      },
+    });
+  });
+
   Object.defineProperty(window, "cefari", {
     configurable: false,
     enumerable: false,
@@ -93,6 +115,13 @@ pub const CEFARI_BRIDGE_SCRIPT: &str = r#"
     value(event) {
       for (const listener of listeners) listener(event);
     },
+  });
+
+  Object.defineProperty(window, "__CEFARI_IPC_POST__", {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: postNativeIpc,
   });
 })();
 "#;
@@ -247,6 +276,10 @@ fn denied_response(id: String, message: &str) -> CefariIpcResponse {
     }
 }
 
+pub fn denied_response_json(request_json: &str, message: &str) -> String {
+    response_json(&denied_response(request_id(request_json), message))
+}
+
 fn invalid_response(id: String, message: &str) -> CefariIpcResponse {
     CefariIpcResponse {
         id,
@@ -398,6 +431,8 @@ mod tests {
             None
         );
         assert!(CEFARI_BRIDGE_SCRIPT.contains("window.cefari"));
+        assert!(CEFARI_BRIDGE_SCRIPT.contains("window.__CEFARI_IPC_QUERY__"));
+        assert!(CEFARI_BRIDGE_SCRIPT.contains("\"__CEFARI_IPC_POST__\""));
     }
 
     #[test]
@@ -470,6 +505,25 @@ mod tests {
             .expect("response should deserialize");
 
         assert_eq!(context.update_state_calls, 0);
+        assert!(matches!(
+            response.outcome,
+            CefariIpcOutcome::Err(CefariIpcError::Denied { .. })
+        ));
+    }
+
+    #[test]
+    fn transport_denial_preserves_request_id_without_dispatch() {
+        let request = CefariIpcRequest {
+            id: "request-transport-denied".to_owned(),
+            command: CefariIpcCommand::UpdateState,
+        };
+        let request_json = serde_json::to_string(&request).expect("request should serialize");
+
+        let response_json = super::denied_response_json(&request_json, "origin is not allowed");
+        let response = serde_json::from_str::<cefari_core::CefariIpcResponse>(&response_json)
+            .expect("response should deserialize");
+
+        assert_eq!(response.id, "request-transport-denied");
         assert!(matches!(
             response.outcome,
             CefariIpcOutcome::Err(CefariIpcError::Denied { .. })
