@@ -32,7 +32,7 @@ Each finding uses:
 | `cargo fmt --all --check` | Rust formatting | Pending |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Rust linting | Pending |
 | `cargo test --workspace` | Rust test suite | Pending |
-| `cargo test -p cefari-core` | Core crate tests | Pending |
+| `cargo test -p cefari-core` | Core crate tests | Passed |
 | `cargo test -p cefari-desktop` | Desktop crate tests | Pending |
 | `cargo test -p cefari-cli` | CLI crate tests | Pending |
 | `deno task --cwd packages/cefari-app check` | TypeScript package type check | Pending |
@@ -50,12 +50,18 @@ No findings recorded yet.
 
 ## Reviewed Areas With No Findings
 
-None yet.
+- `crates/cefari-core/src/config.rs`: config serialization, defaults, unknown-field rejection, and save/load error mapping reviewed with no findings.
+- `crates/cefari-core/src/ipc.rs` and `crates/cefari-core/bindings/ipc.ts`: IPC command/result/event contracts and generated TypeScript binding currency reviewed with no findings.
+- `crates/cefari-core/src/logging.rs`: runtime log config and rotated log pruning reviewed with no findings.
+- `crates/cefari-core/src/paths.rs`: platform project directory resolution reviewed with no findings.
+- `crates/cefari-core/src/resources.rs`: packaged resource path validation and existence checks reviewed with no findings.
+- `crates/cefari-core/src/services.rs`: service-manager wrappers, default levels, Windows `sc.exe` status fallback, and tests reviewed with no findings.
+- `crates/cefari-core/src/updates.rs`: updater configuration preparation, unconfigured-state handling, and update result modeling reviewed with no findings.
 
 ## Validation Summary
 
-Pending.
+- `cargo test -p cefari-core`: passed. This ran 31 unit tests and doc tests successfully; the `native_service_lifecycle_smoke` integration test remains ignored by design because it installs and starts a native OS service.
 
 ## Skipped Or Limited Checks
 
-Pending.
+- `crates/cefari-core/tests/service_lifecycle.rs::native_service_lifecycle_smoke` was not run because it is explicitly ignored and requires a disposable host for native service installation/start/stop verification.
