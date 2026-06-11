@@ -450,6 +450,10 @@ mod tests {
             Ok(())
         }
 
+        fn reload_ui(&mut self) -> Result<()> {
+            Ok(())
+        }
+
         fn open_external_url(&mut self, _url: &str) -> Result<()> {
             Ok(())
         }

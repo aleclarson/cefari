@@ -16,6 +16,7 @@ pub trait NativeShellContext {
     fn window_close(&mut self) -> Result<WindowState>;
     fn window_set_title(&mut self, title: &str) -> Result<WindowState>;
     fn open_logs(&mut self) -> Result<()>;
+    fn reload_ui(&mut self) -> Result<()>;
     fn open_external_url(&mut self, url: &str) -> Result<()>;
     fn update_state(&mut self) -> Result<UpdateStateResult>;
     fn update_check(&mut self) -> Result<UpdateCheckResult>;
@@ -72,10 +73,10 @@ fn dispatch_command(
             .open_logs()
             .map(|()| CefariIpcResult::Empty)
             .map_err(|error| invalid_command(&error, "openLogs")),
-        CefariIpcCommand::ReloadUi => Err(CefariIpcError::Unsupported {
-            command: "reloadUi".to_owned(),
-            reason: "CEF UI reload is not wired yet".to_owned(),
-        }),
+        CefariIpcCommand::ReloadUi => context
+            .reload_ui()
+            .map(|()| CefariIpcResult::ReloadUi)
+            .map_err(|error| unsupported_command(&error, "reloadUi")),
         CefariIpcCommand::OpenExternalUrl(request) => context
             .open_external_url(&request.url)
             .map(|()| {
@@ -207,6 +208,7 @@ mod tests {
     struct FakeShellContext {
         calls: Vec<&'static str>,
         window_title: String,
+        reload_should_fail: bool,
     }
 
     impl Default for FakeShellContext {
@@ -214,6 +216,7 @@ mod tests {
             Self {
                 calls: Vec::new(),
                 window_title: "Cefari".to_owned(),
+                reload_should_fail: false,
             }
         }
     }
@@ -247,6 +250,14 @@ mod tests {
 
         fn open_logs(&mut self) -> Result<()> {
             self.calls.push("open_logs");
+            Ok(())
+        }
+
+        fn reload_ui(&mut self) -> Result<()> {
+            self.calls.push("reload_ui");
+            if self.reload_should_fail {
+                anyhow::bail!("CEF main browser is not available");
+            }
             Ok(())
         }
 
@@ -333,6 +344,7 @@ mod tests {
                 title: "New Title".to_owned(),
             }),
             CefariIpcCommand::OpenLogs,
+            CefariIpcCommand::ReloadUi,
             CefariIpcCommand::OpenExternalUrl(OpenExternalUrlRequest {
                 url: "https://cefari.dev".to_owned(),
             }),
@@ -367,6 +379,7 @@ mod tests {
                 "window_close",
                 "window_set_title",
                 "open_logs",
+                "reload_ui",
                 "open_external_url",
                 "update_state",
                 "update_check",
@@ -383,10 +396,9 @@ mod tests {
     fn returns_typed_unsupported_errors_for_reserved_commands() {
         let mut context = FakeShellContext::default();
 
-        for command in [
-            CefariIpcCommand::ReloadUi,
-            CefariIpcCommand::Notification(NotificationCommand::PermissionState),
-        ] {
+        for command in [CefariIpcCommand::Notification(
+            NotificationCommand::PermissionState,
+        )] {
             let response = DesktopIpcDispatcher::dispatch(
                 CefariIpcRequest {
                     id: "reserved".to_owned(),
@@ -400,5 +412,27 @@ mod tests {
                 CefariIpcOutcome::Err(CefariIpcError::Unsupported { .. })
             ));
         }
+    }
+
+    #[test]
+    fn reload_ui_returns_typed_unsupported_when_browser_is_missing() {
+        let mut context = FakeShellContext {
+            reload_should_fail: true,
+            ..Default::default()
+        };
+
+        let response = DesktopIpcDispatcher::dispatch(
+            CefariIpcRequest {
+                id: "reload".to_owned(),
+                command: CefariIpcCommand::ReloadUi,
+            },
+            &mut context,
+        );
+
+        assert_eq!(context.calls, ["reload_ui"]);
+        assert!(matches!(
+            response.outcome,
+            CefariIpcOutcome::Err(CefariIpcError::Unsupported { .. })
+        ));
     }
 }

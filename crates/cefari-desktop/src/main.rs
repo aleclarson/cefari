@@ -188,6 +188,7 @@ fn run_event_loop(
                         window: &mut window,
                         window_title: &mut window_title,
                         paths: &paths,
+                        cef_runtime: &guards.cef_runtime,
                         runtime_operations: &runtime_operations,
                         should_exit: false,
                     };
@@ -212,6 +213,7 @@ fn run_event_loop(
                         window: &mut window,
                         window_title: &mut window_title,
                         paths: &paths,
+                        cef_runtime: &guards.cef_runtime,
                         runtime_operations: &runtime_operations,
                         should_exit: false,
                     };
@@ -233,6 +235,7 @@ fn run_event_loop(
                     window: &mut window,
                     window_title: &mut window_title,
                     paths: &paths,
+                    cef_runtime: &guards.cef_runtime,
                     runtime_operations: &runtime_operations,
                     should_exit: false,
                 };
@@ -294,6 +297,7 @@ fn run_event_loop(
                             window: &mut window,
                             window_title: &mut window_title,
                             paths: &paths,
+                            cef_runtime: &guards.cef_runtime,
                             runtime_operations: &runtime_operations,
                             should_exit: false,
                         };
@@ -335,6 +339,7 @@ struct DesktopShellContext<'a> {
     window: &'a mut Option<Window>,
     window_title: &'a mut String,
     paths: &'a RuntimePaths,
+    cef_runtime: &'a desktop_cef::CefRuntime,
     runtime_operations: &'a runtime::RuntimeOperations,
     should_exit: bool,
 }
@@ -382,6 +387,10 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
 
     fn open_logs(&mut self) -> Result<()> {
         external::open_external_file(&self.paths.log_dir)
+    }
+
+    fn reload_ui(&mut self) -> Result<()> {
+        self.cef_runtime.reload_browser()
     }
 
     fn open_external_url(&mut self, url: &str) -> Result<()> {
