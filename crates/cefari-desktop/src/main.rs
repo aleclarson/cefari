@@ -4,6 +4,7 @@ use std::{
 };
 #[cfg(feature = "cef")]
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use cefari_core::{
@@ -101,6 +102,8 @@ enum UserEvent {
     Tray(tray_icon::TrayIconEvent),
     #[cfg(feature = "cef")]
     BridgeIpc(desktop_cef::CefBridgeIpcRequest),
+    #[cfg(feature = "cef")]
+    CefMessagePump(Instant),
 }
 
 fn run_native_shell(
@@ -122,6 +125,12 @@ fn run_native_shell(
     guards
         .cef_runtime
         .set_bridge_ipc_sender(Arc::new(TaoBridgeIpcSender {
+            event_proxy: event_loop.create_proxy(),
+        }));
+    #[cfg(feature = "cef")]
+    guards
+        .cef_runtime
+        .set_message_pump_scheduler(Arc::new(TaoMessagePumpScheduler {
             event_proxy: event_loop.create_proxy(),
         }));
     guards
@@ -169,6 +178,7 @@ fn run_event_loop(
 
     let mut window = Some(window);
     let mut window_title = MAIN_WINDOW_TITLE.to_owned();
+    let mut cef_message_pump_deadline = None;
     let mut tray = None;
     event_loop.run(move |event, _, control_flow| {
         let _guards = &guards;
@@ -177,14 +187,27 @@ fn run_event_loop(
         *control_flow = ControlFlow::Wait;
 
         match event {
-            Event::NewEvents(StartCause::Init) => match desktop_tray::DesktopTray::new() {
-                Ok(desktop_tray) => {
-                    tray = Some(desktop_tray);
+            Event::NewEvents(start_cause) => match start_cause {
+                StartCause::Init => match desktop_tray::DesktopTray::new() {
+                    Ok(desktop_tray) => {
+                        tray = Some(desktop_tray);
+                    }
+                    Err(error) => {
+                        error!(%error, "failed to initialize tray icon");
+                    }
+                },
+                StartCause::ResumeTimeReached { .. } | StartCause::WaitCancelled { .. } => {
+                    pump_due_cef_message_loop(&guards.cef_runtime, &mut cef_message_pump_deadline);
                 }
-                Err(error) => {
-                    error!(%error, "failed to initialize tray icon");
-                }
+                _ => {}
             },
+            #[cfg(feature = "cef")]
+            Event::UserEvent(UserEvent::CefMessagePump(deadline)) => {
+                cef_message_pump_deadline = earliest_deadline(cef_message_pump_deadline, deadline);
+                if deadline <= Instant::now() {
+                    pump_due_cef_message_loop(&guards.cef_runtime, &mut cef_message_pump_deadline);
+                }
+            }
             Event::UserEvent(UserEvent::Menu(menu_event)) => {
                 if let Some(command) = desktop_menu::ipc_command_for_event(&menu_event) {
                     let mut context = DesktopShellContext {
@@ -335,11 +358,7 @@ fn run_event_loop(
                 *control_flow = ControlFlow::Exit;
             }
             Event::MainEventsCleared => {
-                guards.cef_runtime.pump_message_loop();
-
-                if let Some(window) = &window {
-                    window.request_redraw();
-                }
+                pump_due_cef_message_loop(&guards.cef_runtime, &mut cef_message_pump_deadline);
             }
             Event::LoopDestroyed => {
                 info!("cefari native shell stopped");
@@ -386,6 +405,7 @@ fn run_event_loop(
             }
             _ => {}
         }
+        apply_cef_message_pump_control_flow(&cef_message_pump_deadline, control_flow);
     });
 }
 
@@ -393,6 +413,49 @@ fn log_cef_lifecycle_result(result: Result<()>, success_message: &'static str) {
     match result {
         Ok(()) => debug!("{success_message}"),
         Err(error) => debug!(%error, "{success_message} skipped or failed"),
+    }
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+fn cef_message_pump_deadline(delay_ms: i64) -> Instant {
+    let now = Instant::now();
+    if delay_ms <= 0 {
+        now
+    } else {
+        now.checked_add(Duration::from_millis(delay_ms as u64))
+            .unwrap_or(now)
+    }
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+fn earliest_deadline(current: Option<Instant>, next: Instant) -> Option<Instant> {
+    Some(current.map_or(next, |current| current.min(next)))
+}
+
+fn pump_due_cef_message_loop(
+    cef_runtime: &desktop_cef::CefRuntime,
+    deadline: &mut Option<Instant>,
+) {
+    if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+        *deadline = None;
+        cef_runtime.pump_message_loop();
+    }
+}
+
+fn apply_cef_message_pump_control_flow(deadline: &Option<Instant>, control_flow: &mut ControlFlow) {
+    if matches!(
+        *control_flow,
+        ControlFlow::Exit | ControlFlow::ExitWithCode(_)
+    ) {
+        return;
+    }
+
+    if let Some(deadline) = deadline {
+        *control_flow = if *deadline <= Instant::now() {
+            ControlFlow::Poll
+        } else {
+            ControlFlow::WaitUntil(*deadline)
+        };
     }
 }
 
@@ -406,6 +469,22 @@ impl desktop_cef::BridgeIpcSender for TaoBridgeIpcSender {
     fn send_bridge_ipc(&self, request: desktop_cef::CefBridgeIpcRequest) -> Result<()> {
         self.event_proxy
             .send_event(UserEvent::BridgeIpc(request))
+            .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
+    }
+}
+
+#[cfg(feature = "cef")]
+struct TaoMessagePumpScheduler {
+    event_proxy: tao::event_loop::EventLoopProxy<UserEvent>,
+}
+
+#[cfg(feature = "cef")]
+impl desktop_cef::MessagePumpScheduler for TaoMessagePumpScheduler {
+    fn schedule_message_pump_work(&self, delay_ms: i64) -> Result<()> {
+        self.event_proxy
+            .send_event(UserEvent::CefMessagePump(cef_message_pump_deadline(
+                delay_ms,
+            )))
             .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
     }
 }
@@ -640,8 +719,11 @@ fn prune_all_rotated_logs(config: &RuntimeLogConfig) {
 mod tests {
     use super::{
         MAIN_WINDOW_HEIGHT, MAIN_WINDOW_TITLE, MAIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT,
-        MIN_WINDOW_WIDTH, startup_error_message,
+        MIN_WINDOW_WIDTH, apply_cef_message_pump_control_flow, cef_message_pump_deadline,
+        earliest_deadline, startup_error_message,
     };
+    use std::time::{Duration, Instant};
+    use tao::event_loop::ControlFlow;
 
     #[test]
     fn startup_error_message_names_pre_ui_failure() {
@@ -658,5 +740,33 @@ mod tests {
         assert!(
             std::hint::black_box(MAIN_WINDOW_HEIGHT) >= std::hint::black_box(MIN_WINDOW_HEIGHT)
         );
+    }
+
+    #[test]
+    fn cef_message_pump_deadline_handles_immediate_and_delayed_work() {
+        let before = Instant::now();
+
+        let immediate = cef_message_pump_deadline(0);
+        let delayed = cef_message_pump_deadline(25);
+
+        assert!(immediate >= before);
+        assert!(delayed > immediate);
+    }
+
+    #[test]
+    fn cef_message_pump_control_flow_uses_earliest_deadline_without_overriding_exit() {
+        let now = Instant::now();
+        let later = now + Duration::from_secs(5);
+        let earlier = now + Duration::from_secs(1);
+
+        assert_eq!(earliest_deadline(Some(later), earlier), Some(earlier));
+
+        let mut wait = ControlFlow::Wait;
+        apply_cef_message_pump_control_flow(&Some(later), &mut wait);
+        assert_eq!(wait, ControlFlow::WaitUntil(later));
+
+        let mut exit = ControlFlow::Exit;
+        apply_cef_message_pump_control_flow(&Some(later), &mut exit);
+        assert_eq!(exit, ControlFlow::Exit);
     }
 }

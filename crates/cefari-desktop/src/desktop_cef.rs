@@ -21,15 +21,16 @@ mod imp {
     };
     use cef::wrapper::stream_resource_handler::StreamResourceHandler;
     use cef::{
-        App, Client, DownloadHandler, ImplApp, ImplBrowser as _, ImplBrowserHost as _, ImplClient,
-        ImplDownloadHandler, ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler,
-        ImplProcessMessage as _, ImplRenderHandler, ImplRenderProcessHandler, ImplRequest as _,
-        ImplRequestHandler, ImplResourceRequestHandler, ImplSchemeRegistrar as _, LifeSpanHandler,
-        LoadHandler, RenderHandler, RenderProcessHandler, RequestHandler, ResourceRequestHandler,
-        SchemeOptions, WrapApp, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
+        App, BrowserProcessHandler, Client, DownloadHandler, ImplApp, ImplBrowser as _,
+        ImplBrowserHost as _, ImplBrowserProcessHandler, ImplClient, ImplDownloadHandler,
+        ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler, ImplProcessMessage as _,
+        ImplRenderHandler, ImplRenderProcessHandler, ImplRequest as _, ImplRequestHandler,
+        ImplResourceRequestHandler, ImplSchemeRegistrar as _, LifeSpanHandler, LoadHandler,
+        RenderHandler, RenderProcessHandler, RequestHandler, ResourceRequestHandler, SchemeOptions,
+        WrapApp, WrapBrowserProcessHandler, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
         WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler, WrapRequestHandler,
-        WrapResourceRequestHandler, wrap_app, wrap_client, wrap_download_handler,
-        wrap_life_span_handler, wrap_load_handler, wrap_render_handler,
+        WrapResourceRequestHandler, wrap_app, wrap_browser_process_handler, wrap_client,
+        wrap_download_handler, wrap_life_span_handler, wrap_load_handler, wrap_render_handler,
         wrap_render_process_handler, wrap_request_handler, wrap_resource_request_handler,
     };
 
@@ -49,6 +50,7 @@ mod imp {
         client: cef::Client,
         bridge_ipc: SharedBridgeIpcState,
         app_scheme: SharedAppSchemeState,
+        message_pump: SharedMessagePumpState,
     }
 
     pub type CefBridgeIpcCallback = Arc<Mutex<dyn BrowserSideCallback>>;
@@ -73,12 +75,17 @@ mod imp {
         fn send_bridge_ipc(&self, request: CefBridgeIpcRequest) -> Result<()>;
     }
 
+    pub trait MessagePumpScheduler: Send + Sync {
+        fn schedule_message_pump_work(&self, delay_ms: i64) -> Result<()>;
+    }
+
     #[allow(dead_code)]
     impl CefRuntime {
         pub fn initialize() -> Result<Self> {
             let args = cef::args::Args::new();
             let router_config = bridge_router_config();
-            let mut app = CefariApp::build(router_config.clone());
+            let message_pump = SharedMessagePumpState::default();
+            let mut app = CefariApp::build(router_config.clone(), message_pump.clone());
             let subprocess_exit =
                 cef::execute_process(Some(args.as_main_args()), Some(&mut app), ptr::null_mut());
 
@@ -133,6 +140,7 @@ mod imp {
                 ),
                 bridge_ipc,
                 app_scheme,
+                message_pump,
             })
         }
 
@@ -229,6 +237,10 @@ mod imp {
             self.app_scheme.set_resource_dir(resource_dir);
         }
 
+        pub fn set_message_pump_scheduler(&self, scheduler: Arc<dyn MessagePumpScheduler>) {
+            self.message_pump.set_scheduler(scheduler);
+        }
+
         fn browser_host(&self) -> Result<cef::BrowserHost> {
             let browser = self.state.active_browser()?;
             browser
@@ -321,6 +333,37 @@ mod imp {
     }
 
     #[derive(Clone, Default)]
+    struct SharedMessagePumpState(Arc<Mutex<MessagePumpState>>);
+
+    impl SharedMessagePumpState {
+        fn set_scheduler(&self, scheduler: Arc<dyn MessagePumpScheduler>) {
+            if let Ok(mut state) = self.0.lock() {
+                state.scheduler = Some(scheduler);
+            }
+        }
+
+        fn schedule(&self, delay_ms: i64) {
+            let scheduler = self.0.lock().ok().and_then(|state| state.scheduler.clone());
+            let Some(scheduler) = scheduler else {
+                debug!(
+                    delay_ms,
+                    "CEF message pump work scheduled before Tao scheduler was installed"
+                );
+                return;
+            };
+
+            if let Err(error) = scheduler.schedule_message_pump_work(delay_ms) {
+                warn!(%error, delay_ms, "failed to schedule CEF message pump work");
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct MessagePumpState {
+        scheduler: Option<Arc<dyn MessagePumpScheduler>>,
+    }
+
+    #[derive(Clone, Default)]
     struct SharedAppSchemeState(Arc<Mutex<AppSchemeState>>);
 
     impl SharedAppSchemeState {
@@ -362,10 +405,15 @@ mod imp {
 
     wrap_app! {
         struct CefariApp {
+            browser_process_handler: cef::BrowserProcessHandler,
             render_process_handler: cef::RenderProcessHandler,
         }
 
         impl App {
+            fn browser_process_handler(&self) -> Option<cef::BrowserProcessHandler> {
+                Some(self.browser_process_handler.clone())
+            }
+
             fn on_register_custom_schemes(
                 &self,
                 registrar: Option<&mut cef::SchemeRegistrar>,
@@ -380,8 +428,26 @@ mod imp {
     }
 
     impl CefariApp {
-        fn build(router_config: MessageRouterConfig) -> cef::App {
-            Self::new(CefariRenderProcessHandler::build(router_config))
+        fn build(
+            router_config: MessageRouterConfig,
+            message_pump: SharedMessagePumpState,
+        ) -> cef::App {
+            Self::new(
+                CefariBrowserProcessHandler::new(message_pump),
+                CefariRenderProcessHandler::build(router_config),
+            )
+        }
+    }
+
+    wrap_browser_process_handler! {
+        struct CefariBrowserProcessHandler {
+            message_pump: SharedMessagePumpState,
+        }
+
+        impl BrowserProcessHandler {
+            fn on_schedule_message_pump_work(&self, delay_ms: i64) {
+                self.message_pump.schedule(delay_ms);
+            }
         }
     }
 
@@ -1128,7 +1194,7 @@ mod imp {
 }
 
 #[cfg(feature = "cef")]
-pub use imp::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime};
+pub use imp::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime, MessagePumpScheduler};
 
 #[cfg(feature = "cef")]
 pub fn initialize() -> anyhow::Result<CefRuntime> {
