@@ -59,7 +59,7 @@ impl DevProcesses {
         if let Some(command) = &frontend.dev_command {
             let child = spawn_frontend_command(project_dir, command, port)?;
             self.children
-                .push(NamedChild::new("frontend dev server", child));
+                .push(NamedChild::frontend("frontend dev server", child));
             self.frontend_url = Some(format!("http://127.0.0.1:{port}"));
             println!("frontend dev server: http://127.0.0.1:{port}");
             return Ok(());
@@ -143,10 +143,23 @@ impl DevProcesses {
     }
 
     fn shutdown(&mut self) {
+        for child in self
+            .children
+            .iter_mut()
+            .filter(|child| !child.is_frontend_dev_server)
+        {
+            child.stop();
+        }
+
         if let Some(frontend) = &mut self.frontend {
             frontend.shutdown();
         }
-        for child in &mut self.children {
+
+        for child in self
+            .children
+            .iter_mut()
+            .filter(|child| child.is_frontend_dev_server)
+        {
             child.stop();
         }
     }
@@ -161,11 +174,24 @@ impl Drop for DevProcesses {
 struct NamedChild {
     description: &'static str,
     child: Child,
+    is_frontend_dev_server: bool,
 }
 
 impl NamedChild {
     fn new(description: &'static str, child: Child) -> Self {
-        Self { description, child }
+        Self {
+            description,
+            child,
+            is_frontend_dev_server: false,
+        }
+    }
+
+    fn frontend(description: &'static str, child: Child) -> Self {
+        Self {
+            description,
+            child,
+            is_frontend_dev_server: true,
+        }
     }
 
     fn stop(&mut self) {
