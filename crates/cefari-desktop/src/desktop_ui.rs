@@ -60,14 +60,48 @@ pub struct AppSchemeResource {
 }
 
 #[cfg_attr(not(feature = "cef"), allow(dead_code))]
-pub fn resolve_app_scheme_resource(resource_dir: &Path, url: &str) -> Option<AppSchemeResource> {
-    let resource_path = app_scheme_resource_path(url)?;
-    let path = resolve_safe_resource_path(resource_dir, &resource_path)?;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AppSchemeResourceError {
+    InvalidUrl,
+    UnsafePath,
+    Missing { path: PathBuf },
+}
 
-    path.is_file().then(|| AppSchemeResource {
-        mime_type: mime_type_for_path(&path),
-        path,
-    })
+impl std::fmt::Display for AppSchemeResourceError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidUrl => write!(formatter, "invalid app-scheme URL"),
+            Self::UnsafePath => write!(formatter, "unsafe app-scheme resource path"),
+            Self::Missing { path } => {
+                write!(formatter, "missing app-scheme resource {}", path.display())
+            }
+        }
+    }
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+#[allow(dead_code)]
+pub fn resolve_app_scheme_resource(resource_dir: &Path, url: &str) -> Option<AppSchemeResource> {
+    diagnose_app_scheme_resource(resource_dir, url).ok()
+}
+
+#[cfg_attr(not(feature = "cef"), allow(dead_code))]
+pub fn diagnose_app_scheme_resource(
+    resource_dir: &Path,
+    url: &str,
+) -> Result<AppSchemeResource, AppSchemeResourceError> {
+    let resource_path = app_scheme_resource_path(url).ok_or(AppSchemeResourceError::InvalidUrl)?;
+    let path = resolve_safe_resource_path(resource_dir, &resource_path)
+        .ok_or(AppSchemeResourceError::UnsafePath)?;
+
+    if path.is_file() {
+        Ok(AppSchemeResource {
+            mime_type: mime_type_for_path(&path),
+            path,
+        })
+    } else {
+        Err(AppSchemeResourceError::Missing { path })
+    }
 }
 
 fn load_from_candidates(
@@ -288,7 +322,8 @@ mod tests {
 
     use super::{
         CEFARI_APP_ORIGIN, ResourceCandidate, ShellUiState, UI_ENTRY_RESOURCE,
-        diagnostic_view_html, load_from_candidates, resolve_app_scheme_resource,
+        diagnose_app_scheme_resource, diagnostic_view_html, load_from_candidates,
+        resolve_app_scheme_resource,
     };
 
     #[test]
@@ -370,6 +405,25 @@ mod tests {
         assert!(resolve_app_scheme_resource(&root, "cefari://other/index.html").is_none());
         assert!(resolve_app_scheme_resource(&root, "cefari://app/../secret.txt").is_none());
         assert!(resolve_app_scheme_resource(&root, "cefari://app/missing.css").is_none());
+
+        fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    #[test]
+    fn app_scheme_diagnostics_classify_resource_failures() {
+        let root = temp_dir("app-scheme-diagnostics");
+        fs::create_dir_all(&root).expect("root should exist");
+
+        let invalid = diagnose_app_scheme_resource(&root, "file:///tmp/index.html")
+            .expect_err("invalid URL should be diagnosed");
+        let unsafe_path = diagnose_app_scheme_resource(&root, "cefari://app/../secret.txt")
+            .expect_err("unsafe path should be diagnosed");
+        let missing = diagnose_app_scheme_resource(&root, "cefari://app/missing.css")
+            .expect_err("missing file should be diagnosed");
+
+        assert_eq!(invalid.to_string(), "invalid app-scheme URL");
+        assert_eq!(unsafe_path.to_string(), "unsafe app-scheme resource path");
+        assert!(missing.to_string().contains("missing.css"));
 
         fs::remove_dir_all(root).expect("temp dir should be removable");
     }

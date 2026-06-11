@@ -380,6 +380,16 @@ pub fn denied_response_json(request_json: &str, message: &str) -> String {
     response_json(&denied_response(request_id(request_json), message))
 }
 
+pub fn transport_error_response_json(request_json: &str, reason: &str) -> String {
+    response_json(&CefariIpcResponse {
+        id: request_id(request_json),
+        outcome: CefariIpcOutcome::Err(CefariIpcError::Unsupported {
+            command: "bridge".to_owned(),
+            reason: reason.to_owned(),
+        }),
+    })
+}
+
 fn invalid_response(id: String, message: &str) -> CefariIpcResponse {
     CefariIpcResponse {
         id,
@@ -414,6 +424,7 @@ mod tests {
     use super::{
         BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CEFARI_DEFAULT_STYLES, CefariBridge,
         NavigationDecision, NavigationPolicy, NavigationSurface, origin_from_url,
+        transport_error_response_json,
     };
     use crate::desktop_ipc::NativeShellContext;
 
@@ -572,6 +583,27 @@ mod tests {
         assert!(CEFARI_BRIDGE_SCRIPT.contains(".cefari-drag button"));
         assert!(!CEFARI_BRIDGE_SCRIPT.contains("header {"));
         assert!(!CEFARI_BRIDGE_SCRIPT.contains("nav {"));
+    }
+
+    #[test]
+    fn transport_errors_return_typed_unsupported_response() {
+        let request = CefariIpcRequest {
+            id: "request-transport".to_owned(),
+            command: CefariIpcCommand::UpdateState,
+        };
+        let request_json = serde_json::to_string(&request).expect("request should serialize");
+
+        let response_json =
+            transport_error_response_json(&request_json, "native IPC transport failed");
+        let response = serde_json::from_str::<cefari_core::CefariIpcResponse>(&response_json)
+            .expect("response should deserialize");
+
+        assert_eq!(response.id, "request-transport");
+        assert!(matches!(
+            response.outcome,
+            CefariIpcOutcome::Err(CefariIpcError::Unsupported { command, reason })
+                if command == "bridge" && reason == "native IPC transport failed"
+        ));
     }
 
     #[test]

@@ -144,9 +144,9 @@ mod imp {
 
     use crate::desktop_bridge::{
         BridgeOriginPolicy, NavigationDecision, NavigationPolicy, NavigationSurface,
-        denied_response_json, origin_from_url,
+        denied_response_json, origin_from_url, transport_error_response_json,
     };
-    use crate::desktop_ui::{CEFARI_APP_SCHEME, resolve_app_scheme_resource};
+    use crate::desktop_ui::{CEFARI_APP_SCHEME, diagnose_app_scheme_resource};
     use crate::external;
 
     use super::{CefRuntimePathConfig, resolve_cef_runtime_paths};
@@ -217,6 +217,10 @@ mod imp {
             );
 
             if initialized != 1 {
+                error!(
+                    initialized,
+                    "CEF initialization failed before browser creation"
+                );
                 anyhow::bail!("CEF initialization returned {initialized}");
             }
 
@@ -279,6 +283,13 @@ mod imp {
             );
 
             if created != 1 {
+                error!(
+                    created,
+                    url = %url.to_string(),
+                    width = bounds.width,
+                    height = bounds.height,
+                    "CEF browser creation failed"
+                );
                 anyhow::bail!("CEF browser creation returned {created}");
             }
 
@@ -547,17 +558,25 @@ mod imp {
             }
         }
 
-        fn resource_handler_for_url(&self, url: &str) -> Option<cef::ResourceHandler> {
+        fn resource_handler_for_url(&self, url: &str) -> Result<cef::ResourceHandler, String> {
             let resource_dir = self
                 .0
                 .lock()
                 .ok()
-                .and_then(|state| state.resource_dir.clone())?;
-            let resource = resolve_app_scheme_resource(&resource_dir, url)?;
+                .and_then(|state| state.resource_dir.clone())
+                .ok_or_else(|| "app-scheme resource root is not installed".to_owned())?;
+            let resource = diagnose_app_scheme_resource(&resource_dir, url)
+                .map_err(|error| error.to_string())?;
             let path = resource.path.to_string_lossy();
             let stream =
-                cef::stream_reader_create_for_file(Some(&cef::CefString::from(path.as_ref())))?;
-            Some(StreamResourceHandler::new_with_stream(
+                cef::stream_reader_create_for_file(Some(&cef::CefString::from(path.as_ref())))
+                    .ok_or_else(|| {
+                        format!(
+                            "failed to open resource stream for {}",
+                            resource.path.display()
+                        )
+                    })?;
+            Ok(StreamResourceHandler::new_with_stream(
                 resource.mime_type.to_owned(),
                 stream,
             ))
@@ -1130,11 +1149,13 @@ mod imp {
                 request: Option<&mut cef::Request>,
             ) -> Option<cef::ResourceHandler> {
                 let url = request_url(request);
-                let handler = self.app_scheme.resource_handler_for_url(&url);
-                if handler.is_none() {
-                    warn!(url, "CEF app-scheme resource was not found or was denied");
+                match self.app_scheme.resource_handler_for_url(&url) {
+                    Ok(handler) => Some(handler),
+                    Err(reason) => {
+                        warn!(url, reason, "CEF app-scheme resource request failed");
+                        None
+                    }
                 }
-                handler
             }
         }
     }
@@ -1187,9 +1208,15 @@ mod imp {
                 callback: callback.clone(),
             }) {
                 if let Ok(callback) = callback.lock() {
-                    callback.failure(1, &error.to_string());
+                    let response =
+                        transport_error_response_json(request, "native IPC transport failed");
+                    callback.success_str(&response);
                 }
-                error!(%error, frame_url, "failed to enqueue CEF bridge IPC request");
+                error!(
+                    %error,
+                    frame_url,
+                    "failed to enqueue CEF bridge IPC request"
+                );
             }
 
             true
