@@ -403,7 +403,11 @@ fn write_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<(
 
 #[cfg(test)]
 mod tests {
-    use std::io::{ErrorKind, Read, Write};
+    use std::{
+        io::{ErrorKind, Read, Write},
+        thread,
+        time::{Duration, Instant},
+    };
 
     use super::{StaticDevServer, request_path, static_file_path, substitute_frontend_port};
 
@@ -441,13 +445,7 @@ mod tests {
         std::fs::write(root.join("index.html"), "hello cefari").expect("index should be written");
 
         let mut server = StaticDevServer::start(&root, 0).expect("server should start");
-        let mut stream = std::net::TcpStream::connect(server.address())
-            .expect("server should accept connections");
-        stream
-            .write_all(b"GET / HTTP/1.1\r\nhost: localhost\r\n\r\n")
-            .expect("request should be sent");
-
-        let response = read_response(&mut stream);
+        let response = get_until_ok(server.address());
         assert!(response.contains("200 OK"));
         assert!(response.contains("hello cefari"));
 
@@ -461,6 +459,27 @@ mod tests {
             .expect("system time should be after epoch")
             .as_nanos();
         std::env::temp_dir().join(format!("cefari-dev-server-test-{label}-{suffix}"))
+    }
+
+    fn get_until_ok(address: std::net::SocketAddr) -> String {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut last_response = String::new();
+
+        while Instant::now() < deadline {
+            let mut stream =
+                std::net::TcpStream::connect(address).expect("server should accept connections");
+            stream
+                .write_all(b"GET / HTTP/1.1\r\nhost: localhost\r\n\r\n")
+                .expect("request should be sent");
+
+            last_response = read_response(&mut stream);
+            if last_response.contains("200 OK") {
+                return last_response;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        last_response
     }
 
     fn read_response(stream: &mut std::net::TcpStream) -> String {

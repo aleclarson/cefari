@@ -207,7 +207,8 @@ fn run_event_loop(
             },
             #[cfg(feature = "cef")]
             Event::UserEvent(UserEvent::CefMessagePump(deadline)) => {
-                cef_message_pump_deadline = earliest_deadline(cef_message_pump_deadline, deadline);
+                cef_message_pump_deadline =
+                    Some(earliest_deadline(cef_message_pump_deadline, deadline));
                 if deadline <= Instant::now() {
                     pump_due_cef_message_loop(&guards.cef_runtime, &mut cef_message_pump_deadline);
                 }
@@ -413,7 +414,7 @@ fn run_event_loop(
             }
             _ => {}
         }
-        apply_cef_message_pump_control_flow(&cef_message_pump_deadline, control_flow);
+        apply_cef_message_pump_control_flow(cef_message_pump_deadline.as_ref(), control_flow);
     });
 }
 
@@ -449,14 +450,14 @@ fn cef_message_pump_deadline(delay_ms: i64) -> Instant {
     if delay_ms <= 0 {
         now
     } else {
-        now.checked_add(Duration::from_millis(delay_ms as u64))
+        now.checked_add(Duration::from_millis(delay_ms.unsigned_abs()))
             .unwrap_or(now)
     }
 }
 
 #[cfg_attr(not(feature = "cef"), allow(dead_code))]
-fn earliest_deadline(current: Option<Instant>, next: Instant) -> Option<Instant> {
-    Some(current.map_or(next, |current| current.min(next)))
+fn earliest_deadline(current: Option<Instant>, next: Instant) -> Instant {
+    current.map_or(next, |current| current.min(next))
 }
 
 fn pump_due_cef_message_loop(
@@ -469,7 +470,7 @@ fn pump_due_cef_message_loop(
     }
 }
 
-fn apply_cef_message_pump_control_flow(deadline: &Option<Instant>, control_flow: &mut ControlFlow) {
+fn apply_cef_message_pump_control_flow(deadline: Option<&Instant>, control_flow: &mut ControlFlow) {
     if matches!(
         *control_flow,
         ControlFlow::Exit | ControlFlow::ExitWithCode(_)
@@ -786,14 +787,14 @@ mod tests {
         let later = now + Duration::from_secs(5);
         let earlier = now + Duration::from_secs(1);
 
-        assert_eq!(earliest_deadline(Some(later), earlier), Some(earlier));
+        assert_eq!(earliest_deadline(Some(later), earlier), earlier);
 
         let mut wait = ControlFlow::Wait;
-        apply_cef_message_pump_control_flow(&Some(later), &mut wait);
+        apply_cef_message_pump_control_flow(Some(&later), &mut wait);
         assert_eq!(wait, ControlFlow::WaitUntil(later));
 
         let mut exit = ControlFlow::Exit;
-        apply_cef_message_pump_control_flow(&Some(later), &mut exit);
+        apply_cef_message_pump_control_flow(Some(&later), &mut exit);
         assert_eq!(exit, ControlFlow::Exit);
     }
 }

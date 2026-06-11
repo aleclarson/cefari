@@ -395,23 +395,19 @@ mod tests {
     #[test]
     fn returns_typed_unsupported_errors_for_reserved_commands() {
         let mut context = FakeShellContext::default();
+        let command = CefariIpcCommand::Notification(NotificationCommand::PermissionState);
+        let response = DesktopIpcDispatcher::dispatch(
+            CefariIpcRequest {
+                id: "reserved".to_owned(),
+                command,
+            },
+            &mut context,
+        );
 
-        for command in [CefariIpcCommand::Notification(
-            NotificationCommand::PermissionState,
-        )] {
-            let response = DesktopIpcDispatcher::dispatch(
-                CefariIpcRequest {
-                    id: "reserved".to_owned(),
-                    command,
-                },
-                &mut context,
-            );
-
-            assert!(matches!(
-                response.outcome,
-                CefariIpcOutcome::Err(CefariIpcError::Unsupported { .. })
-            ));
-        }
+        assert!(matches!(
+            response.outcome,
+            CefariIpcOutcome::Err(CefariIpcError::Unsupported { .. })
+        ));
     }
 
     #[test]

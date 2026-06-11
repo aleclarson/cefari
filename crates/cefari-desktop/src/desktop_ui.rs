@@ -81,7 +81,6 @@ impl std::fmt::Display for AppSchemeResourceError {
     }
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 #[allow(dead_code)]
 pub fn resolve_app_scheme_resource(resource_dir: &Path, url: &str) -> Option<AppSchemeResource> {
     diagnose_app_scheme_resource(resource_dir, url).ok()
@@ -247,9 +246,7 @@ fn app_scheme_resource_path(url: &str) -> Option<String> {
         return None;
     }
 
-    let authority_end = rest
-        .find(|character| matches!(character, '/' | '?' | '#'))
-        .unwrap_or(rest.len());
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = &rest[..authority_end];
     if !authority.eq_ignore_ascii_case(CEFARI_APP_HOST) {
         return None;
@@ -257,7 +254,7 @@ fn app_scheme_resource_path(url: &str) -> Option<String> {
 
     let after_authority = &rest[authority_end..];
     let path_end = after_authority
-        .find(|character| matches!(character, '?' | '#'))
+        .find(['?', '#'])
         .unwrap_or(after_authority.len());
     let resource_path = after_authority[..path_end].trim_start_matches('/');
     if resource_path.is_empty() {
@@ -289,12 +286,12 @@ fn mime_type_for_path(path: &Path) -> &'static str {
         .as_deref()
     {
         Some("css") => "text/css",
-        Some("html") | Some("htm") => "text/html",
-        Some("js") | Some("mjs") => "text/javascript",
+        Some("html" | "htm") => "text/html",
+        Some("js" | "mjs") => "text/javascript",
         Some("json") => "application/json",
         Some("svg") => "image/svg+xml",
         Some("png") => "image/png",
-        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("jpg" | "jpeg") => "image/jpeg",
         Some("webp") => "image/webp",
         Some("ico") => "image/x-icon",
         Some("wasm") => "application/wasm",

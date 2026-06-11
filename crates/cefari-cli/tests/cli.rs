@@ -239,7 +239,7 @@ fn package_release_metadata_uses_release_desktop_binary() {
         .expect("cefari build should run");
     assert_success(&build_output);
 
-    let output = with_fake_tools(cefari(), &tools, &log)
+    let output = with_only_fake_tools(cefari(), &tools, &log)
         .arg("package")
         .arg(&root)
         .arg("--release")
@@ -327,7 +327,7 @@ fn package_invokes_cargo_packager_subcommand_when_binary_is_unavailable() {
         .expect("cefari build should run");
     assert_success(&build_output);
 
-    let output = with_fake_tools(cefari(), &tools, &log)
+    let output = with_only_fake_tools(cefari(), &tools, &log)
         .arg("package")
         .arg(&root)
         .output()
@@ -676,6 +676,12 @@ fn with_fake_tools(mut command: Command, tools_dir: &Path, log: &Path) -> Comman
     paths.extend(std::env::split_paths(&path));
     let path = std::env::join_paths(paths).expect("PATH should be joinable");
     command.env("PATH", path);
+    command.env("CEFARI_TOOL_LOG", log);
+    command
+}
+
+fn with_only_fake_tools(mut command: Command, tools_dir: &Path, log: &Path) -> Command {
+    command.env("PATH", tools_dir);
     command.env("CEFARI_TOOL_LOG", log);
     command
 }

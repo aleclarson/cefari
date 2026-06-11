@@ -183,9 +183,7 @@ pub fn origin_from_url(url: &str) -> Option<String> {
         return Some(url.to_owned());
     }
 
-    let authority_end = rest
-        .find(|character| matches!(character, '/' | '?' | '#'))
-        .unwrap_or(rest.len());
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = &rest[..authority_end];
 
     (!authority.is_empty()).then(|| format!("{}://{}", scheme.to_ascii_lowercase(), authority))
@@ -242,7 +240,7 @@ impl NavigationPolicy {
             NavigationSurface::Download => NavigationPolicyDecision::deny("downloads are disabled"),
             NavigationSurface::MainFrame => self.decide_main_frame(url),
             NavigationSurface::Popup | NavigationSurface::OpenUrlFromTab => {
-                self.decide_external_surface(url)
+                Self::decide_external_surface(url)
             }
         }
     }
@@ -259,7 +257,7 @@ impl NavigationPolicy {
         NavigationPolicyDecision::deny("untrusted main-frame navigation")
     }
 
-    fn decide_external_surface(&self, url: &str) -> NavigationPolicyDecision {
+    fn decide_external_surface(url: &str) -> NavigationPolicyDecision {
         if is_supported_external_url(url) {
             NavigationPolicyDecision::open_externally("external URL surface")
         } else {

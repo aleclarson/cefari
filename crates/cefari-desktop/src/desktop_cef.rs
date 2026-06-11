@@ -107,6 +107,8 @@ fn platform_package_formats() -> &'static [PackageFormat] {
 
 #[cfg(feature = "cef")]
 mod imp {
+    #![allow(clippy::transmute_ptr_to_ptr)]
+
     use std::{
         cell::RefCell,
         fs,
@@ -421,17 +423,15 @@ mod imp {
             root_cache_path = %runtime_paths.root_cache_path.display(),
             log_file = %runtime_paths.log_file.display(),
             browser_subprocess_path = %runtime_paths.browser_subprocess_path.display(),
-            resources_dir_path = %display_optional_path(&runtime_paths.resources_dir_path),
-            locales_dir_path = %display_optional_path(&runtime_paths.locales_dir_path),
-            framework_dir_path = %display_optional_path(&runtime_paths.framework_dir_path),
+            resources_dir_path = %display_optional_path(runtime_paths.resources_dir_path.as_ref()),
+            locales_dir_path = %display_optional_path(runtime_paths.locales_dir_path.as_ref()),
+            framework_dir_path = %display_optional_path(runtime_paths.framework_dir_path.as_ref()),
             "resolved CEF runtime paths"
         );
     }
 
-    fn display_optional_path(path: &Option<PathBuf>) -> String {
-        path.as_ref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "<unset>".to_owned())
+    fn display_optional_path(path: Option<&PathBuf>) -> String {
+        path.map_or_else(|| "<unset>".to_owned(), |path| path.display().to_string())
     }
 
     #[derive(Clone, Default)]
@@ -650,12 +650,13 @@ mod imp {
             return;
         };
         let scheme = cef::CefString::from(CEFARI_APP_SCHEME);
-        let options = (SchemeOptions::STANDARD.get_raw()
+        let options = SchemeOptions::STANDARD.get_raw()
             | SchemeOptions::LOCAL.get_raw()
             | SchemeOptions::SECURE.get_raw()
             | SchemeOptions::CORS_ENABLED.get_raw()
-            | SchemeOptions::FETCH_ENABLED.get_raw())
-            as ::std::os::raw::c_int;
+            | SchemeOptions::FETCH_ENABLED.get_raw();
+        let options =
+            ::std::os::raw::c_int::try_from(options).expect("CEF scheme options should fit c_int");
         let registered = registrar.add_custom_scheme(Some(&scheme), options);
         if registered == 1 {
             info!(scheme = CEFARI_APP_SCHEME, "registered CEF app scheme");
@@ -1380,9 +1381,8 @@ mod imp {
             let state = SharedBrowserState::default();
 
             assert!(!state.has_browser());
-            let error = match state.active_browser() {
-                Ok(_) => panic!("empty state should not return a browser"),
-                Err(error) => error,
+            let Err(error) = state.active_browser() else {
+                panic!("empty state should not return a browser");
             };
 
             assert!(
@@ -1426,39 +1426,42 @@ mod imp {
             _window: &tao::window::Window,
             _url: &str,
         ) -> anyhow::Result<()> {
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+            self.disabled_result()
         }
 
         pub fn has_browser(&self) -> bool {
+            if self.enabled {
+                unreachable!("CEF cannot be enabled without the cef feature");
+            }
             false
         }
 
         pub fn browser_identifier(&self) -> anyhow::Result<i32> {
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+            self.disabled_result()
         }
 
         pub fn reload_browser(&self) -> anyhow::Result<()> {
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+            self.disabled_result()
         }
 
         pub fn focus_browser(&self, _focused: bool) -> anyhow::Result<()> {
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+            self.disabled_result()
         }
 
         pub fn close_browser(&self, _force_close: bool) -> anyhow::Result<()> {
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+            self.disabled_result()
         }
 
         pub fn notify_browser_resized(&self) -> anyhow::Result<()> {
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+            self.disabled_result()
         }
 
         pub fn notify_browser_screen_info_changed(&self) -> anyhow::Result<()> {
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+            self.disabled_result()
         }
 
         pub fn notify_browser_move_or_resize_started(&self) -> anyhow::Result<()> {
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+            self.disabled_result()
         }
 
         pub fn pump_message_loop(&self) {
@@ -1467,7 +1470,18 @@ mod imp {
             }
         }
 
-        pub fn set_app_scheme_resource_dir(&self, _resource_dir: PathBuf) {}
+        pub fn set_app_scheme_resource_dir(&self, _resource_dir: PathBuf) {
+            if self.enabled {
+                unreachable!("CEF cannot be enabled without the cef feature");
+            }
+        }
+
+        fn disabled_result<T>(&self) -> anyhow::Result<T> {
+            if self.enabled {
+                unreachable!("CEF cannot be enabled without the cef feature");
+            }
+            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
+        }
     }
 }
 
