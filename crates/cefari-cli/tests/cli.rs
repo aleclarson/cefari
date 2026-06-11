@@ -697,6 +697,9 @@ fn create_fake_cef_resources(path: &Path) -> PathBuf {
     )
     .expect("CEF archive metadata should be written");
     fs::write(path.join("libcef.fixture"), "fixture").expect("CEF fixture file should be written");
+    fs::create_dir_all(path.join("locales")).expect("CEF locales dir should be created");
+    fs::write(path.join("locales/en-US.pak"), "locale")
+        .expect("CEF locale fixture should be written");
     path.to_path_buf()
 }
 
