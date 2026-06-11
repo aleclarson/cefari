@@ -7,7 +7,7 @@ identifier = "dev.cefari.vite-react-basic"
 dist = "frontend/dist"
 build_command = ["deno", "task", "build:frontend"]
 dev_command = ["deno", "task", "dev:frontend", "--host", "127.0.0.1", "--port", "{port}"]
-dev_port = 5173
+dev_port = 5111
 
 [daemon]
 entry = "daemon/main.ts"
