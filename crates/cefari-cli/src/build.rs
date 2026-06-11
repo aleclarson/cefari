@@ -217,12 +217,7 @@ fn build_daemon(project_dir: &Path, project: &ProjectConfig, output_dir: &Path) 
 
 fn build_desktop(project: &ProjectConfig, output_dir: &Path, release: bool) -> Result<()> {
     let mut command = Command::new("cargo");
-    command
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(workspace_manifest())
-        .arg("-p")
-        .arg("cefari-desktop");
+    configure_desktop_build_command(&mut command);
     if release {
         command.arg("--release");
     }
@@ -232,7 +227,7 @@ fn build_desktop(project: &ProjectConfig, output_dir: &Path, release: bool) -> R
         .context("failed to run cargo build for cefari-desktop")?;
 
     if !status.success() {
-        anyhow::bail!("cargo build -p cefari-desktop failed with status {status}");
+        anyhow::bail!("cargo build -p cefari-desktop --features cef failed with status {status}");
     }
 
     let source = workspace_target_dir(release).join(desktop_crate_binary_name());
@@ -246,6 +241,17 @@ fn build_desktop(project: &ProjectConfig, output_dir: &Path, release: bool) -> R
     })?;
 
     Ok(())
+}
+
+fn configure_desktop_build_command(command: &mut Command) {
+    command
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(workspace_manifest())
+        .arg("-p")
+        .arg("cefari-desktop")
+        .arg("--features")
+        .arg("cef");
 }
 
 pub(crate) fn workspace_manifest() -> std::path::PathBuf {
@@ -274,7 +280,8 @@ mod tests {
     use crate::project::ProjectConfig;
 
     use super::{
-        copy_frontend_dist, daemon_executable_name, desktop_executable_name, workspace_manifest,
+        configure_desktop_build_command, copy_frontend_dist, daemon_executable_name,
+        desktop_executable_name, workspace_manifest,
     };
 
     #[test]
@@ -303,6 +310,19 @@ mod tests {
     fn resolves_workspace_manifest() {
         assert!(workspace_manifest().ends_with("Cargo.toml"));
         assert!(workspace_manifest().exists());
+    }
+
+    #[test]
+    fn desktop_build_command_enables_cef_feature() {
+        let mut command = std::process::Command::new("cargo");
+
+        configure_desktop_build_command(&mut command);
+
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(args.windows(2).any(|args| args == ["--features", "cef"]));
     }
 
     #[test]

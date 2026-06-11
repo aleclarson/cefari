@@ -26,7 +26,7 @@ tray-icon.workspace = true
 user-notify.workspace = true
 
 [features]
-default = []
+default = ["cef"]
 cef = ["dep:cef"]
 
 [lints]
