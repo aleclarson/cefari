@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::desktop_ipc::{DesktopIpcDispatcher, NativeShellContext};
 
+pub const CEFARI_DEFAULT_DEV_PORT: u16 = 5173;
 pub const CEFARI_DEFAULT_STYLES: &str = r".cefari-drag {
   -webkit-app-region: drag;
 }
@@ -103,6 +104,20 @@ pub struct BridgeOriginPolicy {
 }
 
 impl BridgeOriginPolicy {
+    pub fn from_environment() -> Self {
+        let dev_port = std::env::var("CEFARI_FRONTEND_PORT")
+            .ok()
+            .and_then(|port| port.parse::<u16>().ok())
+            .or_else(|| {
+                std::env::var("CEFARI_FRONTEND_URL")
+                    .ok()
+                    .and_then(|url| dev_port_from_url(&url))
+            })
+            .unwrap_or(CEFARI_DEFAULT_DEV_PORT);
+
+        Self::for_dev_port(dev_port)
+    }
+
     pub fn for_dev_port(dev_port: u16) -> Self {
         Self {
             trusted_packaged_origins: vec![
@@ -130,6 +145,31 @@ impl BridgeOriginPolicy {
         self.is_trusted_origin(origin)
             .then_some(CEFARI_BRIDGE_SCRIPT)
     }
+
+    pub fn bridge_script_for_url(&self, url: &str) -> Option<&'static str> {
+        self.bridge_script_for_origin(&origin_from_url(url)?)
+    }
+}
+
+pub fn origin_from_url(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    if scheme.eq_ignore_ascii_case("file") {
+        return Some(url.to_owned());
+    }
+
+    let authority_end = rest
+        .find(|character| matches!(character, '/' | '?' | '#'))
+        .unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+
+    (!authority.is_empty()).then(|| format!("{}://{}", scheme.to_ascii_lowercase(), authority))
+}
+
+fn dev_port_from_url(url: &str) -> Option<u16> {
+    let origin = origin_from_url(url)?;
+    let authority = origin.split_once("://")?.1;
+    let port = authority.rsplit_once(':')?.1;
+    port.parse().ok()
 }
 
 pub struct CefariBridge {
@@ -238,7 +278,10 @@ mod tests {
         UpdateCheckResult, UpdateStateKind, UpdateStateResult, WindowState,
     };
 
-    use super::{BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CEFARI_DEFAULT_STYLES, CefariBridge};
+    use super::{
+        BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CEFARI_DEFAULT_STYLES, CefariBridge,
+        origin_from_url,
+    };
     use crate::desktop_ipc::NativeShellContext;
 
     #[derive(Debug, Default)]
@@ -355,6 +398,29 @@ mod tests {
             None
         );
         assert!(CEFARI_BRIDGE_SCRIPT.contains("window.cefari"));
+    }
+
+    #[test]
+    fn origin_policy_maps_page_urls_before_returning_bridge_script() {
+        let policy = BridgeOriginPolicy::for_dev_port(5173);
+
+        assert_eq!(
+            origin_from_url("http://127.0.0.1:5173/dashboard").as_deref(),
+            Some("http://127.0.0.1:5173")
+        );
+        assert_eq!(
+            origin_from_url("cefari://app/index.html").as_deref(),
+            Some("cefari://app")
+        );
+        assert!(origin_from_url("not a url").is_none());
+        assert_eq!(
+            policy.bridge_script_for_url("http://127.0.0.1:5173/dashboard"),
+            Some(CEFARI_BRIDGE_SCRIPT)
+        );
+        assert_eq!(
+            policy.bridge_script_for_url("https://example.test/dashboard"),
+            None
+        );
     }
 
     #[test]

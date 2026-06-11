@@ -17,6 +17,8 @@ mod imp {
         wrap_render_handler, wrap_request_handler,
     };
 
+    use crate::desktop_bridge::{BridgeOriginPolicy, origin_from_url};
+
     pub struct CefRuntime {
         initialized: bool,
         #[allow(dead_code)]
@@ -59,7 +61,7 @@ mod imp {
             Ok(Self {
                 initialized: true,
                 state: state.clone(),
-                client: CefariCefClient::build(state),
+                client: CefariCefClient::build(state, BridgeOriginPolicy::from_environment()),
             })
         }
 
@@ -257,12 +259,12 @@ mod imp {
     }
 
     impl CefariCefClient {
-        fn build(state: SharedBrowserState) -> cef::Client {
+        fn build(state: SharedBrowserState, origin_policy: BridgeOriginPolicy) -> cef::Client {
             Self::new(
                 CefariLifeSpanHandler::new(state),
                 CefariLoadHandler::new(),
                 CefariRenderHandler::new(),
-                CefariRequestHandler::new(),
+                CefariRequestHandler::new(origin_policy),
             )
         }
     }
@@ -359,7 +361,9 @@ mod imp {
     }
 
     wrap_request_handler! {
-        struct CefariRequestHandler;
+        struct CefariRequestHandler {
+            origin_policy: BridgeOriginPolicy,
+        }
 
         impl RequestHandler {
             fn on_before_browse(
@@ -412,7 +416,10 @@ mod imp {
                 );
             }
 
-            fn on_document_available_in_main_frame(&self, _browser: Option<&mut cef::Browser>) {
+            fn on_document_available_in_main_frame(&self, browser: Option<&mut cef::Browser>) {
+                if let Some(mut frame) = browser.and_then(|browser| browser.main_frame()) {
+                    inject_bridge_script(&self.origin_policy, &mut frame);
+                }
                 debug!("CEF document available in main frame");
             }
         }
@@ -452,6 +459,33 @@ mod imp {
         message
             .map(|message| cef::CefString::from(&message.name()).to_string())
             .unwrap_or_default()
+    }
+
+    fn inject_bridge_script(origin_policy: &BridgeOriginPolicy, frame: &mut cef::Frame) {
+        if frame.is_main() == 0 {
+            debug!("skipping Cefari bridge injection for non-main frame");
+            return;
+        }
+
+        let frame_url = cef::CefString::from(&frame.url()).to_string();
+        let origin = origin_from_url(&frame_url);
+        let Some(script) = origin_policy.bridge_script_for_url(&frame_url) else {
+            debug!(
+                frame_url,
+                origin = origin.as_deref().unwrap_or_default(),
+                "skipping Cefari bridge injection for untrusted frame"
+            );
+            return;
+        };
+
+        let code = cef::CefString::from(script);
+        let script_url = cef::CefString::from("cefari://bridge/bootstrap.js");
+        frame.execute_java_script(Some(&code), Some(&script_url), 1);
+        info!(
+            frame_url,
+            origin = origin.as_deref().unwrap_or_default(),
+            "Cefari bridge script injected"
+        );
     }
 
     impl Drop for CefRuntime {
