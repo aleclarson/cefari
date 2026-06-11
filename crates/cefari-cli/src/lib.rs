@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use serde::Serialize;
 
 mod build;
 mod cef;
@@ -229,23 +230,7 @@ pub fn init_project(path: &Path, name: Option<&str>) -> Result<()> {
 
     write_file(
         &path.join("cefari.toml"),
-        &format!(
-            r#"[app]
-project_name = "{project_name}"
-name = "{display_name}"
-identifier = "{identifier}"
-
-[frontend]
-dist = "frontend/dist"
-dev_port = 5173
-
-[daemon]
-entry = "daemon/main.ts"
-
-[package]
-product_name = "{display_name}"
-"#
-        ),
+        &initial_project_manifest(&project_name, &display_name, &identifier)?,
     )?;
     write_file(&path.join("frontend/index.html"), FRONTEND_TEMPLATE)?;
     write_file(&path.join("daemon/main.ts"), DAEMON_TEMPLATE)?;
@@ -268,6 +253,62 @@ cefari package
 
     println!("created Cefari project at {}", path.display());
     Ok(())
+}
+
+fn initial_project_manifest(
+    project_name: &str,
+    display_name: &str,
+    identifier: &str,
+) -> Result<String> {
+    toml::to_string_pretty(&InitialProjectManifest {
+        app: InitialProjectApp {
+            project_name,
+            name: display_name,
+            identifier,
+        },
+        frontend: InitialFrontendConfig {
+            dist: "frontend/dist",
+            dev_port: 5173,
+        },
+        daemon: InitialDaemonConfig {
+            entry: "daemon/main.ts",
+        },
+        package: InitialPackageConfig {
+            product_name: display_name,
+        },
+    })
+    .context("failed to encode project manifest")
+}
+
+#[derive(Serialize)]
+struct InitialProjectManifest<'a> {
+    app: InitialProjectApp<'a>,
+    frontend: InitialFrontendConfig<'a>,
+    daemon: InitialDaemonConfig<'a>,
+    package: InitialPackageConfig<'a>,
+}
+
+#[derive(Serialize)]
+struct InitialProjectApp<'a> {
+    project_name: &'a str,
+    name: &'a str,
+    identifier: &'a str,
+}
+
+#[derive(Serialize)]
+struct InitialFrontendConfig<'a> {
+    dist: &'a str,
+    dev_port: u16,
+}
+
+#[derive(Serialize)]
+struct InitialDaemonConfig<'a> {
+    entry: &'a str,
+}
+
+#[derive(Serialize)]
+struct InitialPackageConfig<'a> {
+    product_name: &'a str,
 }
 
 fn doctor() {
@@ -433,7 +474,8 @@ const CEFARI_SKILL_FILES: &[(&str, &str)] = &[
 mod tests {
     use clap::Parser;
 
-    use super::{Cli, Command, identifier_slug, project_name_slug};
+    use super::{Cli, Command, identifier_slug, initial_project_manifest, project_name_slug};
+    use crate::project::ProjectConfig;
 
     #[test]
     fn parses_planned_commands() {
@@ -511,6 +553,22 @@ mod tests {
                 .command,
             Command::Clean { .. }
         ));
+    }
+
+    #[test]
+    fn initial_project_manifest_escapes_toml_strings() {
+        let manifest = initial_project_manifest(
+            "quoted-app",
+            "Quoted \"App\" \\ Demo\nNext",
+            "dev.cefari.quoted-app",
+        )
+        .expect("manifest should serialize");
+
+        let project: ProjectConfig = toml::from_str(&manifest).expect("manifest should parse");
+
+        assert_eq!(project.app.project_name, "quoted-app");
+        assert_eq!(project.app.name, "Quoted \"App\" \\ Demo\nNext");
+        assert_eq!(project.package.product_name, "Quoted \"App\" \\ Demo\nNext");
     }
 
     #[test]

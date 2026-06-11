@@ -2,6 +2,7 @@ use std::{fs, path::Path, time::Duration};
 
 use anyhow::{Context, Result};
 use download_cef::{CefFile, CefIndex, DEFAULT_TARGET};
+use serde::Serialize;
 
 use crate::project::ProjectConfig;
 
@@ -61,7 +62,8 @@ fn prepare_cef_with_overrides(
         resources_dir: &normalize(&resources_dir),
     };
 
-    fs::write(cef_dir.join("manifest.json"), manifest.to_json()).with_context(|| {
+    let manifest_json = manifest.to_json()?;
+    fs::write(cef_dir.join("manifest.json"), manifest_json).with_context(|| {
         format!(
             "failed to write CEF preparation manifest at {}",
             cef_dir.join("manifest.json").display()
@@ -233,6 +235,7 @@ fn read_archive_file(path: &Path) -> Result<CefFile> {
         .with_context(|| format!("failed to parse CEF archive metadata at {}", path.display()))
 }
 
+#[derive(Serialize)]
 struct CefPreparationManifest<'a> {
     version: &'a str,
     archive_version: &'a str,
@@ -246,30 +249,8 @@ struct CefPreparationManifest<'a> {
 }
 
 impl CefPreparationManifest<'_> {
-    fn to_json(&self) -> String {
-        format!(
-            r#"{{
-  "version": "{}",
-  "archive_version": "{}",
-  "target_os": "{}",
-  "target_arch": "{}",
-  "target": "{}",
-  "source": "{}",
-  "sha1": "{}",
-  "cache_dir": "{}",
-  "resources_dir": "{}"
-}}
-"#,
-            self.version,
-            self.archive_version,
-            self.target_os,
-            self.target_arch,
-            self.target,
-            self.source,
-            self.sha1,
-            self.cache_dir,
-            self.resources_dir
-        )
+    fn to_json(&self) -> Result<String> {
+        serde_json::to_string_pretty(self).context("failed to encode CEF preparation manifest")
     }
 }
 
@@ -281,7 +262,7 @@ fn normalize(path: &Path) -> String {
 mod tests {
     use std::fs;
 
-    use super::prepare_cef_with_overrides;
+    use super::{CefPreparationManifest, prepare_cef_with_overrides};
 
     #[test]
     fn prepares_cef_manifest_and_resources_dir() {
@@ -315,5 +296,30 @@ mod tests {
         assert!(manifest.contains(r#""sha1": "fixture-sha1""#));
 
         std::fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    #[test]
+    fn cef_preparation_manifest_escapes_json_strings() {
+        let manifest = CefPreparationManifest {
+            version: "148.4.0",
+            archive_version: "148.0.10",
+            target_os: "macos",
+            target_arch: "aarch64",
+            target: "macosarm64",
+            source: "https://example.test/quoted\"archive.tar.bz2",
+            sha1: "fixture\\sha\nnext",
+            cache_dir: "/tmp/cache",
+            resources_dir: "/tmp/resources",
+        };
+
+        let json = manifest.to_json().expect("manifest should serialize");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("manifest should be valid JSON");
+
+        assert_eq!(
+            value["source"],
+            "https://example.test/quoted\"archive.tar.bz2"
+        );
+        assert_eq!(value["sha1"], "fixture\\sha\nnext");
     }
 }

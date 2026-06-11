@@ -298,7 +298,8 @@ fn write_package_manifest(
         cef_archive_json: normalize(&cef_resources_dir.join("archive.json")),
     };
 
-    fs::write(package_dir.join("manifest.json"), manifest.to_json()).with_context(|| {
+    let manifest_json = manifest.to_json()?;
+    fs::write(package_dir.join("manifest.json"), manifest_json).with_context(|| {
         format!(
             "failed to write package manifest at {}",
             package_dir.join("manifest.json").display()
@@ -339,7 +340,7 @@ fn run_cargo_packager_if_available(package_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 struct PackageManifest {
     product_name: String,
     identifier: String,
@@ -352,28 +353,8 @@ struct PackageManifest {
 }
 
 impl PackageManifest {
-    fn to_json(&self) -> String {
-        format!(
-            r#"{{
-  "product_name": "{}",
-  "identifier": "{}",
-  "desktop_binary": "{}",
-  "frontend_dir": "{}",
-  "daemon_dir": "{}",
-  "daemon_executable": "{}",
-  "cef_resources": "{}",
-  "cef_archive_json": "{}"
-}}
-"#,
-            self.product_name,
-            self.identifier,
-            self.desktop_binary,
-            self.frontend_dir,
-            self.daemon_dir,
-            self.daemon_executable,
-            self.cef_resources,
-            self.cef_archive_json
-        )
+    fn to_json(&self) -> Result<String> {
+        serde_json::to_string_pretty(self).context("failed to encode package manifest")
     }
 }
 
@@ -391,7 +372,7 @@ mod tests {
 
     use crate::project::ProjectConfig;
 
-    use super::verify_cef_package_payload;
+    use super::{PackageManifest, verify_cef_package_payload};
 
     #[test]
     fn verifies_cef_package_payload_contract() {
@@ -423,6 +404,26 @@ mod tests {
         assert!(error.to_string().contains("missing CEF locales directory"));
 
         fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    #[test]
+    fn package_manifest_escapes_json_strings() {
+        let manifest = PackageManifest {
+            product_name: "Quoted \"App\" \\ Demo\nNext".to_owned(),
+            identifier: "dev.cefari.quoted-app".to_owned(),
+            desktop_binary: "quoted-app".to_owned(),
+            frontend_dir: "/tmp/frontend".to_owned(),
+            daemon_dir: "/tmp/daemon".to_owned(),
+            daemon_executable: "/tmp/daemon/quoted-app-daemon".to_owned(),
+            cef_resources: "/tmp/cef".to_owned(),
+            cef_archive_json: "/tmp/cef/archive.json".to_owned(),
+        };
+
+        let json = manifest.to_json().expect("manifest should serialize");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("manifest should be valid JSON");
+
+        assert_eq!(value["product_name"], "Quoted \"App\" \\ Demo\nNext");
     }
 
     fn create_desktop_binary(build_dir: &Path, name: &str) {
