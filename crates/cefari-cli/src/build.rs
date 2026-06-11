@@ -227,7 +227,7 @@ fn build_desktop(project: &ProjectConfig, output_dir: &Path, release: bool) -> R
         .context("failed to run cargo build for cefari-desktop")?;
 
     if !status.success() {
-        anyhow::bail!("cargo build -p cefari-desktop --features cef failed with status {status}");
+        anyhow::bail!("cargo build -p cefari-desktop failed with status {status}");
     }
 
     let source = workspace_target_dir(release).join(desktop_crate_binary_name());
@@ -249,9 +249,7 @@ fn configure_desktop_build_command(command: &mut Command) {
         .arg("--manifest-path")
         .arg(workspace_manifest())
         .arg("-p")
-        .arg("cefari-desktop")
-        .arg("--features")
-        .arg("cef");
+        .arg("cefari-desktop");
 }
 
 pub(crate) fn workspace_manifest() -> std::path::PathBuf {
@@ -313,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn desktop_build_command_enables_cef_feature() {
+    fn desktop_build_command_targets_desktop_crate() {
         let mut command = std::process::Command::new("cargo");
 
         configure_desktop_build_command(&mut command);
@@ -322,7 +320,8 @@ mod tests {
             .get_args()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
-        assert!(args.windows(2).any(|args| args == ["--features", "cef"]));
+        assert!(args.windows(2).any(|args| args == ["-p", "cefari-desktop"]));
+        assert!(!args.iter().any(|arg| arg == "--features"));
     }
 
     #[test]

@@ -2,10 +2,8 @@ use std::path::{Path, PathBuf};
 
 use cefari_core::{PackageFormat, RuntimePaths, packaged_resources_dir};
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 const CEF_RESOURCES_DIR_ENV: &str = "CEFARI_CEF_RESOURCES_DIR";
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CefRuntimePathConfig {
     cache_path: PathBuf,
@@ -17,7 +15,6 @@ struct CefRuntimePathConfig {
     framework_dir_path: Option<PathBuf>,
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn resolve_cef_runtime_paths(paths: &RuntimePaths) -> CefRuntimePathConfig {
     cef_runtime_path_config(
         paths,
@@ -26,7 +23,6 @@ fn resolve_cef_runtime_paths(paths: &RuntimePaths) -> CefRuntimePathConfig {
     )
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn cef_runtime_path_config(
     paths: &RuntimePaths,
     resource_candidates: Vec<PathBuf>,
@@ -55,7 +51,6 @@ fn cef_runtime_path_config(
     }
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn cef_resource_dir_candidates(paths: &RuntimePaths) -> Vec<PathBuf> {
     let mut candidates = std::env::var_os(CEF_RESOURCES_DIR_ENV)
         .map(PathBuf::from)
@@ -71,25 +66,21 @@ fn cef_resource_dir_candidates(paths: &RuntimePaths) -> Vec<PathBuf> {
     candidates
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn cef_framework_dir(resources_dir: &Path) -> Option<PathBuf> {
     let framework_dir = resources_dir.join("Chromium Embedded Framework.framework");
     framework_dir.is_dir().then_some(framework_dir)
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 #[cfg(target_os = "macos")]
 fn platform_package_formats() -> &'static [PackageFormat] {
     &[PackageFormat::App, PackageFormat::Dmg]
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 #[cfg(target_os = "windows")]
 fn platform_package_formats() -> &'static [PackageFormat] {
     &[PackageFormat::Nsis, PackageFormat::Wix]
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn platform_package_formats() -> &'static [PackageFormat] {
     &[
@@ -99,13 +90,11 @@ fn platform_package_formats() -> &'static [PackageFormat] {
     ]
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
 fn platform_package_formats() -> &'static [PackageFormat] {
     &[]
 }
 
-#[cfg(feature = "cef")]
 mod imp {
     #![allow(clippy::transmute_ptr_to_ptr)]
 
@@ -1394,105 +1383,12 @@ mod imp {
     }
 }
 
-#[cfg(feature = "cef")]
 pub use imp::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime, MessagePumpScheduler};
 
-#[cfg(feature = "cef")]
 pub fn initialize(paths: &cefari_core::RuntimePaths) -> anyhow::Result<CefRuntime> {
     let runtime = imp::initialize(paths)?;
     tracing::info!("CEF runtime prepared");
     Ok(runtime)
-}
-
-#[cfg(not(feature = "cef"))]
-mod imp {
-    use std::path::PathBuf;
-
-    use tracing::info;
-
-    pub struct CefRuntime {
-        enabled: bool,
-    }
-
-    #[allow(dead_code)]
-    impl CefRuntime {
-        pub fn initialize(_paths: &cefari_core::RuntimePaths) -> Self {
-            info!("CEF feature disabled; skipping CEF initialization");
-            Self { enabled: false }
-        }
-
-        pub fn create_browser(
-            &mut self,
-            _window: &tao::window::Window,
-            _url: &str,
-        ) -> anyhow::Result<()> {
-            self.disabled_result()
-        }
-
-        pub fn has_browser(&self) -> bool {
-            if self.enabled {
-                unreachable!("CEF cannot be enabled without the cef feature");
-            }
-            false
-        }
-
-        pub fn browser_identifier(&self) -> anyhow::Result<i32> {
-            self.disabled_result()
-        }
-
-        pub fn reload_browser(&self) -> anyhow::Result<()> {
-            self.disabled_result()
-        }
-
-        pub fn focus_browser(&self, _focused: bool) -> anyhow::Result<()> {
-            self.disabled_result()
-        }
-
-        pub fn close_browser(&self, _force_close: bool) -> anyhow::Result<()> {
-            self.disabled_result()
-        }
-
-        pub fn notify_browser_resized(&self) -> anyhow::Result<()> {
-            self.disabled_result()
-        }
-
-        pub fn notify_browser_screen_info_changed(&self) -> anyhow::Result<()> {
-            self.disabled_result()
-        }
-
-        pub fn notify_browser_move_or_resize_started(&self) -> anyhow::Result<()> {
-            self.disabled_result()
-        }
-
-        pub fn pump_message_loop(&self) {
-            if self.enabled {
-                unreachable!("CEF cannot be enabled without the cef feature");
-            }
-        }
-
-        pub fn set_app_scheme_resource_dir(&self, _resource_dir: PathBuf) {
-            if self.enabled {
-                unreachable!("CEF cannot be enabled without the cef feature");
-            }
-        }
-
-        fn disabled_result<T>(&self) -> anyhow::Result<T> {
-            if self.enabled {
-                unreachable!("CEF cannot be enabled without the cef feature");
-            }
-            anyhow::bail!("CEF feature disabled; rebuild cefari-desktop with --features cef")
-        }
-    }
-}
-
-#[cfg(not(feature = "cef"))]
-pub use imp::CefRuntime;
-
-#[cfg(not(feature = "cef"))]
-pub fn initialize(paths: &cefari_core::RuntimePaths) -> CefRuntime {
-    let runtime = CefRuntime::initialize(paths);
-    tracing::info!("CEF runtime prepared");
-    runtime
 }
 
 #[cfg(test)]

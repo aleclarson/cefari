@@ -1,8 +1,7 @@
-#[cfg(feature = "cef")]
-use std::sync::Arc;
 use std::{
     fs,
     process::{Command, ExitCode},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
@@ -58,11 +57,7 @@ fn run() -> Result<()> {
     let instance = acquire_single_instance(&paths)?;
     let log_guards = init_logging(&paths)?;
 
-    #[cfg(feature = "cef")]
     let cef_runtime = desktop_cef::initialize(&paths)?;
-
-    #[cfg(not(feature = "cef"))]
-    let cef_runtime = desktop_cef::initialize(&paths);
 
     let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
     let desktop_notifier =
@@ -103,9 +98,7 @@ enum UserEvent {
     Menu(muda::MenuEvent),
     Tray(tray_icon::TrayIconEvent),
     SmokeExit,
-    #[cfg(feature = "cef")]
     BridgeIpc(desktop_cef::CefBridgeIpcRequest),
-    #[cfg(feature = "cef")]
     CefMessagePump(Instant),
 }
 
@@ -125,13 +118,11 @@ fn run_native_shell(
     tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
         let _ = event_proxy.send_event(UserEvent::Tray(event));
     }));
-    #[cfg(feature = "cef")]
     guards
         .cef_runtime
         .set_bridge_ipc_sender(Arc::new(TaoBridgeIpcSender {
             event_proxy: event_loop.create_proxy(),
         }));
-    #[cfg(feature = "cef")]
     guards
         .cef_runtime
         .set_message_pump_scheduler(Arc::new(TaoMessagePumpScheduler {
@@ -205,7 +196,6 @@ fn run_event_loop(
                 }
                 _ => {}
             },
-            #[cfg(feature = "cef")]
             Event::UserEvent(UserEvent::CefMessagePump(deadline)) => {
                 cef_message_pump_deadline =
                     Some(earliest_deadline(cef_message_pump_deadline, deadline));
@@ -264,7 +254,6 @@ fn run_event_loop(
                 info!("CEF live smoke requested timed desktop shutdown");
                 *control_flow = ControlFlow::Exit;
             }
-            #[cfg(feature = "cef")]
             Event::UserEvent(UserEvent::BridgeIpc(request)) => {
                 let mut context = DesktopShellContext {
                     window: &mut window,
@@ -444,7 +433,6 @@ fn log_cef_lifecycle_result(result: Result<()>, success_message: &'static str) {
     }
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn cef_message_pump_deadline(delay_ms: i64) -> Instant {
     let now = Instant::now();
     if delay_ms <= 0 {
@@ -455,7 +443,6 @@ fn cef_message_pump_deadline(delay_ms: i64) -> Instant {
     }
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn earliest_deadline(current: Option<Instant>, next: Instant) -> Instant {
     current.map_or(next, |current| current.min(next))
 }
@@ -487,12 +474,10 @@ fn apply_cef_message_pump_control_flow(deadline: Option<&Instant>, control_flow:
     }
 }
 
-#[cfg(feature = "cef")]
 struct TaoBridgeIpcSender {
     event_proxy: tao::event_loop::EventLoopProxy<UserEvent>,
 }
 
-#[cfg(feature = "cef")]
 impl desktop_cef::BridgeIpcSender for TaoBridgeIpcSender {
     fn send_bridge_ipc(&self, request: desktop_cef::CefBridgeIpcRequest) -> Result<()> {
         self.event_proxy
@@ -501,12 +486,10 @@ impl desktop_cef::BridgeIpcSender for TaoBridgeIpcSender {
     }
 }
 
-#[cfg(feature = "cef")]
 struct TaoMessagePumpScheduler {
     event_proxy: tao::event_loop::EventLoopProxy<UserEvent>,
 }
 
-#[cfg(feature = "cef")]
 impl desktop_cef::MessagePumpScheduler for TaoMessagePumpScheduler {
     fn schedule_message_pump_work(&self, delay_ms: i64) -> Result<()> {
         self.event_proxy

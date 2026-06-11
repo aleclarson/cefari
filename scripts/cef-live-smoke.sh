@@ -94,8 +94,8 @@ runSmoke().catch((error) => {
 </html>
 HTML
 
-echo "building cefari-desktop with CEF support"
-cargo build -p cefari-desktop --features cef
+echo "building cefari-desktop"
+cargo build -p cefari-desktop
 
 desktop_bin="$repo_root/target/debug/cefari-desktop"
 if [[ ! -x "$desktop_bin" ]]; then

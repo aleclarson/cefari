@@ -60,7 +60,7 @@ When `CEFARI_LIVE_CEF_SMOKE` is not set, the command exits successfully with a
 skip message so CI can include it without requiring local CEF binaries. When it
 does run, the script:
 
-- builds `cefari-desktop` with `--features cef`
+- builds `cefari-desktop`
 - creates a minimal fixture frontend under `.tmp/cef-live-smoke/resources`
 - loads that fixture through `cefari://app/index.html` by setting
   `CEFARI_RESOURCE_DIR`

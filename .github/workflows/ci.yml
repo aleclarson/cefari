@@ -37,8 +37,8 @@ jobs:
       - name: Check workspace
         run: cargo check --workspace
 
-      - name: Check desktop CEF feature
-        run: cargo check -p cefari-desktop --features cef
+      - name: Check desktop crate
+        run: cargo check -p cefari-desktop
 
       - name: Test workspace
         run: cargo test --workspace

@@ -110,7 +110,7 @@ Run Rust checks:
 
 ```bash
 cargo check --workspace
-cargo check -p cefari-desktop --features cef
+cargo check -p cefari-desktop
 ```
 
 Run Rust tests:
@@ -268,7 +268,7 @@ Run the main local checks:
 ```bash
 cargo fmt --all --check
 cargo check --workspace
-cargo check -p cefari-desktop --features cef
+cargo check -p cefari-desktop
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 deno task --config packages/cefari-app/deno.json check

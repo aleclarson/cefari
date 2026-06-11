@@ -6,9 +6,7 @@ use std::{
 use anyhow::{Context, Result};
 use cefari_core::{PackageFormat, RuntimePaths, packaged_resources_dir, resolve_resource};
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 pub const CEFARI_APP_SCHEME: &str = "cefari";
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 pub const CEFARI_APP_HOST: &str = "app";
 pub const CEFARI_RESOURCE_DIR_ENV: &str = "CEFARI_RESOURCE_DIR";
 pub const CEFARI_APP_ORIGIN: &str = "cefari://app";
@@ -54,14 +52,12 @@ impl ShellUi {
     }
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppSchemeResource {
     pub path: PathBuf,
     pub mime_type: &'static str,
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AppSchemeResourceError {
     InvalidUrl,
@@ -86,7 +82,6 @@ pub fn resolve_app_scheme_resource(resource_dir: &Path, url: &str) -> Option<App
     diagnose_app_scheme_resource(resource_dir, url).ok()
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 pub fn diagnose_app_scheme_resource(
     resource_dir: &Path,
     url: &str,
@@ -239,7 +234,6 @@ fn app_url_for_entry(entry_path: &Path) -> Result<String> {
     Ok(format!("{CEFARI_APP_ORIGIN}/{file_name}"))
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn app_scheme_resource_path(url: &str) -> Option<String> {
     let (scheme, rest) = url.split_once("://")?;
     if !scheme.eq_ignore_ascii_case(CEFARI_APP_SCHEME) {
@@ -264,7 +258,6 @@ fn app_scheme_resource_path(url: &str) -> Option<String> {
     }
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn resolve_safe_resource_path(resource_dir: &Path, resource_path: &str) -> Option<PathBuf> {
     let mut path = resource_dir.to_path_buf();
     for component in Path::new(resource_path).components() {
@@ -277,7 +270,6 @@ fn resolve_safe_resource_path(resource_dir: &Path, resource_path: &str) -> Optio
     Some(path)
 }
 
-#[cfg_attr(not(feature = "cef"), allow(dead_code))]
 fn mime_type_for_path(path: &Path) -> &'static str {
     match path
         .extension()
