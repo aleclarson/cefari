@@ -1,0 +1,14 @@
+[app]
+project_name = "cefari-smoke"
+name = "Cefari Smoke"
+identifier = "dev.cefari.smoke"
+
+[frontend]
+dist = "frontend"
+dev_port = 5273
+
+[daemon]
+entry = "daemon/main.ts"
+
+[package]
+product_name = "Cefari Smoke"

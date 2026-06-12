@@ -20,9 +20,14 @@ use cefari_core::{
 };
 
 use crate::{
-    build::workspace_manifest,
+    build::{workspace_manifest, workspace_target_dir},
     project::{FrontendConfig, ProjectConfig},
 };
+
+#[cfg(target_os = "macos")]
+const MACOS_DEV_APP_EXECUTABLE: &str = "cefari-desktop";
+#[cfg(target_os = "macos")]
+const MACOS_DEV_APP_BUNDLE_IDENTIFIER: &str = "dev.cefari.app";
 
 pub fn dev_project(project_dir: &Path, frontend_port: Option<u16>) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
@@ -31,7 +36,7 @@ pub fn dev_project(project_dir: &Path, frontend_port: Option<u16>) -> Result<()>
     let mut processes = DevProcesses::new();
     processes.start_frontend(project_dir, &project.frontend, frontend_port)?;
     processes.spawn_daemon(project_dir, &project)?;
-    processes.spawn_desktop()?;
+    processes.spawn_desktop(project_dir)?;
     processes.wait()
 }
 
@@ -101,12 +106,12 @@ impl DevProcesses {
         Ok(())
     }
 
-    fn spawn_desktop(&mut self) -> Result<()> {
+    fn spawn_desktop(&mut self, project_dir: &Path) -> Result<()> {
         let frontend_url = self.frontend_url.as_deref();
-        let mut command = Command::new("cargo");
-        configure_desktop_run_command(&mut command);
+        let mut command = desktop_launch_command()?;
         let child = command
             .envs(frontend_url.map(|url| ("CEFARI_FRONTEND_URL", url)))
+            .env("CEFARI_RESOURCE_DIR", project_dir)
             .stdin(Stdio::null())
             .spawn()
             .context("failed to start Rust desktop app for cefari dev")?;
@@ -160,6 +165,7 @@ impl DevProcesses {
     }
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn configure_desktop_run_command(command: &mut Command) {
     command
         .arg("run")
@@ -167,6 +173,105 @@ fn configure_desktop_run_command(command: &mut Command) {
         .arg(workspace_manifest())
         .arg("-p")
         .arg("cefari-desktop");
+}
+
+#[cfg(not(target_os = "macos"))]
+fn desktop_launch_command() -> Result<Command> {
+    let mut command = Command::new("cargo");
+    configure_desktop_run_command(&mut command);
+    Ok(command)
+}
+
+#[cfg(target_os = "macos")]
+fn desktop_launch_command() -> Result<Command> {
+    let mut build = Command::new("cargo");
+    configure_desktop_build_command(&mut build);
+    let status = build
+        .status()
+        .context("failed to run cargo build for cefari-desktop")?;
+    if !status.success() {
+        anyhow::bail!("cargo build -p cefari-desktop failed with status {status}");
+    }
+
+    let paths = RuntimePaths::resolve(&AppIdentity::cefari())?;
+    let desktop_binary = workspace_target_dir(false).join(MACOS_DEV_APP_EXECUTABLE);
+    let app_executable = prepare_macos_dev_app(&paths.cache_dir, &desktop_binary)?;
+    Ok(Command::new(app_executable))
+}
+
+#[cfg(target_os = "macos")]
+fn configure_desktop_build_command(command: &mut Command) {
+    command
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(workspace_manifest())
+        .arg("-p")
+        .arg("cefari-desktop");
+}
+
+#[cfg(target_os = "macos")]
+fn prepare_macos_dev_app(cache_dir: &Path, desktop_binary: &Path) -> Result<PathBuf> {
+    let app_path = cache_dir
+        .join("dev-app")
+        .join(format!("{MACOS_DEV_APP_EXECUTABLE}.app"));
+    let contents_dir = app_path.join("Contents");
+    let macos_dir = contents_dir.join("MacOS");
+    let frameworks_dir = contents_dir.join("Frameworks");
+    let resources_dir = contents_dir.join("Resources");
+    let app_executable = macos_dir.join(MACOS_DEV_APP_EXECUTABLE);
+
+    for directory in [&macos_dir, &frameworks_dir, &resources_dir] {
+        fs::create_dir_all(directory)
+            .with_context(|| format!("failed to create {}", directory.display()))?;
+    }
+    fs::write(contents_dir.join("Info.plist"), macos_dev_app_info_plist()).with_context(|| {
+        format!(
+            "failed to write macOS dev app Info.plist under {}",
+            contents_dir.display()
+        )
+    })?;
+    fs::copy(desktop_binary, &app_executable).with_context(|| {
+        format!(
+            "failed to copy desktop executable {} -> {}",
+            desktop_binary.display(),
+            app_executable.display()
+        )
+    })?;
+
+    Ok(app_executable)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_dev_app_info_plist() -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Cefari Dev</string>
+    <key>CFBundleExecutable</key>
+    <string>{MACOS_DEV_APP_EXECUTABLE}</string>
+    <key>CFBundleIdentifier</key>
+    <string>{MACOS_DEV_APP_BUNDLE_IDENTIFIER}</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Cefari Dev</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+</dict>
+</plist>
+"#
+    )
 }
 
 impl Drop for DevProcesses {
@@ -394,8 +499,13 @@ fn handle_static_request(mut stream: TcpStream, frontend_dir: &Path) -> Result<(
     let file = static_file_path(frontend_dir, path);
 
     match fs::read(&file) {
-        Ok(contents) => write_response(&mut stream, "200 OK", &contents),
-        Err(_) => write_response(&mut stream, "404 Not Found", b"not found"),
+        Ok(contents) => write_response(&mut stream, "200 OK", mime_type_for_path(&file), &contents),
+        Err(_) => write_response(
+            &mut stream,
+            "404 Not Found",
+            "text/plain; charset=utf-8",
+            b"not found",
+        ),
     }
 }
 
@@ -414,10 +524,27 @@ fn static_file_path(frontend_dir: &Path, request_path: &str) -> PathBuf {
     }
 }
 
-fn write_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<()> {
+fn mime_type_for_path(path: &Path) -> &'static str {
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("css") => "text/css; charset=utf-8",
+        Some("html") | Some("htm") => "text/html; charset=utf-8",
+        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("wasm") => "application/wasm",
+        _ => "application/octet-stream",
+    }
+}
+
+fn write_response(
+    stream: &mut TcpStream,
+    status: &str,
+    content_type: &str,
+    body: &[u8],
+) -> Result<()> {
     write!(
         stream,
-        "HTTP/1.1 {status}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
         body.len()
     )
     .context("failed to write frontend dev server response header")?;
@@ -492,9 +619,28 @@ mod tests {
         std::fs::write(root.join("index.html"), "hello cefari").expect("index should be written");
 
         let mut server = StaticDevServer::start(&root, 0).expect("server should start");
-        let response = get_until_ok(server.address());
+        let response = get_until_ok(server.address(), "/");
         assert!(response.contains("200 OK"));
+        assert!(response.contains("content-type: text/html; charset=utf-8"));
         assert!(response.contains("hello cefari"));
+
+        server.shutdown();
+        std::fs::remove_dir_all(root).expect("frontend dir should be removable");
+    }
+
+    #[test]
+    fn serves_module_scripts_with_javascript_mime_type() {
+        let root = temp_dir("frontend-module");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("frontend dir should be created");
+        std::fs::write(root.join("index.html"), "hello cefari").expect("index should be written");
+        std::fs::write(root.join("smoke.js"), "export {};").expect("script should be written");
+
+        let mut server = StaticDevServer::start(&root, 0).expect("server should start");
+        let response = get_until_ok(server.address(), "/smoke.js");
+        assert!(response.contains("200 OK"));
+        assert!(response.contains("content-type: text/javascript; charset=utf-8"));
+        assert!(response.contains("export {};"));
 
         server.shutdown();
         std::fs::remove_dir_all(root).expect("frontend dir should be removable");
@@ -508,20 +654,27 @@ mod tests {
         std::env::temp_dir().join(format!("cefari-dev-server-test-{label}-{suffix}"))
     }
 
-    fn get_until_ok(address: std::net::SocketAddr) -> String {
+    fn get_until_ok(address: std::net::SocketAddr, path: &str) -> String {
         let deadline = Instant::now() + Duration::from_secs(2);
         let mut last_response = String::new();
 
         while Instant::now() < deadline {
-            let mut stream =
-                std::net::TcpStream::connect(address).expect("server should accept connections");
-            stream
-                .write_all(b"GET / HTTP/1.1\r\nhost: localhost\r\n\r\n")
-                .expect("request should be sent");
-
-            last_response = read_response(&mut stream);
-            if last_response.contains("200 OK") {
-                return last_response;
+            match get_once(address, path) {
+                Ok(response) => {
+                    last_response = response;
+                    if last_response.contains("200 OK") {
+                        return last_response;
+                    }
+                }
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        ErrorKind::ConnectionRefused
+                            | ErrorKind::ConnectionReset
+                            | ErrorKind::TimedOut
+                            | ErrorKind::WouldBlock
+                    ) => {}
+                Err(error) => panic!("response should be readable: {error}"),
             }
             thread::sleep(Duration::from_millis(10));
         }
@@ -529,7 +682,14 @@ mod tests {
         last_response
     }
 
-    fn read_response(stream: &mut std::net::TcpStream) -> String {
+    fn get_once(address: std::net::SocketAddr, path: &str) -> std::io::Result<String> {
+        let mut stream = std::net::TcpStream::connect(address)?;
+        let request = format!("GET {path} HTTP/1.1\r\nhost: localhost\r\n\r\n");
+        stream.write_all(request.as_bytes())?;
+        read_response(&mut stream)
+    }
+
+    fn read_response(stream: &mut std::net::TcpStream) -> std::io::Result<String> {
         let mut response = Vec::new();
         let mut buffer = [0; 1024];
 
@@ -542,10 +702,10 @@ mod tests {
                 {
                     break;
                 }
-                Err(error) => panic!("response should be readable: {error}"),
+                Err(error) => return Err(error),
             }
         }
 
-        String::from_utf8(response).expect("response should be utf-8")
+        Ok(String::from_utf8(response).expect("response should be utf-8"))
     }
 }

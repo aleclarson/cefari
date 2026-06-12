@@ -40,7 +40,9 @@ const MAIN_WINDOW_WIDTH: f64 = 1200.0;
 const MAIN_WINDOW_HEIGHT: f64 = 800.0;
 const MIN_WINDOW_WIDTH: f64 = 800.0;
 const MIN_WINDOW_HEIGHT: f64 = 560.0;
+const CEFARI_SMOKE_BACKGROUND_ENV: &str = "CEFARI_SMOKE_BACKGROUND";
 const CEFARI_SMOKE_EXIT_AFTER_MS_ENV: &str = "CEFARI_SMOKE_EXIT_AFTER_MS";
+const CEF_MESSAGE_PUMP_FALLBACK_INTERVAL: Duration = Duration::from_millis(16);
 
 fn main() -> ExitCode {
     match run() {
@@ -54,15 +56,24 @@ fn main() -> ExitCode {
 
 fn run() -> Result<()> {
     let paths = RuntimePaths::resolve(&AppIdentity::cefari())?;
-    let instance = acquire_single_instance(&paths)?;
     let log_guards = init_logging(&paths)?;
 
     let cef_runtime = desktop_cef::initialize(&paths)?;
+    let instance = acquire_single_instance(&paths)?;
 
     let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
-    let desktop_notifier =
-        desktop_notifications::DesktopNotifier::from_app_config(runtime_operations.app_config())?;
-    let notifications_app_id = desktop_notifier.app_id().to_owned();
+    let background_smoke = smoke_background_requested();
+    let desktop_notifier = if background_smoke {
+        None
+    } else {
+        Some(desktop_notifications::DesktopNotifier::from_app_config(
+            runtime_operations.app_config(),
+        )?)
+    };
+    let notifications_app_id = desktop_notifier.as_ref().map_or_else(
+        || "<disabled for smoke>".to_owned(),
+        |notifier| notifier.app_id().to_owned(),
+    );
     let update_state = runtime_operations.update_check_config();
     let daemon_program = runtime_operations.daemon_service_spec().program;
     let shell_ui = desktop_ui::ShellUi::load(&paths)?;
@@ -89,7 +100,7 @@ fn run() -> Result<()> {
 struct RuntimeGuards {
     _instance: SingleInstance,
     _log_guards: LogGuards,
-    _desktop_notifier: desktop_notifications::DesktopNotifier,
+    _desktop_notifier: Option<desktop_notifications::DesktopNotifier>,
     cef_runtime: desktop_cef::CefRuntime,
 }
 
@@ -108,7 +119,9 @@ fn run_native_shell(
     runtime_operations: runtime::RuntimeOperations,
     shell_ui: &desktop_ui::ShellUi,
 ) -> Result<()> {
-    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    let background_smoke = smoke_background_requested();
+    let mut event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    configure_smoke_background_event_loop(&mut event_loop, background_smoke);
     schedule_smoke_exit_if_requested(&event_loop);
     let event_proxy = event_loop.create_proxy();
     muda::MenuEvent::set_event_handler(Some(move |event| {
@@ -132,7 +145,7 @@ fn run_native_shell(
         .cef_runtime
         .set_app_scheme_resource_dir(shell_ui.app_resource_dir().to_path_buf());
 
-    let window = create_main_window(&event_loop)?;
+    let window = create_main_window(&event_loop, background_smoke)?;
     apply_ui_diagnostic_state(&window, shell_ui);
     guards
         .cef_runtime
@@ -152,13 +165,23 @@ fn apply_ui_diagnostic_state(window: &Window, shell_ui: &desktop_ui::ShellUi) {
     }
 }
 
-fn create_main_window(event_loop: &EventLoop<UserEvent>) -> Result<Window> {
-    WindowBuilder::new()
-        .with_title(MAIN_WINDOW_TITLE)
-        .with_inner_size(LogicalSize::new(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT))
-        .with_min_inner_size(LogicalSize::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT))
+fn create_main_window(event_loop: &EventLoop<UserEvent>, background_smoke: bool) -> Result<Window> {
+    main_window_builder(background_smoke)
         .build(event_loop)
         .context("failed to create Cefari main window")
+}
+
+fn main_window_builder(background_smoke: bool) -> WindowBuilder {
+    let builder = WindowBuilder::new()
+        .with_title(MAIN_WINDOW_TITLE)
+        .with_inner_size(LogicalSize::new(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT))
+        .with_min_inner_size(LogicalSize::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT));
+
+    if background_smoke {
+        return builder.with_visible(false).with_focused(false);
+    }
+
+    builder
 }
 
 fn run_event_loop(
@@ -173,7 +196,7 @@ fn run_event_loop(
 
     let mut window = Some(window);
     let mut window_title = MAIN_WINDOW_TITLE.to_owned();
-    let mut cef_message_pump_deadline = None;
+    let mut cef_message_pump_deadline = Some(Instant::now());
     let mut tray = None;
     event_loop.run(move |event, _, control_flow| {
         let _guards = &guards;
@@ -426,6 +449,33 @@ fn smoke_exit_delay() -> Option<Duration> {
         .map(Duration::from_millis)
 }
 
+fn smoke_background_requested() -> bool {
+    std::env::var(CEFARI_SMOKE_BACKGROUND_ENV).is_ok_and(|value| value == "1")
+}
+
+#[cfg(target_os = "macos")]
+fn configure_smoke_background_event_loop(
+    event_loop: &mut EventLoop<UserEvent>,
+    background_smoke: bool,
+) {
+    if !background_smoke {
+        return;
+    }
+
+    use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
+
+    event_loop.set_activation_policy(ActivationPolicy::Prohibited);
+    event_loop.set_dock_visibility(false);
+    event_loop.set_activate_ignoring_other_apps(false);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configure_smoke_background_event_loop(
+    _event_loop: &mut EventLoop<UserEvent>,
+    _background_smoke: bool,
+) {
+}
+
 fn log_cef_lifecycle_result(result: Result<()>, success_message: &'static str) {
     match result {
         Ok(()) => debug!("{success_message}"),
@@ -451,9 +501,10 @@ fn pump_due_cef_message_loop(
     cef_runtime: &desktop_cef::CefRuntime,
     deadline: &mut Option<Instant>,
 ) {
-    if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
-        *deadline = None;
+    let now = Instant::now();
+    if deadline.is_some_and(|deadline| deadline <= now) {
         cef_runtime.pump_message_loop();
+        *deadline = Some(now + CEF_MESSAGE_PUMP_FALLBACK_INTERVAL);
     }
 }
 
@@ -522,7 +573,7 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
             .as_ref()
             .context("main window is no longer available")?;
         window.set_visible(true);
-        Ok(self.window_state(true, false))
+        Ok(self.window_state())
     }
 
     fn window_focus(&mut self) -> Result<WindowState> {
@@ -532,12 +583,12 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
             .context("main window is no longer available")?;
         window.set_visible(true);
         window.set_focus();
-        Ok(self.window_state(true, true))
+        Ok(self.window_state())
     }
 
     fn window_close(&mut self) -> Result<WindowState> {
         *self.window = None;
-        Ok(self.window_state(false, false))
+        Ok(self.window_state())
     }
 
     fn window_set_title(&mut self, title: &str) -> Result<WindowState> {
@@ -547,7 +598,7 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
             .context("main window is no longer available")?;
         window.set_title(title);
         title.clone_into(self.window_title);
-        Ok(self.window_state(true, true))
+        Ok(self.window_state())
     }
 
     fn open_logs(&mut self) -> Result<()> {
@@ -613,10 +664,10 @@ fn restart_current_executable() -> Result<()> {
 }
 
 impl DesktopShellContext<'_> {
-    fn window_state(&self, visible: bool, focused: bool) -> WindowState {
+    fn window_state(&self) -> WindowState {
         WindowState {
-            visible,
-            focused,
+            visible: self.window.as_ref().is_some_and(Window::is_visible),
+            focused: self.window.as_ref().is_some_and(Window::is_focused),
             title: self.window_title.clone(),
         }
     }
@@ -731,7 +782,7 @@ mod tests {
     use super::{
         MAIN_WINDOW_HEIGHT, MAIN_WINDOW_TITLE, MAIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT,
         MIN_WINDOW_WIDTH, apply_cef_message_pump_control_flow, cef_message_pump_deadline,
-        earliest_deadline, startup_error_message,
+        earliest_deadline, main_window_builder, startup_error_message,
     };
     use std::time::{Duration, Instant};
     use tao::event_loop::ControlFlow;
@@ -751,6 +802,17 @@ mod tests {
         assert!(
             std::hint::black_box(MAIN_WINDOW_HEIGHT) >= std::hint::black_box(MIN_WINDOW_HEIGHT)
         );
+    }
+
+    #[test]
+    fn smoke_background_window_starts_hidden_and_unfocused() {
+        let normal = main_window_builder(false);
+        let background = main_window_builder(true);
+
+        assert!(normal.window.visible);
+        assert!(normal.window.focused);
+        assert!(!background.window.visible);
+        assert!(!background.window.focused);
     }
 
     #[test]

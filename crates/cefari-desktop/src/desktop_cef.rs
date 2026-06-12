@@ -3,13 +3,26 @@ use std::path::{Path, PathBuf};
 use cefari_core::{PackageFormat, RuntimePaths, packaged_resources_dir};
 
 const CEF_RESOURCES_DIR_ENV: &str = "CEFARI_CEF_RESOURCES_DIR";
+const CEFARI_SMOKE_BACKGROUND_ENV: &str = "CEFARI_SMOKE_BACKGROUND";
+#[cfg(target_os = "macos")]
+const MACOS_CEFARI_BUNDLE_IDENTIFIER: &str = "dev.cefari.app";
+#[cfg(target_os = "macos")]
+const MACOS_CEF_HELPER_SUFFIXES: &[&str] = &[
+    "Helper (GPU)",
+    "Helper (Renderer)",
+    "Helper (Plugin)",
+    "Helper (Alerts)",
+    "Helper",
+];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CefRuntimePathConfig {
     cache_path: PathBuf,
     root_cache_path: PathBuf,
     log_file: PathBuf,
-    browser_subprocess_path: PathBuf,
+    executable_path: PathBuf,
+    browser_subprocess_path: Option<PathBuf>,
+    main_bundle_path: Option<PathBuf>,
     resources_dir_path: Option<PathBuf>,
     locales_dir_path: Option<PathBuf>,
     framework_dir_path: Option<PathBuf>,
@@ -26,7 +39,7 @@ fn resolve_cef_runtime_paths(paths: &RuntimePaths) -> CefRuntimePathConfig {
 fn cef_runtime_path_config(
     paths: &RuntimePaths,
     resource_candidates: Vec<PathBuf>,
-    browser_subprocess_path: PathBuf,
+    executable_path: PathBuf,
 ) -> CefRuntimePathConfig {
     let resources_dir_path = resource_candidates
         .into_iter()
@@ -39,16 +52,126 @@ fn cef_runtime_path_config(
         .as_ref()
         .and_then(|resources_dir| cef_framework_dir(resources_dir));
     let root_cache_path = paths.cache_dir.join("cef");
+    let browser_subprocess_path = cef_browser_subprocess_path(&root_cache_path, &executable_path);
+    let main_bundle_path = cef_main_bundle_path(&executable_path);
 
     CefRuntimePathConfig {
         cache_path: root_cache_path.join("profile"),
         root_cache_path,
         log_file: paths.log_dir.join("cef.log"),
+        executable_path: executable_path.clone(),
         browser_subprocess_path,
+        main_bundle_path,
         resources_dir_path,
         locales_dir_path,
         framework_dir_path,
     }
+}
+
+#[cfg(target_os = "macos")]
+fn cef_browser_subprocess_path(root_cache_path: &Path, executable_path: &Path) -> Option<PathBuf> {
+    if macos_app_contents_dir(executable_path).is_some() {
+        return None;
+    }
+
+    Some(macos_helper_executable_path(
+        &macos_frameworks_dir(root_cache_path, executable_path),
+        &macos_helper_executable_name(executable_path, "Helper"),
+    ))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn cef_browser_subprocess_path(_root_cache_path: &Path, executable_path: &Path) -> Option<PathBuf> {
+    Some(executable_path.to_path_buf())
+}
+
+#[cfg(target_os = "macos")]
+fn cef_main_bundle_path(executable_path: &Path) -> Option<PathBuf> {
+    macos_host_app_contents_dir(executable_path)
+        .or_else(|| macos_app_contents_dir(executable_path))
+        .and_then(|contents_dir| contents_dir.parent().map(Path::to_path_buf))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn cef_main_bundle_path(_executable_path: &Path) -> Option<PathBuf> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn macos_frameworks_dir(root_cache_path: &Path, executable_path: &Path) -> PathBuf {
+    macos_host_app_contents_dir(executable_path)
+        .map(|contents_dir| contents_dir.join("Frameworks"))
+        .unwrap_or_else(|| root_cache_path.join("loader-layout").join("Frameworks"))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_loader_executable(root_cache_path: &Path, executable_path: &Path) -> PathBuf {
+    if macos_app_contents_dir(executable_path).is_some() {
+        return executable_path.to_path_buf();
+    }
+
+    root_cache_path
+        .join("loader-layout")
+        .join("MacOS")
+        .join("cefari-desktop")
+}
+
+#[cfg(target_os = "macos")]
+fn macos_is_helper_executable(executable_path: &Path) -> bool {
+    macos_helper_host_contents_dir(executable_path).is_some()
+}
+
+#[cfg(target_os = "macos")]
+fn macos_host_app_contents_dir(executable_path: &Path) -> Option<PathBuf> {
+    macos_helper_host_contents_dir(executable_path)
+        .or_else(|| macos_app_contents_dir(executable_path))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_helper_host_contents_dir(executable_path: &Path) -> Option<PathBuf> {
+    let helper_contents_dir = macos_app_contents_dir(executable_path)?;
+    let helper_app_dir = helper_contents_dir.parent()?;
+    let frameworks_dir = helper_app_dir.parent()?;
+    if frameworks_dir.file_name()? != "Frameworks" {
+        return None;
+    }
+
+    let host_contents_dir = frameworks_dir.parent()?;
+    (host_contents_dir.file_name()? == "Contents").then_some(host_contents_dir.to_path_buf())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_app_contents_dir(executable_path: &Path) -> Option<PathBuf> {
+    let macos_dir = executable_path.parent()?;
+    if macos_dir.file_name()? != "MacOS" {
+        return None;
+    }
+
+    let contents_dir = macos_dir.parent()?;
+    if contents_dir.file_name()? != "Contents" {
+        return None;
+    }
+
+    let app_dir = contents_dir.parent()?;
+    (app_dir.extension()? == "app").then_some(contents_dir.to_path_buf())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_helper_executable_name(executable_path: &Path, suffix: &str) -> String {
+    let app_executable_name = executable_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("cefari-desktop");
+    format!("{app_executable_name} {suffix}")
+}
+
+#[cfg(target_os = "macos")]
+fn macos_helper_executable_path(frameworks_dir: &Path, helper_name: &str) -> PathBuf {
+    frameworks_dir
+        .join(format!("{helper_name}.app"))
+        .join("Contents")
+        .join("MacOS")
+        .join(helper_name)
 }
 
 fn cef_resource_dir_candidates(paths: &RuntimePaths) -> Vec<PathBuf> {
@@ -124,16 +247,17 @@ mod imp {
     use cef::wrapper::stream_resource_handler::StreamResourceHandler;
     use cef::{
         App, BrowserProcessHandler, Client, DownloadHandler, ImplApp, ImplBrowser as _,
-        ImplBrowserHost as _, ImplBrowserProcessHandler, ImplClient, ImplDownloadHandler,
-        ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler, ImplProcessMessage as _,
-        ImplRenderHandler, ImplRenderProcessHandler, ImplRequest as _, ImplRequestHandler,
-        ImplResourceRequestHandler, ImplSchemeRegistrar as _, LifeSpanHandler, LoadHandler,
-        RenderHandler, RenderProcessHandler, RequestHandler, ResourceRequestHandler, SchemeOptions,
-        WrapApp, WrapBrowserProcessHandler, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
-        WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler, WrapRequestHandler,
-        WrapResourceRequestHandler, wrap_app, wrap_browser_process_handler, wrap_client,
-        wrap_download_handler, wrap_life_span_handler, wrap_load_handler, wrap_render_handler,
-        wrap_render_process_handler, wrap_request_handler, wrap_resource_request_handler,
+        ImplBrowserHost as _, ImplBrowserProcessHandler, ImplClient, ImplCommandLine as _,
+        ImplDownloadHandler, ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler,
+        ImplProcessMessage as _, ImplRenderHandler, ImplRenderProcessHandler, ImplRequest as _,
+        ImplRequestHandler, ImplResourceRequestHandler, ImplSchemeRegistrar as _, LifeSpanHandler,
+        LoadHandler, RenderHandler, RenderProcessHandler, RequestHandler, ResourceRequestHandler,
+        SchemeOptions, WrapApp, WrapBrowserProcessHandler, WrapClient, WrapDownloadHandler,
+        WrapLifeSpanHandler, WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler,
+        WrapRequestHandler, WrapResourceRequestHandler, wrap_app, wrap_browser_process_handler,
+        wrap_client, wrap_download_handler, wrap_life_span_handler, wrap_load_handler,
+        wrap_render_handler, wrap_render_process_handler, wrap_request_handler,
+        wrap_resource_request_handler,
     };
 
     use crate::desktop_bridge::{
@@ -195,31 +319,35 @@ mod imp {
             .framework_dir_path
             .as_ref()
             .context("CEF framework directory was not found")?;
-        let resources_dir = framework_dir
-            .parent()
-            .context("CEF framework directory has no parent resource directory")?;
-        let loader_exe = runtime_paths
-            .root_cache_path
-            .join("loader-layout")
-            .join("MacOS")
-            .join("cefari-desktop");
+        let loader_exe = super::macos_loader_executable(
+            &runtime_paths.root_cache_path,
+            &runtime_paths.executable_path,
+        );
+        let helper_process = super::macos_is_helper_executable(&runtime_paths.executable_path);
         let loader_macos_dir = loader_exe
             .parent()
             .context("CEF loader executable path has no parent directory")?;
-        let loader_root = loader_macos_dir
-            .parent()
-            .context("CEF loader layout has no root directory")?;
-        let loader_frameworks_dir = loader_root.join("Frameworks");
+        let loader_frameworks_dir = super::macos_frameworks_dir(
+            &runtime_paths.root_cache_path,
+            &runtime_paths.executable_path,
+        );
 
-        fs::create_dir_all(loader_macos_dir).with_context(|| {
-            format!(
-                "failed to create CEF loader layout at {}",
-                loader_macos_dir.display()
-            )
-        })?;
-        replace_symlink(&loader_frameworks_dir, resources_dir)?;
+        if !helper_process {
+            fs::create_dir_all(loader_macos_dir).with_context(|| {
+                format!(
+                    "failed to create CEF loader layout at {}",
+                    loader_macos_dir.display()
+                )
+            })?;
+            create_clean_directory(&loader_frameworks_dir)?;
+            replace_symlink(
+                &loader_frameworks_dir.join("Chromium Embedded Framework.framework"),
+                framework_dir,
+            )?;
+            prepare_macos_helper_apps(runtime_paths, &loader_frameworks_dir)?;
+        }
 
-        let loader = CefLibraryLoader::new(&loader_exe, false);
+        let loader = CefLibraryLoader::new(&loader_exe, helper_process);
         if !loader.load() {
             anyhow::bail!(
                 "failed to load CEF framework from {}",
@@ -231,6 +359,121 @@ mod imp {
             "CEF framework loaded"
         );
         Ok(loader)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn prepare_macos_helper_apps(
+        runtime_paths: &CefRuntimePathConfig,
+        frameworks_dir: &std::path::Path,
+    ) -> Result<()> {
+        for suffix in super::MACOS_CEF_HELPER_SUFFIXES {
+            let helper_name =
+                super::macos_helper_executable_name(&runtime_paths.executable_path, suffix);
+            prepare_macos_helper_app(runtime_paths, frameworks_dir, &helper_name)?;
+        }
+
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn prepare_macos_helper_app(
+        runtime_paths: &CefRuntimePathConfig,
+        frameworks_dir: &std::path::Path,
+        helper_name: &str,
+    ) -> Result<()> {
+        let helper_exe = super::macos_helper_executable_path(frameworks_dir, helper_name);
+        let helper_macos_dir = helper_exe
+            .parent()
+            .context("CEF helper executable path has no parent directory")?;
+        let helper_contents_dir = helper_macos_dir
+            .parent()
+            .context("CEF helper app has no Contents directory")?;
+        let helper_resources_dir = helper_contents_dir.join("Resources");
+
+        fs::create_dir_all(helper_macos_dir).with_context(|| {
+            format!(
+                "failed to create CEF helper executable directory at {}",
+                helper_macos_dir.display()
+            )
+        })?;
+        fs::create_dir_all(&helper_resources_dir).with_context(|| {
+            format!(
+                "failed to create CEF helper resources directory at {}",
+                helper_resources_dir.display()
+            )
+        })?;
+        fs::write(
+            helper_contents_dir.join("Info.plist"),
+            macos_helper_info_plist(helper_name).as_bytes(),
+        )
+        .with_context(|| {
+            format!(
+                "failed to write CEF helper Info.plist under {}",
+                helper_contents_dir.display()
+            )
+        })?;
+        if runtime_paths.executable_path != helper_exe {
+            replace_file_copy(&helper_exe, &runtime_paths.executable_path)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn macos_helper_info_plist(helper_name: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>{helper_name}</string>
+    <key>CFBundleExecutable</key>
+    <string>{helper_name}</string>
+    <key>CFBundleIdentifier</key>
+    <string>{}</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>{helper_name}</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>LSUIElement</key>
+    <string>1</string>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+</dict>
+</plist>
+"#,
+            super::MACOS_CEFARI_BUNDLE_IDENTIFIER
+        )
+    }
+
+    #[cfg(target_os = "macos")]
+    fn create_clean_directory(path: &std::path::Path) -> Result<()> {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                fs::remove_file(path)
+                    .with_context(|| format!("failed to remove symlink at {}", path.display()))?;
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                fs::remove_file(path)
+                    .with_context(|| format!("failed to remove file at {}", path.display()))?;
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("failed to inspect {}", path.display()));
+            }
+        }
+
+        fs::create_dir_all(path)
+            .with_context(|| format!("failed to create directory at {}", path.display()))
     }
 
     #[cfg(target_os = "macos")]
@@ -251,6 +494,27 @@ mod imp {
         })
     }
 
+    #[cfg(target_os = "macos")]
+    fn replace_file_copy(destination: &std::path::Path, source: &std::path::Path) -> Result<()> {
+        match fs::remove_file(destination) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to remove {}", destination.display()));
+            }
+        }
+
+        fs::copy(source, destination).with_context(|| {
+            format!(
+                "failed to copy CEF helper executable {} -> {}",
+                source.display(),
+                destination.display()
+            )
+        })?;
+        Ok(())
+    }
+
     #[allow(dead_code)]
     impl CefRuntime {
         pub fn initialize(paths: &cefari_core::RuntimePaths) -> Result<Self> {
@@ -259,6 +523,7 @@ mod imp {
             prepare_cef_runtime_dirs(&runtime_paths)?;
             #[cfg(target_os = "macos")]
             let library_loader = load_cef_library(&runtime_paths)?;
+            configure_cef_api_version()?;
             let router_config = bridge_router_config();
             let message_pump = SharedMessagePumpState::default();
             let mut app = CefariApp::build(router_config.clone(), message_pump.clone());
@@ -439,13 +704,18 @@ mod imp {
         let mut settings = cef::Settings {
             no_sandbox: 1,
             external_message_pump: 1,
-            browser_subprocess_path: cef_string_from_path(&runtime_paths.browser_subprocess_path),
             cache_path: cef_string_from_path(&runtime_paths.cache_path),
             root_cache_path: cef_string_from_path(&runtime_paths.root_cache_path),
             log_file: cef_string_from_path(&runtime_paths.log_file),
             ..Default::default()
         };
 
+        if let Some(browser_subprocess_path) = &runtime_paths.browser_subprocess_path {
+            settings.browser_subprocess_path = cef_string_from_path(browser_subprocess_path);
+        }
+        if let Some(main_bundle_path) = &runtime_paths.main_bundle_path {
+            settings.main_bundle_path = cef_string_from_path(main_bundle_path);
+        }
         if let Some(resources_dir_path) = &runtime_paths.resources_dir_path {
             settings.resources_dir_path = cef_string_from_path(resources_dir_path);
         }
@@ -457,6 +727,19 @@ mod imp {
         }
 
         settings
+    }
+
+    fn configure_cef_api_version() -> Result<()> {
+        let hash = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
+        if hash.is_null() {
+            anyhow::bail!(
+                "failed to configure CEF API version {}",
+                cef::sys::CEF_API_VERSION_LAST
+            );
+        }
+
+        info!(version = cef::api_version(), "configured CEF API version");
+        Ok(())
     }
 
     fn cef_string_from_path(path: &std::path::Path) -> cef::CefString {
@@ -486,7 +769,9 @@ mod imp {
             cache_path = %runtime_paths.cache_path.display(),
             root_cache_path = %runtime_paths.root_cache_path.display(),
             log_file = %runtime_paths.log_file.display(),
-            browser_subprocess_path = %runtime_paths.browser_subprocess_path.display(),
+            executable_path = %runtime_paths.executable_path.display(),
+            browser_subprocess_path = %display_optional_path(runtime_paths.browser_subprocess_path.as_ref()),
+            main_bundle_path = %display_optional_path(runtime_paths.main_bundle_path.as_ref()),
             resources_dir_path = %display_optional_path(runtime_paths.resources_dir_path.as_ref()),
             locales_dir_path = %display_optional_path(runtime_paths.locales_dir_path.as_ref()),
             framework_dir_path = %display_optional_path(runtime_paths.framework_dir_path.as_ref()),
@@ -667,6 +952,14 @@ mod imp {
         }
 
         impl App {
+            fn on_before_command_line_processing(
+                &self,
+                process_type: Option<&cef::CefString>,
+                command_line: Option<&mut cef::CommandLine>,
+            ) {
+                configure_smoke_chromium_command_line(process_type, command_line);
+            }
+
             fn browser_process_handler(&self) -> Option<cef::BrowserProcessHandler> {
                 Some(self.browser_process_handler.clone())
             }
@@ -682,6 +975,48 @@ mod imp {
                 Some(self.render_process_handler.clone())
             }
         }
+    }
+
+    fn configure_smoke_chromium_command_line(
+        process_type: Option<&cef::CefString>,
+        command_line: Option<&mut cef::CommandLine>,
+    ) {
+        if std::env::var(super::CEFARI_SMOKE_BACKGROUND_ENV).as_deref() != Ok("1") {
+            return;
+        }
+        let Some(command_line) = command_line else {
+            return;
+        };
+
+        append_chromium_switch(command_line, "use-mock-keychain");
+        append_chromium_switch_with_value(command_line, "password-store", "basic");
+        append_chromium_switch(command_line, "disable-save-password-bubble");
+        append_chromium_switch(command_line, "disable-notifications");
+        append_chromium_switch(command_line, "deny-permission-prompts");
+
+        debug!(
+            process_type = %display_cef_process_type(process_type),
+            "configured smoke Chromium command line"
+        );
+    }
+
+    fn append_chromium_switch(command_line: &cef::CommandLine, name: &str) {
+        let name = cef::CefString::from(name);
+        command_line.append_switch(Some(&name));
+    }
+
+    fn append_chromium_switch_with_value(command_line: &cef::CommandLine, name: &str, value: &str) {
+        let name = cef::CefString::from(name);
+        let value = cef::CefString::from(value);
+        command_line.append_switch_with_value(Some(&name), Some(&value));
+    }
+
+    fn display_cef_process_type(process_type: Option<&cef::CefString>) -> String {
+        process_type
+            .and_then(cef::CefString::as_slice)
+            .map(String::from_utf16_lossy)
+            .filter(|process_type| !process_type.is_empty())
+            .unwrap_or_else(|| "<browser>".to_owned())
     }
 
     impl CefariApp {
@@ -1100,7 +1435,7 @@ mod imp {
                     .is_some_and(|frame| frame.is_main() != 0);
                 let current_frame_url = frame
                     .as_ref()
-                    .map(|frame| cef::CefString::from(&frame.url()).to_string())
+                    .map(|frame| cef_userfree_string(&frame.url()))
                     .unwrap_or_default();
                 let target_url = request_url(request);
                 self.browser_router.on_before_browse(
@@ -1251,7 +1586,7 @@ mod imp {
         ) -> bool {
             let frame_url = frame
                 .as_ref()
-                .map(|frame| cef::CefString::from(&frame.url()).to_string())
+                .map(|frame| cef_userfree_string(&frame.url()))
                 .unwrap_or_default();
             let origin = origin_from_url(&frame_url).unwrap_or_default();
             if !self.origin_policy.is_trusted_origin(&origin) {
@@ -1306,21 +1641,33 @@ mod imp {
         value.map(ToString::to_string).unwrap_or_default()
     }
 
+    fn cef_userfree_string(value: &cef::CefStringUserfree) -> String {
+        let value: Option<&cef::sys::_cef_string_utf16_t> = value.into();
+        let Some(value) = value else {
+            return String::new();
+        };
+        if value.str_.is_null() || value.length == 0 {
+            return String::new();
+        }
+
+        cef::CefString::from(*value).to_string()
+    }
+
     fn frame_url(frame: Option<&mut cef::Frame>) -> String {
         frame
-            .map(|frame| cef::CefString::from(&frame.url()).to_string())
+            .map(|frame| cef_userfree_string(&frame.url()))
             .unwrap_or_default()
     }
 
     fn request_url(request: Option<&mut cef::Request>) -> String {
         request
-            .map(|request| cef::CefString::from(&request.url()).to_string())
+            .map(|request| cef_userfree_string(&request.url()))
             .unwrap_or_default()
     }
 
     fn message_name(message: Option<&mut cef::ProcessMessage>) -> String {
         message
-            .map(|message| cef::CefString::from(&message.name()).to_string())
+            .map(|message| cef_userfree_string(&message.name()))
             .unwrap_or_default()
     }
 
@@ -1383,7 +1730,7 @@ mod imp {
             return;
         }
 
-        let frame_url = cef::CefString::from(&frame.url()).to_string();
+        let frame_url = cef_userfree_string(&frame.url());
         let origin = origin_from_url(&frame_url);
         let Some(script) = origin_policy.bridge_script_for_url(&frame_url) else {
             debug!(
@@ -1489,10 +1836,42 @@ mod path_tests {
         assert_eq!(config.cache_path, root.join("cache/cef/profile"));
         assert_eq!(config.root_cache_path, root.join("cache/cef"));
         assert_eq!(config.log_file, root.join("data/logs/cef.log"));
-        assert_eq!(config.browser_subprocess_path, subprocess);
+        assert_eq!(config.executable_path, subprocess);
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            config.browser_subprocess_path,
+            Some(root.join(
+                "cache/cef/loader-layout/Frameworks/cefari-desktop Helper.app/Contents/MacOS/cefari-desktop Helper"
+            ))
+        );
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(config.browser_subprocess_path, Some(subprocess));
+        assert!(config.main_bundle_path.is_none());
         assert!(config.resources_dir_path.is_none());
         assert!(config.locales_dir_path.is_none());
         assert!(config.framework_dir_path.is_none());
+
+        if root.exists() {
+            fs::remove_dir_all(root).expect("temp dir should be removable");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn leaves_subprocess_path_unset_for_macos_app_bundle_launch() {
+        let root = temp_dir("runtime-app-paths");
+        let paths = test_paths(&root);
+        let executable =
+            root.join("cache/dev-app/cefari-desktop.app/Contents/MacOS/cefari-desktop");
+
+        let config = cef_runtime_path_config(&paths, Vec::new(), executable.clone());
+
+        assert_eq!(config.executable_path, executable);
+        assert_eq!(config.browser_subprocess_path, None);
+        assert_eq!(
+            config.main_bundle_path,
+            Some(root.join("cache/dev-app/cefari-desktop.app"))
+        );
 
         if root.exists() {
             fs::remove_dir_all(root).expect("temp dir should be removable");

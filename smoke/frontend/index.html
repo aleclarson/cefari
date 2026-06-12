@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cefari Smoke Pending</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 32px;
+        color: CanvasText;
+        background: Canvas;
+      }
+
+      main {
+        max-width: 760px;
+      }
+
+      h1 {
+        margin: 0 0 16px;
+        font-size: 24px;
+      }
+
+      pre {
+        min-height: 260px;
+        margin: 0;
+        padding: 16px;
+        overflow: auto;
+        border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+        border-radius: 6px;
+        background: color-mix(in srgb, CanvasText 5%, transparent);
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Cefari Smoke</h1>
+      <pre id="status">Starting...</pre>
+    </main>
+    <script type="module" src="./smoke.js"></script>
+  </body>
+</html>

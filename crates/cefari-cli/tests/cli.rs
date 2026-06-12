@@ -587,6 +587,11 @@ exit 0"#,
         &tools,
         "cargo",
         r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
+if [ ! -e target/debug/cefari-desktop ]; then
+  mkdir -p target/debug
+  printf '#!/bin/sh\nexit 0\n' > target/debug/cefari-desktop
+  chmod +x target/debug/cefari-desktop
+fi
 sleep 5"#,
     );
 
@@ -612,6 +617,9 @@ sleep 5"#,
     assert!(stdout.contains("frontend dev server: http://"));
     let tool_log = fs::read_to_string(&log).expect("tool log should exist");
     assert!(tool_log.contains("deno run --watch --allow-read --allow-net daemon/main.ts"));
+    #[cfg(target_os = "macos")]
+    assert!(tool_log.contains("cargo build --manifest-path"));
+    #[cfg(not(target_os = "macos"))]
     assert!(tool_log.contains("cargo run --manifest-path"));
     assert!(tool_log.contains("cefari-desktop"));
 

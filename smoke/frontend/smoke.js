@@ -1,0 +1,388 @@
+const statusElement = document.getElementById("status");
+const phaseKey = "cefari.smoke.phase";
+const resultPath = "smoke/result.json";
+const workRoot = "smoke/work";
+const steps = [];
+
+function record(name, detail = "") {
+  const line = `${new Date().toISOString()} ${name}${
+    detail ? `: ${detail}` : ""
+  }`;
+  steps.push(line);
+  statusElement.textContent = steps.join("\n");
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function commandFile(file, payload) {
+  return payload === undefined
+    ? { command: "files", payload: { file } }
+    : { command: "files", payload: { file, payload } };
+}
+
+async function invoke(command) {
+  record("invoke", command.command);
+  const response = await window.cefari.invoke(command);
+  record(`${command.command} response`, response.outcome.status);
+  return response;
+}
+
+async function invokeOk(command, resultTag) {
+  const response = await invoke(command);
+  if (response.outcome.status !== "ok") {
+    throw new Error(
+      `${command.command} failed: ${JSON.stringify(response.outcome.payload)}`,
+    );
+  }
+
+  const result = response.outcome.payload;
+  if (resultTag && result.result !== resultTag) {
+    throw new Error(
+      `${command.command} returned ${result.result}, expected ${resultTag}`,
+    );
+  }
+  return result;
+}
+
+async function expectError(command, code) {
+  const response = await invoke(command);
+  if (response.outcome.status !== "err") {
+    throw new Error(`${command.command} unexpectedly succeeded`);
+  }
+  if (response.outcome.payload.code !== code) {
+    throw new Error(
+      `${command.command} returned ${response.outcome.payload.code}, expected ${code}`,
+    );
+  }
+  return response.outcome.payload;
+}
+
+async function expectFileEmpty(command) {
+  const result = await invokeOk(command, "file");
+  assert(
+    result.payload.result === "empty" || result.payload.result === "written",
+    `unexpected file result ${result.payload.result}`,
+  );
+  return result.payload;
+}
+
+async function writeResult(status, details = {}) {
+  const payload = {
+    status,
+    location: window.location.href,
+    completedAt: new Date().toISOString(),
+    steps,
+    ...details,
+  };
+  await expectFileEmpty(commandFile("writeFile", {
+    path: resultPath,
+    contents: { kind: "text", value: `${JSON.stringify(payload, null, 2)}\n` },
+    options: { createParents: true, overwrite: true },
+  }));
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function preReloadSmoke() {
+  record("preflight", window.location.href);
+  assert(
+    window.location.protocol === "http:",
+    "cefari dev should load the static dev server",
+  );
+  assert(
+    window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "localhost",
+    `unexpected dev hostname ${window.location.hostname}`,
+  );
+  assert(
+    window.cefari && typeof window.cefari.invoke === "function",
+    "window.cefari is missing",
+  );
+  assert(typeof window.cefari.on === "function", "window.cefari.on is missing");
+
+  const unsubscribe = window.cefari.on(() => {});
+  assert(
+    typeof unsubscribe === "function",
+    "window.cefari.on did not return an unsubscribe",
+  );
+  unsubscribe();
+
+  const defaultStyles = document.getElementById("cefari-default-styles");
+  assert(defaultStyles, "default Cefari drag-region styles were not injected");
+  assert(
+    defaultStyles.textContent.includes(".cefari-drag"),
+    "drag-region CSS is missing",
+  );
+
+  await expectError({ command: "definitelyUnknownCommand" }, "unknownCommand");
+
+  sessionStorage.setItem(phaseKey, "after-reload");
+  await invokeOk({ command: "reloadUi" }, "reloadUi");
+  await delay(1_500);
+  throw new Error("reloadUi returned but the frontend was not reloaded");
+}
+
+async function fileSmoke() {
+  const appData = await invokeOk(commandFile("appDataDir"), "file");
+  assert(
+    appData.payload.result === "appDataDir",
+    "appDataDir returned the wrong result",
+  );
+  assert(
+    appData.payload.payload.displayPath,
+    "appDataDir did not include a display path",
+  );
+
+  await expectFileEmpty(commandFile("rm", {
+    path: workRoot,
+    recursive: true,
+    force: true,
+  }));
+  await expectFileEmpty(commandFile("mkdir", {
+    path: `${workRoot}/nested`,
+    recursive: true,
+  }));
+  await expectFileEmpty(commandFile("writeFile", {
+    path: `${workRoot}/nested/input.txt`,
+    contents: { kind: "text", value: "cefari smoke text\n" },
+    options: { createParents: true, overwrite: true },
+  }));
+
+  const text = await invokeOk(
+    commandFile("readFile", {
+      path: `${workRoot}/nested/input.txt`,
+      encoding: "utf8",
+    }),
+    "file",
+  );
+  assert(text.payload.result === "text", "text read returned the wrong result");
+  assert(
+    text.payload.payload.contents === "cefari smoke text\n",
+    "text contents changed",
+  );
+
+  await expectFileEmpty(commandFile("writeFile", {
+    path: `${workRoot}/nested/bytes.bin`,
+    contents: { kind: "base64", value: "AQIDBA==" },
+    options: { createParents: true, overwrite: true },
+  }));
+  const bytes = await invokeOk(
+    commandFile("readFile", {
+      path: `${workRoot}/nested/bytes.bin`,
+      encoding: "base64",
+    }),
+    "file",
+  );
+  assert(
+    bytes.payload.result === "base64",
+    "byte read returned the wrong result",
+  );
+  assert(
+    bytes.payload.payload.contents === "AQIDBA==",
+    "byte contents changed",
+  );
+
+  const entries = await invokeOk(
+    commandFile("readdir", {
+      path: `${workRoot}/nested`,
+      withFileTypes: true,
+    }),
+    "file",
+  );
+  assert(
+    entries.payload.result === "dirEntries",
+    "readdir returned the wrong result",
+  );
+  assert(
+    entries.payload.payload.entries.some((entry) =>
+      entry.name === "input.txt" && entry.kind === "file"
+    ),
+    "readdir did not include input.txt",
+  );
+
+  const stat = await invokeOk(
+    commandFile("stat", {
+      path: `${workRoot}/nested/input.txt`,
+    }),
+    "file",
+  );
+  assert(stat.payload.result === "stat", "stat returned the wrong result");
+  assert(stat.payload.payload.kind === "file", "stat did not identify a file");
+  assert(stat.payload.payload.size > 0, "stat size was not populated");
+
+  const accessOk = await invokeOk(
+    commandFile("access", {
+      path: `${workRoot}/nested/input.txt`,
+    }),
+    "file",
+  );
+  assert(
+    accessOk.payload.result === "access",
+    "access returned the wrong result",
+  );
+  assert(
+    accessOk.payload.payload.ok === true,
+    "access did not find an existing file",
+  );
+
+  const accessMissing = await invokeOk(
+    commandFile("access", {
+      path: `${workRoot}/missing.txt`,
+    }),
+    "file",
+  );
+  assert(
+    accessMissing.payload.result === "access",
+    "missing access returned the wrong result",
+  );
+  assert(
+    accessMissing.payload.payload.ok === false,
+    "access found a missing file",
+  );
+
+  await expectFileEmpty(commandFile("copyFile", {
+    from: `${workRoot}/nested/input.txt`,
+    to: `${workRoot}/nested/copy.txt`,
+  }));
+  await expectFileEmpty(commandFile("rename", {
+    from: `${workRoot}/nested/copy.txt`,
+    to: `${workRoot}/nested/renamed.txt`,
+  }));
+  const renamed = await invokeOk(
+    commandFile("readFile", {
+      path: `${workRoot}/nested/renamed.txt`,
+      encoding: "utf8",
+    }),
+    "file",
+  );
+  assert(
+    renamed.payload.payload.contents === "cefari smoke text\n",
+    "renamed contents changed",
+  );
+
+  await expectError(
+    commandFile("readFile", {
+      path: "../outside.txt",
+      encoding: "utf8",
+    }),
+    "invalidCommand",
+  );
+}
+
+async function postReloadSmoke() {
+  record("post-reload");
+  const updateState = await invokeOk({ command: "updateState" }, "updateState");
+  assert(
+    updateState.payload.state === "notConfigured",
+    "updates should be unconfigured",
+  );
+
+  const updateCheck = await invokeOk({ command: "updateCheck" }, "updateCheck");
+  assert(
+    updateCheck.payload.state === "notConfigured",
+    "update check should stay local",
+  );
+  assert(
+    updateCheck.payload.version === null,
+    "unconfigured update check should not report a version",
+  );
+  assert(
+    updateCheck.payload.updateId === null,
+    "unconfigured update check should not report an id",
+  );
+  await expectError(
+    { command: "updateApply", payload: { updateId: null } },
+    "unsupported",
+  );
+
+  await expectError({
+    command: "openExternalUrl",
+    payload: { url: "file:///tmp/cefari-smoke" },
+  }, "invalidCommand");
+  await expectError({
+    command: "notification",
+    payload: { notification: "permissionState" },
+  }, "unsupported");
+
+  const service = await invoke({ command: "serviceStatus" });
+  if (service.outcome.status === "ok") {
+    assert(
+      service.outcome.payload.result === "serviceStatus",
+      "serviceStatus result mismatch",
+    );
+    assert(
+      typeof service.outcome.payload.payload.status === "string",
+      "serviceStatus did not include a status string",
+    );
+  } else {
+    assert(
+      service.outcome.payload.code === "unsupported",
+      `serviceStatus returned ${service.outcome.payload.code}`,
+    );
+  }
+
+  await fileSmoke();
+
+  const title = await invokeOk({
+    command: "windowSetTitle",
+    payload: { title: "Cefari Smoke PASS" },
+  }, "window");
+  assert(
+    title.payload.title === "Cefari Smoke PASS",
+    "window title did not update",
+  );
+  assert(
+    title.payload.focused === false,
+    "background smoke window became focused",
+  );
+
+  await writeResult("pass", {
+    window: title.payload,
+    service: service.outcome.status === "ok"
+      ? service.outcome.payload.payload
+      : service.outcome.payload,
+  });
+  await invokeOk({ command: "appQuit" }, "empty");
+}
+
+async function main() {
+  try {
+    if (sessionStorage.getItem(phaseKey) !== "after-reload") {
+      await preReloadSmoke();
+      return;
+    }
+
+    sessionStorage.removeItem(phaseKey);
+    await postReloadSmoke();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    record("fail", message);
+    try {
+      await writeResult("fail", { error: message });
+    } catch (writeError) {
+      record(
+        "failed to write result",
+        writeError instanceof Error ? writeError.message : String(writeError),
+      );
+    }
+    try {
+      await invokeOk({
+        command: "windowSetTitle",
+        payload: { title: "Cefari Smoke FAIL" },
+      }, "window");
+    } catch (_error) {
+      // Keep the original smoke failure as the result.
+    }
+    try {
+      await invokeOk({ command: "appQuit" }, "empty");
+    } catch (_error) {
+      // The watchdog will stop the process if the bridge is already unavailable.
+    }
+  }
+}
+
+main();
