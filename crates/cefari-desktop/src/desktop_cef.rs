@@ -63,6 +63,9 @@ fn cef_resource_dir_candidates(paths: &RuntimePaths) -> Vec<PathBuf> {
             .map(|resources_dir| resources_dir.join("cef"))
     }));
     candidates.push(paths.resource_dir.join("cef"));
+    if let Some(cef_dir) = cef::sys::get_cef_dir() {
+        candidates.push(cef_dir);
+    }
     candidates
 }
 
@@ -144,6 +147,9 @@ mod imp {
 
     pub struct CefRuntime {
         initialized: bool,
+        #[cfg(target_os = "macos")]
+        #[allow(dead_code)]
+        library_loader: CefLibraryLoader,
         #[allow(dead_code)]
         state: SharedBrowserState,
         #[allow(dead_code)]
@@ -180,12 +186,79 @@ mod imp {
         fn schedule_message_pump_work(&self, delay_ms: i64) -> Result<()>;
     }
 
+    #[cfg(target_os = "macos")]
+    type CefLibraryLoader = cef::library_loader::LibraryLoader;
+
+    #[cfg(target_os = "macos")]
+    fn load_cef_library(runtime_paths: &CefRuntimePathConfig) -> Result<CefLibraryLoader> {
+        let framework_dir = runtime_paths
+            .framework_dir_path
+            .as_ref()
+            .context("CEF framework directory was not found")?;
+        let resources_dir = framework_dir
+            .parent()
+            .context("CEF framework directory has no parent resource directory")?;
+        let loader_exe = runtime_paths
+            .root_cache_path
+            .join("loader-layout")
+            .join("MacOS")
+            .join("cefari-desktop");
+        let loader_macos_dir = loader_exe
+            .parent()
+            .context("CEF loader executable path has no parent directory")?;
+        let loader_root = loader_macos_dir
+            .parent()
+            .context("CEF loader layout has no root directory")?;
+        let loader_frameworks_dir = loader_root.join("Frameworks");
+
+        fs::create_dir_all(loader_macos_dir).with_context(|| {
+            format!(
+                "failed to create CEF loader layout at {}",
+                loader_macos_dir.display()
+            )
+        })?;
+        replace_symlink(&loader_frameworks_dir, resources_dir)?;
+
+        let loader = CefLibraryLoader::new(&loader_exe, false);
+        if !loader.load() {
+            anyhow::bail!(
+                "failed to load CEF framework from {}",
+                framework_dir.join("Chromium Embedded Framework").display()
+            );
+        }
+        info!(
+            framework = %framework_dir.display(),
+            "CEF framework loaded"
+        );
+        Ok(loader)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn replace_symlink(link: &std::path::Path, target: &std::path::Path) -> Result<()> {
+        match fs::remove_file(link) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("failed to remove {}", link.display()));
+            }
+        }
+        std::os::unix::fs::symlink(target, link).with_context(|| {
+            format!(
+                "failed to create CEF loader framework symlink {} -> {}",
+                link.display(),
+                target.display()
+            )
+        })
+    }
+
     #[allow(dead_code)]
     impl CefRuntime {
         pub fn initialize(paths: &cefari_core::RuntimePaths) -> Result<Self> {
             let args = cef::args::Args::new();
             let runtime_paths = resolve_cef_runtime_paths(paths);
             prepare_cef_runtime_dirs(&runtime_paths)?;
+            #[cfg(target_os = "macos")]
+            let library_loader = load_cef_library(&runtime_paths)?;
             let router_config = bridge_router_config();
             let message_pump = SharedMessagePumpState::default();
             let mut app = CefariApp::build(router_config.clone(), message_pump.clone());
@@ -233,6 +306,8 @@ mod imp {
             info!("CEF initialized");
             Ok(Self {
                 initialized: true,
+                #[cfg(target_os = "macos")]
+                library_loader,
                 state: state.clone(),
                 app,
                 client: CefariCefClient::build(
