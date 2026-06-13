@@ -235,6 +235,7 @@ mod imp {
 
     use anyhow::{Context, Result};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use tao::dpi::PhysicalSize;
     use tao::window::Window;
     use tracing::{debug, error, info, warn};
 
@@ -594,13 +595,7 @@ mod imp {
             }
 
             let handle = native_window_handle(window)?;
-            let size = window.inner_size();
-            let bounds = cef::Rect {
-                x: 0,
-                y: 0,
-                width: i32::try_from(size.width).unwrap_or(i32::MAX),
-                height: i32::try_from(size.height).unwrap_or(i32::MAX),
-            };
+            let bounds = browser_bounds_for_size(window.inner_size());
             let window_info = cef::WindowInfo::default().set_as_child(handle, &bounds);
             let settings = cef::BrowserSettings::default();
             let url = cef::CefString::from(url);
@@ -1795,9 +1790,20 @@ mod imp {
         }
     }
 
+    fn browser_bounds_for_size(size: PhysicalSize<u32>) -> cef::Rect {
+        cef::Rect {
+            x: 0,
+            y: 0,
+            width: i32::try_from(size.width).unwrap_or(i32::MAX),
+            height: i32::try_from(size.height).unwrap_or(i32::MAX),
+        }
+    }
+
     #[cfg(test)]
     mod tests {
-        use super::SharedBrowserState;
+        use tao::dpi::PhysicalSize;
+
+        use super::{SharedBrowserState, browser_bounds_for_size};
 
         #[test]
         fn empty_browser_state_reports_missing_browser() {
@@ -1813,6 +1819,24 @@ mod imp {
                     .to_string()
                     .contains("CEF main browser is not available")
             );
+        }
+
+        #[test]
+        fn browser_bounds_match_window_inner_size() {
+            let bounds = browser_bounds_for_size(PhysicalSize::new(1200, 800));
+
+            assert_eq!(bounds.x, 0);
+            assert_eq!(bounds.y, 0);
+            assert_eq!(bounds.width, 1200);
+            assert_eq!(bounds.height, 800);
+        }
+
+        #[test]
+        fn browser_bounds_clamp_dimensions_to_cef_rect_limits() {
+            let bounds = browser_bounds_for_size(PhysicalSize::new(u32::MAX, u32::MAX));
+
+            assert_eq!(bounds.width, i32::MAX);
+            assert_eq!(bounds.height, i32::MAX);
         }
     }
 }
