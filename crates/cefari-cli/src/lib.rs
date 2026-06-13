@@ -49,6 +49,10 @@ pub enum Command {
         /// Override the frontend dev server port. Use 0 with the built-in static server to request any free port.
         #[arg(long)]
         frontend_port: Option<u16>,
+
+        /// Chrome DevTools Protocol port for the embedded CEF browser. Defaults to any free local port.
+        #[arg(long)]
+        devtools_port: Option<u16>,
     },
     /// Build frontend, daemon, and desktop artifacts.
     Build {
@@ -170,7 +174,8 @@ pub fn run_command(command: Command) -> Result<()> {
         Command::Dev {
             path,
             frontend_port,
-        } => dev::dev_project(&path, frontend_port),
+            devtools_port,
+        } => dev::dev_project(&path, frontend_port, devtools_port),
         Command::Build { path, release } => build::build_project(&path, release),
         Command::Package { path, release } => package::package_project(&path, release),
         Command::Codesign {
@@ -486,10 +491,22 @@ mod tests {
             Command::Init { .. }
         ));
         assert!(matches!(
-            Cli::try_parse_from(["cefari", "dev", "sample", "--frontend-port", "0"])
-                .expect("dev should parse")
-                .command,
-            Command::Dev { .. }
+            Cli::try_parse_from([
+                "cefari",
+                "dev",
+                "sample",
+                "--frontend-port",
+                "0",
+                "--devtools-port",
+                "9333",
+            ])
+            .expect("dev should parse")
+            .command,
+            Command::Dev {
+                frontend_port: Some(0),
+                devtools_port: Some(9333),
+                ..
+            }
         ));
         assert!(matches!(
             Cli::try_parse_from(["cefari", "doctor"])

@@ -9,6 +9,7 @@ stdout_log="$run_root/cefari-dev.stdout.log"
 stderr_log="$run_root/cefari-dev.stderr.log"
 frontmost_log="$run_root/frontmost.log"
 frontmost_fail="$run_root/frontmost.fail"
+devtools_probe="$run_root/devtools-version.json"
 watchdog_seconds="${CEFARI_SMOKE_WATCHDOG_SECONDS:-60}"
 exit_after_ms="${CEFARI_SMOKE_EXIT_AFTER_MS:-45000}"
 original_home="${HOME:-}"
@@ -34,6 +35,7 @@ monitor_frontmost() {
 }
 
 rm -rf "$run_root"
+rm -rf "$smoke_dir/.cefari"
 mkdir -p "$home_dir"
 
 echo "building cefari binaries"
@@ -76,15 +78,22 @@ env \
 smoke_pid=$!
 
 status=0
+devtools_verified=0
 deadline=$((SECONDS + watchdog_seconds))
 while kill -0 "$smoke_pid" >/dev/null 2>&1; do
+  if [[ "$devtools_verified" -eq 0 && -f "$smoke_dir/.cefari/devtools.json" ]]; then
+    devtools_url="$(sed -n 's/.*"browserUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$smoke_dir/.cefari/devtools.json" | head -1)"
+    if [[ -n "$devtools_url" ]] && curl -fsS "$devtools_url/json/version" >"$devtools_probe" 2>/dev/null; then
+      devtools_verified=1
+    fi
+  fi
   if (( SECONDS >= deadline )); then
     echo "cefari dev smoke timed out after ${watchdog_seconds}s" >&2
     kill "$smoke_pid" >/dev/null 2>&1 || true
     status=124
     break
   fi
-  sleep 1
+  sleep 0.1
 done
 
 if [[ "$status" -eq 0 ]]; then
@@ -102,6 +111,12 @@ if [[ "$status" -ne 0 ]]; then
   echo "cefari dev smoke failed with status $status" >&2
   echo "see $stdout_log and $stderr_log" >&2
   exit "$status"
+fi
+
+if [[ "$devtools_verified" -ne 1 ]]; then
+  echo "CEF DevTools Protocol endpoint did not respond during smoke" >&2
+  echo "see $smoke_dir/.cefari/devtools.json and $devtools_probe" >&2
+  exit 1
 fi
 
 if [[ -f "$frontmost_fail" ]]; then

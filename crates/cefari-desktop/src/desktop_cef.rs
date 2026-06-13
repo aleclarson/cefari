@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use cefari_core::{PackageFormat, RuntimePaths, packaged_resources_dir};
 
 const CEF_RESOURCES_DIR_ENV: &str = "CEFARI_CEF_RESOURCES_DIR";
+const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
+const CEFARI_DEVTOOLS_PORT_ENV: &str = "CEFARI_DEVTOOLS_PORT";
 const CEFARI_SMOKE_BACKGROUND_ENV: &str = "CEFARI_SMOKE_BACKGROUND";
 #[cfg(target_os = "macos")]
 const MACOS_CEFARI_BUNDLE_IDENTIFIER: &str = "dev.cefari.app";
@@ -732,8 +734,27 @@ mod imp {
         if let Some(framework_dir_path) = &runtime_paths.framework_dir_path {
             settings.framework_dir_path = cef_string_from_path(framework_dir_path);
         }
+        if let Some(port) = devtools_port_from_environment() {
+            settings.remote_debugging_port = i32::from(port);
+            info!(
+                port,
+                "enabled CEF Chrome DevTools Protocol remote debugging"
+            );
+        }
 
         settings
+    }
+
+    fn devtools_port_from_environment() -> Option<u16> {
+        if std::env::var(super::CEFARI_DEV_MODE_ENV).as_deref() != Ok("1") {
+            return None;
+        }
+        let port = std::env::var(super::CEFARI_DEVTOOLS_PORT_ENV).ok()?;
+        parse_devtools_port(&port)
+    }
+
+    fn parse_devtools_port(port: &str) -> Option<u16> {
+        port.parse::<u16>().ok().filter(|port| *port != 0)
     }
 
     fn configure_cef_api_version() -> Result<()> {
@@ -1803,7 +1824,7 @@ mod imp {
     mod tests {
         use tao::dpi::PhysicalSize;
 
-        use super::{SharedBrowserState, browser_bounds_for_size};
+        use super::{SharedBrowserState, browser_bounds_for_size, parse_devtools_port};
 
         #[test]
         fn empty_browser_state_reports_missing_browser() {
@@ -1837,6 +1858,13 @@ mod imp {
 
             assert_eq!(bounds.width, i32::MAX);
             assert_eq!(bounds.height, i32::MAX);
+        }
+
+        #[test]
+        fn parses_nonzero_devtools_ports() {
+            assert_eq!(parse_devtools_port("9222"), Some(9222));
+            assert_eq!(parse_devtools_port("0"), None);
+            assert_eq!(parse_devtools_port("not-a-port"), None);
         }
     }
 }

@@ -6,6 +6,7 @@
 /cef/
 /cef-cache/
 /logs/
+**/.cefari/
 /.env
 /.env.*
 !.env.example

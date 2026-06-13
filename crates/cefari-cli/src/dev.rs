@@ -18,6 +18,7 @@ use cefari_core::{
     AppIdentity, CEFARI_DAEMON_LOG_ENV, LogRotation, RuntimeLogConfig, RuntimePaths,
     prune_rotated_logs,
 };
+use serde::Serialize;
 
 use crate::{
     build::{workspace_manifest, workspace_target_dir},
@@ -29,16 +30,66 @@ const MACOS_DEV_APP_EXECUTABLE: &str = "cefari-desktop";
 #[cfg(target_os = "macos")]
 const MACOS_DEV_APP_BUNDLE_IDENTIFIER: &str = "dev.cefari.app";
 const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
+const CEFARI_DEVTOOLS_PORT_ENV: &str = "CEFARI_DEVTOOLS_PORT";
 
-pub fn dev_project(project_dir: &Path, frontend_port: Option<u16>) -> Result<()> {
+pub fn dev_project(
+    project_dir: &Path,
+    frontend_port: Option<u16>,
+    devtools_port: Option<u16>,
+) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
     let frontend_port = frontend_port.unwrap_or(project.frontend.dev_port);
+    let devtools = DevtoolsEndpoint::for_port(resolve_devtools_port(devtools_port)?)?;
 
     let mut processes = DevProcesses::new();
     processes.start_frontend(project_dir, &project.frontend, frontend_port)?;
+    devtools.write_project_file(project_dir)?;
+    println!("chrome devtools: {}", devtools.browser_url);
+    println!(
+        "chrome-devtools start --browserUrl {}",
+        devtools.browser_url
+    );
     processes.spawn_daemon(project_dir, &project)?;
-    processes.spawn_desktop(project_dir)?;
+    processes.spawn_desktop(project_dir, &devtools)?;
     processes.wait()
+}
+
+#[derive(Debug, Serialize)]
+struct DevtoolsEndpoint {
+    port: u16,
+    #[serde(rename = "browserUrl")]
+    browser_url: String,
+}
+
+impl DevtoolsEndpoint {
+    fn for_port(port: u16) -> Result<Self> {
+        if port == 0 {
+            anyhow::bail!("devtools port must be a fixed port");
+        }
+        Ok(Self {
+            port,
+            browser_url: format!("http://127.0.0.1:{port}"),
+        })
+    }
+
+    fn write_project_file(&self, project_dir: &Path) -> Result<()> {
+        let devtools_dir = project_dir.join(".cefari");
+        fs::create_dir_all(&devtools_dir).with_context(|| {
+            format!(
+                "failed to create Cefari devtools directory at {}",
+                devtools_dir.display()
+            )
+        })?;
+        let devtools_file = devtools_dir.join("devtools.json");
+        let json = serde_json::to_string_pretty(self)
+            .context("failed to encode Cefari devtools endpoint")?;
+        fs::write(&devtools_file, format!("{json}\n")).with_context(|| {
+            format!(
+                "failed to write Cefari devtools endpoint to {}",
+                devtools_file.display()
+            )
+        })
+    }
 }
 
 struct DevProcesses {
@@ -107,12 +158,13 @@ impl DevProcesses {
         Ok(())
     }
 
-    fn spawn_desktop(&mut self, project_dir: &Path) -> Result<()> {
+    fn spawn_desktop(&mut self, project_dir: &Path, devtools: &DevtoolsEndpoint) -> Result<()> {
         let frontend_url = self.frontend_url.as_deref();
         let mut command = desktop_launch_command()?;
         let child = command
             .envs(frontend_url.map(|url| ("CEFARI_FRONTEND_URL", url)))
             .env(CEFARI_DEV_MODE_ENV, "1")
+            .env(CEFARI_DEVTOOLS_PORT_ENV, devtools.port.to_string())
             .env("CEFARI_RESOURCE_DIR", project_dir)
             .stdin(Stdio::null())
             .spawn()
@@ -165,6 +217,22 @@ impl DevProcesses {
             child.stop();
         }
     }
+}
+
+fn resolve_devtools_port(port: Option<u16>) -> Result<u16> {
+    match port {
+        Some(0) | None => available_local_port(),
+        Some(port) => Ok(port),
+    }
+}
+
+fn available_local_port() -> Result<u16> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .context("failed to allocate a local CEF DevTools port")?;
+    listener
+        .local_addr()
+        .context("failed to read allocated CEF DevTools port")
+        .map(|address| address.port())
 }
 
 #[cfg_attr(target_os = "macos", allow(dead_code))]

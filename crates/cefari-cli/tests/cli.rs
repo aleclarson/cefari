@@ -594,7 +594,7 @@ exit 0"#,
         &format!(
             r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
 mkdir -p '{}'
-printf '#!/bin/sh\necho "CEFARI_DEV_MODE=$CEFARI_DEV_MODE" >> "$CEFARI_TOOL_LOG"\nexit 0\n' > '{}'
+printf '#!/bin/sh\necho "CEFARI_DEV_MODE=$CEFARI_DEV_MODE" >> "$CEFARI_TOOL_LOG"\necho "CEFARI_DEVTOOLS_PORT=$CEFARI_DEVTOOLS_PORT" >> "$CEFARI_TOOL_LOG"\nexit 0\n' > '{}'
 chmod +x '{}'
 sleep 5"#,
             desktop_binary
@@ -620,12 +620,20 @@ sleep 5"#,
         .arg(&root)
         .arg("--frontend-port")
         .arg("0")
+        .arg("--devtools-port")
+        .arg("9333")
         .output()
         .expect("cefari dev should run");
 
     assert_success(&output);
     let stdout = stdout(&output);
     assert!(stdout.contains("frontend dev server: http://"));
+    assert!(stdout.contains("chrome devtools: http://127.0.0.1:9333"));
+    assert!(stdout.contains("chrome-devtools start --browserUrl http://127.0.0.1:9333"));
+    let devtools_json = fs::read_to_string(root.join(".cefari/devtools.json"))
+        .expect("devtools endpoint should be written");
+    assert!(devtools_json.contains(r#""port": 9333"#));
+    assert!(devtools_json.contains(r#""browserUrl": "http://127.0.0.1:9333""#));
     let tool_log = fs::read_to_string(&log).expect("tool log should exist");
     assert!(tool_log.contains("deno run --watch --allow-read --allow-net daemon/main.ts"));
     #[cfg(target_os = "macos")]
@@ -634,6 +642,7 @@ sleep 5"#,
     assert!(tool_log.contains("cargo run --manifest-path"));
     assert!(tool_log.contains("cefari-desktop"));
     assert!(tool_log.contains("CEFARI_DEV_MODE=1"));
+    assert!(tool_log.contains("CEFARI_DEVTOOLS_PORT=9333"));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
     fs::remove_dir_all(tools).expect("temp tools should be removable");
@@ -671,7 +680,7 @@ exit 0"#,
         &format!(
             r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
 mkdir -p '{}'
-printf '#!/bin/sh\necho "CEFARI_DEV_MODE=$CEFARI_DEV_MODE" >> "$CEFARI_TOOL_LOG"\nexit 0\n' > '{}'
+printf '#!/bin/sh\necho "CEFARI_DEV_MODE=$CEFARI_DEV_MODE" >> "$CEFARI_TOOL_LOG"\necho "CEFARI_DEVTOOLS_PORT=$CEFARI_DEVTOOLS_PORT" >> "$CEFARI_TOOL_LOG"\nexit 0\n' > '{}'
 chmod +x '{}'
 sleep 5"#,
             desktop_binary
