@@ -650,6 +650,18 @@ mod imp {
             Ok(())
         }
 
+        pub fn open_dev_tools(&self) -> Result<()> {
+            let host = self.browser_host()?;
+            if host.has_dev_tools() != 0 {
+                return Ok(());
+            }
+
+            let window_info = cef::WindowInfo::default();
+            let settings = cef::BrowserSettings::default();
+            host.show_dev_tools(Some(&window_info), None, Some(&settings), None);
+            Ok(())
+        }
+
         pub fn close_browser(&self, force_close: bool) -> Result<()> {
             let host = self.browser_host()?;
             host.close_browser(i32::from(force_close));

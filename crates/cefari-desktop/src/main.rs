@@ -40,6 +40,7 @@ const MAIN_WINDOW_WIDTH: f64 = 1200.0;
 const MAIN_WINDOW_HEIGHT: f64 = 800.0;
 const MIN_WINDOW_WIDTH: f64 = 800.0;
 const MIN_WINDOW_HEIGHT: f64 = 560.0;
+const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
 const CEFARI_SMOKE_BACKGROUND_ENV: &str = "CEFARI_SMOKE_BACKGROUND";
 const CEFARI_SMOKE_EXIT_AFTER_MS_ENV: &str = "CEFARI_SMOKE_EXIT_AFTER_MS";
 const CEF_MESSAGE_PUMP_FALLBACK_INTERVAL: Duration = Duration::from_millis(16);
@@ -120,6 +121,7 @@ fn run_native_shell(
     shell_ui: &desktop_ui::ShellUi,
 ) -> Result<()> {
     let background_smoke = smoke_background_requested();
+    let devtools_enabled = dev_mode_requested();
     let mut event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     configure_smoke_background_event_loop(&mut event_loop, background_smoke);
     schedule_smoke_exit_if_requested(&event_loop);
@@ -151,11 +153,19 @@ fn run_native_shell(
         .cef_runtime
         .create_browser(&window, &shell_ui.url())
         .context("failed to create CEF browser")?;
-    let menu = desktop_menu::DesktopMenu::new()?;
+    let menu = desktop_menu::DesktopMenu::new(devtools_enabled)?;
     menu.install();
 
     info!(window = ?window.id(), "cefari native shell started");
-    run_event_loop(event_loop, window, guards, menu, paths, runtime_operations)
+    run_event_loop(
+        event_loop,
+        window,
+        guards,
+        menu,
+        paths,
+        runtime_operations,
+        devtools_enabled,
+    )
 }
 
 fn apply_ui_diagnostic_state(window: &Window, shell_ui: &desktop_ui::ShellUi) {
@@ -191,6 +201,7 @@ fn run_event_loop(
     menu: desktop_menu::DesktopMenu,
     paths: RuntimePaths,
     runtime_operations: runtime::RuntimeOperations,
+    devtools_enabled: bool,
 ) -> ! {
     #![allow(clippy::too_many_lines)]
 
@@ -227,7 +238,15 @@ fn run_event_loop(
                 }
             }
             Event::UserEvent(UserEvent::Menu(menu_event)) => {
-                if let Some(command) = desktop_menu::ipc_command_for_event(&menu_event) {
+                let menu_command = desktop_menu::command_for_event(&menu_event);
+                if menu_command == desktop_menu::MenuCommand::OpenDevTools && devtools_enabled {
+                    match guards.cef_runtime.open_dev_tools() {
+                        Ok(()) => info!("opened CEF Chrome DevTools"),
+                        Err(error) => error!(%error, "failed to open CEF Chrome DevTools"),
+                    }
+                } else if let Some(command) =
+                    desktop_menu::ipc_command_for_menu_command(menu_command)
+                {
                     let mut context = DesktopShellContext {
                         window: &mut window,
                         window_title: &mut window_title,
@@ -451,6 +470,10 @@ fn smoke_exit_delay() -> Option<Duration> {
 
 fn smoke_background_requested() -> bool {
     std::env::var(CEFARI_SMOKE_BACKGROUND_ENV).is_ok_and(|value| value == "1")
+}
+
+fn dev_mode_requested() -> bool {
+    std::env::var(CEFARI_DEV_MODE_ENV).is_ok_and(|value| value == "1")
 }
 
 #[cfg(target_os = "macos")]

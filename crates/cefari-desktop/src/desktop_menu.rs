@@ -12,6 +12,7 @@ use tracing::{debug, warn};
 pub const CHECK_FOR_UPDATES_ID: &str = "cefari.menu.check_for_updates";
 pub const OPEN_LOGS_ID: &str = "cefari.menu.open_logs";
 pub const RELOAD_UI_ID: &str = "cefari.menu.reload_ui";
+pub const OPEN_DEV_TOOLS_ID: &str = "cefari.menu.open_dev_tools";
 pub const SERVICE_STATUS_ID: &str = "cefari.menu.service_status";
 pub const QUIT_ID: &str = "cefari.menu.quit";
 #[cfg(test)]
@@ -22,6 +23,7 @@ pub enum MenuCommand {
     CheckForUpdates,
     OpenLogs,
     ReloadUi,
+    OpenDevTools,
     ServiceStatus,
     Quit,
     Unhandled,
@@ -36,11 +38,11 @@ pub struct DesktopMenu {
 }
 
 impl DesktopMenu {
-    pub fn new() -> Result<Self> {
+    pub fn new(devtools_enabled: bool) -> Result<Self> {
         let app_menu = app_menu()?;
         let file_menu = file_menu()?;
         let edit_menu = edit_menu()?;
-        let view_menu = view_menu()?;
+        let view_menu = view_menu(devtools_enabled)?;
         let window_menu = window_menu()?;
         let help_menu = help_menu()?;
         let menu = Menu::with_items(&[
@@ -76,21 +78,19 @@ fn command_for_id(id: &MenuId) -> MenuCommand {
         CHECK_FOR_UPDATES_ID => MenuCommand::CheckForUpdates,
         OPEN_LOGS_ID => MenuCommand::OpenLogs,
         RELOAD_UI_ID => MenuCommand::ReloadUi,
+        OPEN_DEV_TOOLS_ID => MenuCommand::OpenDevTools,
         SERVICE_STATUS_ID => MenuCommand::ServiceStatus,
         QUIT_ID => MenuCommand::Quit,
         _ => MenuCommand::Unhandled,
     }
 }
 
-pub fn ipc_command_for_event(event: &MenuEvent) -> Option<CefariIpcCommand> {
-    ipc_command_for_menu_command(command_for_event(event))
-}
-
-fn ipc_command_for_menu_command(command: MenuCommand) -> Option<CefariIpcCommand> {
+pub fn ipc_command_for_menu_command(command: MenuCommand) -> Option<CefariIpcCommand> {
     match command {
         MenuCommand::CheckForUpdates => Some(CefariIpcCommand::UpdateCheck),
         MenuCommand::OpenLogs => Some(CefariIpcCommand::OpenLogs),
         MenuCommand::ReloadUi => Some(CefariIpcCommand::ReloadUi),
+        MenuCommand::OpenDevTools => None,
         MenuCommand::ServiceStatus => Some(CefariIpcCommand::ServiceStatus),
         MenuCommand::Quit => Some(CefariIpcCommand::AppQuit),
         MenuCommand::Unhandled => None,
@@ -175,18 +175,30 @@ fn edit_menu() -> Result<Submenu> {
     .context("failed to build Cefari edit menu")
 }
 
-fn view_menu() -> Result<Submenu> {
-    Submenu::with_items(
-        "View",
+fn view_menu(devtools_enabled: bool) -> Result<Submenu> {
+    let service_status = MenuItem::with_id(SERVICE_STATUS_ID, "Service Status", true, None);
+    let open_dev_tools = MenuItem::with_id(
+        OPEN_DEV_TOOLS_ID,
+        "Open Chrome DevTools",
         true,
-        &[&MenuItem::with_id(
-            SERVICE_STATUS_ID,
-            "Service Status",
+        Some(accelerator("CmdOrCtrl+Shift+I")?),
+    );
+
+    if devtools_enabled {
+        return Submenu::with_items(
+            "View",
             true,
-            None,
-        )],
-    )
-    .context("failed to build Cefari view menu")
+            &[
+                &service_status,
+                &PredefinedMenuItem::separator(),
+                &open_dev_tools,
+            ],
+        )
+        .context("failed to build Cefari view menu");
+    }
+
+    Submenu::with_items("View", true, &[&service_status])
+        .context("failed to build Cefari view menu")
 }
 
 fn window_menu() -> Result<Submenu> {
@@ -234,8 +246,8 @@ mod tests {
     use muda::MenuId;
 
     use super::{
-        CHECK_FOR_UPDATES_ID, MenuCommand, OPEN_LOGS_ID, QUIT_ID, RELOAD_UI_ID, ROOT_MENU_LABELS,
-        SERVICE_STATUS_ID, command_for_id, ipc_command_for_menu_command,
+        CHECK_FOR_UPDATES_ID, MenuCommand, OPEN_DEV_TOOLS_ID, OPEN_LOGS_ID, QUIT_ID, RELOAD_UI_ID,
+        ROOT_MENU_LABELS, SERVICE_STATUS_ID, command_for_id, ipc_command_for_menu_command,
     };
 
     #[test]
@@ -261,6 +273,10 @@ mod tests {
             MenuCommand::ReloadUi
         );
         assert_eq!(
+            command_for_id(&MenuId::new(OPEN_DEV_TOOLS_ID)),
+            MenuCommand::OpenDevTools
+        );
+        assert_eq!(
             command_for_id(&MenuId::new(SERVICE_STATUS_ID)),
             MenuCommand::ServiceStatus
         );
@@ -284,6 +300,10 @@ mod tests {
         assert_eq!(
             ipc_command_for_menu_command(MenuCommand::ReloadUi),
             Some(cefari_core::CefariIpcCommand::ReloadUi)
+        );
+        assert_eq!(
+            ipc_command_for_menu_command(MenuCommand::OpenDevTools),
+            None
         );
         assert_eq!(
             ipc_command_for_menu_command(MenuCommand::ServiceStatus),

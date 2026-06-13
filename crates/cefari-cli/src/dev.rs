@@ -28,6 +28,7 @@ use crate::{
 const MACOS_DEV_APP_EXECUTABLE: &str = "cefari-desktop";
 #[cfg(target_os = "macos")]
 const MACOS_DEV_APP_BUNDLE_IDENTIFIER: &str = "dev.cefari.app";
+const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
 
 pub fn dev_project(project_dir: &Path, frontend_port: Option<u16>) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
@@ -111,6 +112,7 @@ impl DevProcesses {
         let mut command = desktop_launch_command()?;
         let child = command
             .envs(frontend_url.map(|url| ("CEFARI_FRONTEND_URL", url)))
+            .env(CEFARI_DEV_MODE_ENV, "1")
             .env("CEFARI_RESOURCE_DIR", project_dir)
             .stdin(Stdio::null())
             .spawn()

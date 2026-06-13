@@ -580,19 +580,30 @@ fn dev_orchestrates_frontend_daemon_and_desktop() {
         &tools,
         "deno",
         r#"echo "deno $@" >> "$CEFARI_TOOL_LOG"
-sleep 1
+sleep 20
 exit 0"#,
     );
+    let desktop_binary = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("cefari-cli should live under crates/cefari-cli")
+        .join("target/debug/cefari-desktop");
     create_fake_tool(
         &tools,
         "cargo",
-        r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
-if [ ! -e target/debug/cefari-desktop ]; then
-  mkdir -p target/debug
-  printf '#!/bin/sh\nexit 0\n' > target/debug/cefari-desktop
-  chmod +x target/debug/cefari-desktop
-fi
+        &format!(
+            r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
+mkdir -p '{}'
+printf '#!/bin/sh\necho "CEFARI_DEV_MODE=$CEFARI_DEV_MODE" >> "$CEFARI_TOOL_LOG"\nexit 0\n' > '{}'
+chmod +x '{}'
 sleep 5"#,
+            desktop_binary
+                .parent()
+                .expect("desktop binary should have a parent")
+                .display(),
+            desktop_binary.display(),
+            desktop_binary.display()
+        ),
     );
 
     let init_output = cefari()
@@ -622,6 +633,7 @@ sleep 5"#,
     #[cfg(not(target_os = "macos"))]
     assert!(tool_log.contains("cargo run --manifest-path"));
     assert!(tool_log.contains("cefari-desktop"));
+    assert!(tool_log.contains("CEFARI_DEV_MODE=1"));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
     fs::remove_dir_all(tools).expect("temp tools should be removable");
