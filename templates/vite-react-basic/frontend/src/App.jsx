@@ -1,27 +1,7 @@
-import { useEffect, useState } from "react";
-
-import { cefari, isCefariError } from "@cefari/app";
+import { cefari } from "@cefari/app";
 
 export default function App() {
-  const [bridgeState, setBridgeState] = useState("checking");
-
-  useEffect(() => {
-    let active = true;
-
-    cefari.updates.state()
-      .then((state) => {
-        if (active) setBridgeState(state.state);
-      })
-      .catch((error) => {
-        if (active) {
-          setBridgeState(isCefariError(error) ? error.code : "error");
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const bridgeState = cefari.isAvailable() ? "connected" : "unavailable";
 
   return (
     <main className="app-shell">
