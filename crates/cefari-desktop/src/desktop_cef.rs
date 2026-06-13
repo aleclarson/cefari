@@ -985,7 +985,7 @@ mod imp {
                 process_type: Option<&cef::CefString>,
                 command_line: Option<&mut cef::CommandLine>,
             ) {
-                configure_smoke_chromium_command_line(process_type, command_line);
+                configure_development_chromium_command_line(process_type, command_line);
             }
 
             fn browser_process_handler(&self) -> Option<cef::BrowserProcessHandler> {
@@ -1005,11 +1005,11 @@ mod imp {
         }
     }
 
-    fn configure_smoke_chromium_command_line(
+    fn configure_development_chromium_command_line(
         process_type: Option<&cef::CefString>,
         command_line: Option<&mut cef::CommandLine>,
     ) {
-        if std::env::var(super::CEFARI_SMOKE_BACKGROUND_ENV).as_deref() != Ok("1") {
+        if !development_chromium_switches_requested() {
             return;
         }
         let Some(command_line) = command_line else {
@@ -1024,8 +1024,22 @@ mod imp {
 
         debug!(
             process_type = %display_cef_process_type(process_type),
-            "configured smoke Chromium command line"
+            "configured development Chromium command line"
         );
+    }
+
+    fn development_chromium_switches_requested() -> bool {
+        development_chromium_switches_requested_from(
+            std::env::var(super::CEFARI_DEV_MODE_ENV).as_deref() == Ok("1"),
+            std::env::var(super::CEFARI_SMOKE_BACKGROUND_ENV).as_deref() == Ok("1"),
+        )
+    }
+
+    fn development_chromium_switches_requested_from(
+        dev_mode: bool,
+        smoke_background: bool,
+    ) -> bool {
+        dev_mode || smoke_background
     }
 
     fn append_chromium_switch(command_line: &cef::CommandLine, name: &str) {
@@ -1824,7 +1838,10 @@ mod imp {
     mod tests {
         use tao::dpi::PhysicalSize;
 
-        use super::{SharedBrowserState, browser_bounds_for_size, parse_devtools_port};
+        use super::{
+            SharedBrowserState, browser_bounds_for_size,
+            development_chromium_switches_requested_from, parse_devtools_port,
+        };
 
         #[test]
         fn empty_browser_state_reports_missing_browser() {
@@ -1865,6 +1882,13 @@ mod imp {
             assert_eq!(parse_devtools_port("9222"), Some(9222));
             assert_eq!(parse_devtools_port("0"), None);
             assert_eq!(parse_devtools_port("not-a-port"), None);
+        }
+
+        #[test]
+        fn development_chromium_switches_are_dev_or_smoke_only() {
+            assert!(development_chromium_switches_requested_from(true, false));
+            assert!(development_chromium_switches_requested_from(false, true));
+            assert!(!development_chromium_switches_requested_from(false, false));
         }
     }
 }
