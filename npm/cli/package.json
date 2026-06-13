@@ -1,0 +1,27 @@
+{
+  "name": "@cefari/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cefari developer CLI",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cefari/cefari.git"
+  },
+  "bin": {
+    "cefari": "bin/cefari.js"
+  },
+  "files": [
+    "bin/cefari.js",
+    "README.md"
+  ],
+  "optionalDependencies": {
+    "@cefari/cli-darwin-arm64": "0.0.0",
+    "@cefari/cli-darwin-x64": "0.0.0",
+    "@cefari/cli-linux-x64": "0.0.0",
+    "@cefari/cli-win32-x64": "0.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

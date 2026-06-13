@@ -113,13 +113,27 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+          sudo apt-get install -y cmake ninja-build libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+
+      - name: Install macOS desktop build tools
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
+
+      - name: Install Windows desktop build tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+          choco install ninja -y
 
       - name: Install cargo-packager
         run: cargo install cargo-packager --version 0.11.8 --locked
 
       - name: Build cefari CLI
         run: cargo build -p cefari-cli --release
+
+      - name: Build cefari desktop runtime
+        run: cargo build -p cefari-desktop --release
 
       - name: Assemble CLI distribution
         shell: bash
@@ -191,3 +205,49 @@ jobs:
           if grep -q 'cefari-cli-dist' .ci/cefari-sample/dist/package/manifest.json; then
             exit 1
           fi
+
+      - name: Assemble npm CLI packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$RUNNER_OS" in
+            macOS)
+              case "$(uname -m)" in
+                arm64) npm_target="darwin-arm64" ;;
+                x86_64) npm_target="darwin-x64" ;;
+                *) echo "unsupported macOS architecture: $(uname -m)" >&2; exit 1 ;;
+              esac
+              cli_binary="target/release/cefari"
+              desktop_binary="target/release/cefari-desktop"
+              ;;
+            Linux)
+              npm_target="linux-x64"
+              cli_binary="target/release/cefari"
+              desktop_binary="target/release/cefari-desktop"
+              ;;
+            Windows)
+              npm_target="win32-x64"
+              cli_binary="target/release/cefari.exe"
+              desktop_binary="target/release/cefari-desktop.exe"
+              ;;
+            *)
+              echo "unsupported runner OS: $RUNNER_OS" >&2
+              exit 1
+              ;;
+          esac
+
+          scripts/assemble-npm-cli-packages.rb --root-only --output .ci/npm
+          scripts/assemble-npm-cli-packages.rb \
+            --target "$npm_target" \
+            --cli-binary "$cli_binary" \
+            --desktop-binary "$desktop_binary" \
+            --output .ci/npm
+          echo "CEFARI_NPM_TARGET=$npm_target" >> "$GITHUB_ENV"
+
+      - name: Verify npm CLI package
+        shell: bash
+        run: |
+          scripts/verify-npm-cli-package.sh \
+            .ci/npm/packages/cefari-cli \
+            ".ci/npm/packages/cefari-cli-${CEFARI_NPM_TARGET}"

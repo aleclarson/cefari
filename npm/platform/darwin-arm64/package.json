@@ -1,0 +1,21 @@
+{
+  "name": "@cefari/cli-darwin-arm64",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cefari CLI native binaries for macOS arm64",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cefari/cefari.git"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin/",
+    "libexec/"
+  ]
+}

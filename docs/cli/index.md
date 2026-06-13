@@ -3,6 +3,18 @@
 The `cefari` CLI creates, runs, builds, packages, signs, and inspects Cefari app
 projects. These pages are app-developer command references.
 
+## Installation
+
+Install released CLI builds through npm:
+
+```bash
+npm install -g @cefari/cli
+```
+
+The npm distribution bundles the native `cefari` binary and matching
+`cefari-desktop` runtime for supported macOS arm64, macOS x64, Linux x64, and
+Windows x64 hosts.
+
 ## Commands
 
 - [Project Commands](project.md): `init`, `dev`, `build`, `package`, and

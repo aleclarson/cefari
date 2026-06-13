@@ -16,6 +16,13 @@ The repository is split into:
 - [Getting Started](docs/getting-started.md): create, run, build, package, and
   deploy a Cefari app.
 
+## Install The CLI
+
+```bash
+npm install -g @cefari/cli
+cefari --help
+```
+
 ## App Developers
 
 - [Scaffold An App](docs/guides/scaffolding.md): create a project and understand

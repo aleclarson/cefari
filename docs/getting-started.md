@@ -22,6 +22,16 @@ run `cefari` directly:
 cargo install --path crates/cefari-cli --locked
 ```
 
+Released builds are distributed through npm:
+
+```bash
+npm install -g @cefari/cli
+```
+
+The npm package installs a platform-specific native `cefari` binary and the
+matching `cefari-desktop` runtime for supported macOS arm64, macOS x64, Linux
+x64, and Windows x64 hosts.
+
 Check the local environment:
 
 ```bash
