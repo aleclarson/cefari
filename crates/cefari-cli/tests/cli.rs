@@ -639,6 +639,94 @@ sleep 5"#,
     fs::remove_dir_all(tools).expect("temp tools should be removable");
 }
 
+#[cfg(unix)]
+#[test]
+fn dev_stops_frontend_dev_command_before_exiting() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    let frontend_pid_file = tools.join("frontend.pid");
+    create_fake_tool(
+        &tools,
+        "frontend-dev",
+        r#"echo "frontend-dev $@" >> "$CEFARI_TOOL_LOG"
+echo "$$" > "$CEFARI_FRONTEND_PID_FILE"
+while true; do sleep 1; done"#,
+    );
+    create_fake_tool(
+        &tools,
+        "deno",
+        r#"echo "deno $@" >> "$CEFARI_TOOL_LOG"
+sleep 20
+exit 0"#,
+    );
+    let desktop_binary = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("cefari-cli should live under crates/cefari-cli")
+        .join("target/debug/cefari-desktop");
+    create_fake_tool(
+        &tools,
+        "cargo",
+        &format!(
+            r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
+mkdir -p '{}'
+printf '#!/bin/sh\necho "CEFARI_DEV_MODE=$CEFARI_DEV_MODE" >> "$CEFARI_TOOL_LOG"\nexit 0\n' > '{}'
+chmod +x '{}'
+sleep 5"#,
+            desktop_binary
+                .parent()
+                .expect("desktop binary should have a parent")
+                .display(),
+            desktop_binary.display(),
+            desktop_binary.display()
+        ),
+    );
+
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Dev App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+    let manifest_path = root.join("cefari.toml");
+    let manifest = fs::read_to_string(&manifest_path).expect("project manifest should exist");
+    fs::write(
+        &manifest_path,
+        manifest.replace(
+            "dev_port = 5173",
+            r#"dev_command = ["frontend-dev", "--port", "{port}"]
+dev_port = 5173"#,
+        ),
+    )
+    .expect("project manifest should be updated");
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .env("CEFARI_FRONTEND_PID_FILE", &frontend_pid_file)
+        .arg("dev")
+        .arg(&root)
+        .output()
+        .expect("cefari dev should run");
+
+    assert_success(&output);
+    let frontend_pid = fs::read_to_string(&frontend_pid_file)
+        .expect("frontend pid should be captured")
+        .trim()
+        .parse::<u32>()
+        .expect("frontend pid should be numeric");
+    assert!(
+        !process_is_running(frontend_pid),
+        "frontend dev command should be stopped before cefari dev exits"
+    );
+    let tool_log = fs::read_to_string(&log).expect("tool log should exist");
+    assert!(tool_log.contains("frontend-dev --port 5173"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
 fn assert_success(output: &Output) {
     assert!(
         output.status.success(),
@@ -661,6 +749,16 @@ fn json_field<'a>(value: &'a serde_json::Value, field: &str) -> &'a str {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+#[cfg(unix)]
+fn process_is_running(pid: u32) -> bool {
+    Command::new("kill")
+        .arg("-0")
+        .arg(pid.to_string())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn daemon_executable_name(project_name: &str) -> String {

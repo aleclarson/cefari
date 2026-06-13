@@ -4,4 +4,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [deno(), react()],
+  server: {
+    strictPort: true,
+  },
 });

@@ -145,14 +145,6 @@ impl DevProcesses {
     }
 
     fn shutdown(&mut self) {
-        for child in self
-            .children
-            .iter_mut()
-            .filter(|child| !child.is_frontend_dev_server)
-        {
-            child.stop();
-        }
-
         if let Some(frontend) = &mut self.frontend {
             frontend.shutdown();
         }
@@ -161,6 +153,14 @@ impl DevProcesses {
             .children
             .iter_mut()
             .filter(|child| child.is_frontend_dev_server)
+        {
+            child.stop();
+        }
+
+        for child in self
+            .children
+            .iter_mut()
+            .filter(|child| !child.is_frontend_dev_server)
         {
             child.stop();
         }
