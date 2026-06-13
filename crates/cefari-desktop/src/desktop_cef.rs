@@ -597,7 +597,7 @@ mod imp {
             }
 
             let handle = native_window_handle(window)?;
-            let bounds = browser_bounds_for_size(window.inner_size());
+            let bounds = browser_bounds_for_window(window);
             let window_info = cef::WindowInfo::default().set_as_child(handle, &bounds);
             let settings = cef::BrowserSettings::default();
             let url = cef::CefString::from(url);
@@ -1825,13 +1825,33 @@ mod imp {
         }
     }
 
-    fn browser_bounds_for_size(size: PhysicalSize<u32>) -> cef::Rect {
+    fn browser_bounds_for_window(window: &Window) -> cef::Rect {
+        browser_bounds_for_size(window.inner_size(), window.scale_factor())
+    }
+
+    fn browser_bounds_for_size(size: PhysicalSize<u32>, scale_factor: f64) -> cef::Rect {
         cef::Rect {
             x: 0,
             y: 0,
-            width: i32::try_from(size.width).unwrap_or(i32::MAX),
-            height: i32::try_from(size.height).unwrap_or(i32::MAX),
+            width: cef_bounds_dimension(size.width, scale_factor),
+            height: cef_bounds_dimension(size.height, scale_factor),
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn cef_bounds_dimension(physical_size: u32, scale_factor: f64) -> i32 {
+        if scale_factor.is_finite() && scale_factor > 0.0 {
+            return ((physical_size as f64) / scale_factor)
+                .round()
+                .clamp(0.0, f64::from(i32::MAX)) as i32;
+        }
+
+        i32::try_from(physical_size).unwrap_or(i32::MAX)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn cef_bounds_dimension(physical_size: u32, _scale_factor: f64) -> i32 {
+        i32::try_from(physical_size).unwrap_or(i32::MAX)
     }
 
     #[cfg(test)]
@@ -1860,8 +1880,19 @@ mod imp {
         }
 
         #[test]
+        #[cfg(target_os = "macos")]
+        fn browser_bounds_use_appkit_points_on_macos() {
+            let bounds = browser_bounds_for_size(PhysicalSize::new(2400, 1600), 2.0);
+
+            assert_eq!(bounds.x, 0);
+            assert_eq!(bounds.y, 0);
+            assert_eq!(bounds.width, 1200);
+            assert_eq!(bounds.height, 800);
+        }
+
+        #[cfg(not(target_os = "macos"))]
         fn browser_bounds_match_window_inner_size() {
-            let bounds = browser_bounds_for_size(PhysicalSize::new(1200, 800));
+            let bounds = browser_bounds_for_size(PhysicalSize::new(1200, 800), 2.0);
 
             assert_eq!(bounds.x, 0);
             assert_eq!(bounds.y, 0);
@@ -1871,7 +1902,7 @@ mod imp {
 
         #[test]
         fn browser_bounds_clamp_dimensions_to_cef_rect_limits() {
-            let bounds = browser_bounds_for_size(PhysicalSize::new(u32::MAX, u32::MAX));
+            let bounds = browser_bounds_for_size(PhysicalSize::new(u32::MAX, u32::MAX), 1.0);
 
             assert_eq!(bounds.width, i32::MAX);
             assert_eq!(bounds.height, i32::MAX);
