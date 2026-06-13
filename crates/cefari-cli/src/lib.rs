@@ -16,6 +16,7 @@ mod logs;
 mod package;
 pub mod project;
 mod release;
+mod runtime;
 
 use project::ProjectConfig;
 

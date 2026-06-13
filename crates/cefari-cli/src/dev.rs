@@ -21,8 +21,8 @@ use cefari_core::{
 use serde::Serialize;
 
 use crate::{
-    build::{workspace_manifest, workspace_target_dir},
     project::{FrontendConfig, ProjectConfig},
+    runtime::resolve_desktop_runtime,
 };
 
 #[cfg(target_os = "macos")]
@@ -235,48 +235,17 @@ fn available_local_port() -> Result<u16> {
         .map(|address| address.port())
 }
 
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-fn configure_desktop_run_command(command: &mut Command) {
-    command
-        .arg("run")
-        .arg("--manifest-path")
-        .arg(workspace_manifest())
-        .arg("-p")
-        .arg("cefari-desktop");
-}
-
 #[cfg(not(target_os = "macos"))]
 fn desktop_launch_command() -> Result<Command> {
-    let mut command = Command::new("cargo");
-    configure_desktop_run_command(&mut command);
-    Ok(command)
+    Ok(Command::new(resolve_desktop_runtime(false)?))
 }
 
 #[cfg(target_os = "macos")]
 fn desktop_launch_command() -> Result<Command> {
-    let mut build = Command::new("cargo");
-    configure_desktop_build_command(&mut build);
-    let status = build
-        .status()
-        .context("failed to run cargo build for cefari-desktop")?;
-    if !status.success() {
-        anyhow::bail!("cargo build -p cefari-desktop failed with status {status}");
-    }
-
     let paths = RuntimePaths::resolve(&AppIdentity::cefari())?;
-    let desktop_binary = workspace_target_dir(false).join(MACOS_DEV_APP_EXECUTABLE);
+    let desktop_binary = resolve_desktop_runtime(false)?;
     let app_executable = prepare_macos_dev_app(&paths.cache_dir, &desktop_binary)?;
     Ok(Command::new(app_executable))
-}
-
-#[cfg(target_os = "macos")]
-fn configure_desktop_build_command(command: &mut Command) {
-    command
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(workspace_manifest())
-        .arg("-p")
-        .arg("cefari-desktop");
 }
 
 #[cfg(target_os = "macos")]
@@ -636,10 +605,7 @@ mod tests {
         time::{Duration, Instant},
     };
 
-    use super::{
-        StaticDevServer, configure_desktop_run_command, request_path, static_file_path,
-        substitute_frontend_port,
-    };
+    use super::{StaticDevServer, request_path, static_file_path, substitute_frontend_port};
 
     #[test]
     fn extracts_request_path() {
@@ -665,20 +631,6 @@ mod tests {
             substitute_frontend_port("--port={port}", 5174),
             std::ffi::OsString::from("--port=5174")
         );
-    }
-
-    #[test]
-    fn desktop_run_command_targets_desktop_crate_without_features() {
-        let mut command = std::process::Command::new("cargo");
-
-        configure_desktop_run_command(&mut command);
-
-        let args = command
-            .get_args()
-            .map(|arg| arg.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        assert!(args.windows(2).any(|args| args == ["-p", "cefari-desktop"]));
-        assert!(!args.iter().any(|arg| arg == "--features"));
     }
 
     #[test]

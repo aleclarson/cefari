@@ -2,7 +2,7 @@ use std::{fs, path::Path, path::PathBuf, process::Command};
 
 use anyhow::{Context, Result};
 
-use crate::{cef, project::ProjectConfig};
+use crate::{cef, project::ProjectConfig, runtime::resolve_desktop_runtime};
 
 pub(crate) fn daemon_executable_name(project: &ProjectConfig) -> String {
     platform_executable_name(&format!("{}-daemon", project.app.project_name))
@@ -10,14 +10,6 @@ pub(crate) fn daemon_executable_name(project: &ProjectConfig) -> String {
 
 pub(crate) fn desktop_executable_name(project: &ProjectConfig) -> String {
     platform_executable_name(&project.app.project_name)
-}
-
-fn desktop_crate_binary_name() -> &'static str {
-    if cfg!(windows) {
-        "cefari-desktop.exe"
-    } else {
-        "cefari-desktop"
-    }
 }
 
 fn platform_executable_name(stem: &str) -> String {
@@ -216,21 +208,7 @@ fn build_daemon(project_dir: &Path, project: &ProjectConfig, output_dir: &Path) 
 }
 
 fn build_desktop(project: &ProjectConfig, output_dir: &Path, release: bool) -> Result<()> {
-    let mut command = Command::new("cargo");
-    configure_desktop_build_command(&mut command);
-    if release {
-        command.arg("--release");
-    }
-
-    let status = command
-        .status()
-        .context("failed to run cargo build for cefari-desktop")?;
-
-    if !status.success() {
-        anyhow::bail!("cargo build -p cefari-desktop failed with status {status}");
-    }
-
-    let source = workspace_target_dir(release).join(desktop_crate_binary_name());
+    let source = resolve_desktop_runtime(release)?;
     let destination = output_dir.join(desktop_executable_name(project));
     fs::copy(&source, &destination).with_context(|| {
         format!(
@@ -241,15 +219,6 @@ fn build_desktop(project: &ProjectConfig, output_dir: &Path, release: bool) -> R
     })?;
 
     Ok(())
-}
-
-fn configure_desktop_build_command(command: &mut Command) {
-    command
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(workspace_manifest())
-        .arg("-p")
-        .arg("cefari-desktop");
 }
 
 pub(crate) fn workspace_manifest() -> std::path::PathBuf {
@@ -278,9 +247,9 @@ mod tests {
     use crate::project::ProjectConfig;
 
     use super::{
-        configure_desktop_build_command, copy_frontend_dist, daemon_executable_name,
-        desktop_executable_name, workspace_manifest,
+        copy_frontend_dist, daemon_executable_name, desktop_executable_name, workspace_manifest,
     };
+    use crate::runtime::configure_desktop_build_command;
 
     #[test]
     fn daemon_executable_name_matches_host_platform() {

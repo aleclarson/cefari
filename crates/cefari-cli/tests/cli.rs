@@ -105,11 +105,15 @@ fn build_creates_project_artifacts() {
     assert_success(&init_output);
 
     let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
-    let output = with_fake_cef_resources(cefari(), &cef_fixture)
-        .arg("build")
-        .arg(&root)
-        .output()
-        .expect("cefari build should run");
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
 
     assert_success(&output);
     assert!(root.join("build/frontend/index.html").exists());
@@ -129,6 +133,52 @@ fn build_creates_project_artifacts() {
     assert!(root.join("frontend/dist/index.html").exists());
 
     fs::remove_dir_all(root).expect("temp project should be removable");
+}
+
+#[test]
+fn build_uses_desktop_runtime_override_without_cargo() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "cargo",
+        r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
+exit 42"#,
+    );
+
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Runtime Override App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let output = with_fake_tools(
+        with_fake_desktop_runtime(
+            with_fake_cef_resources(cefari(), &cef_fixture),
+            &desktop_runtime,
+        ),
+        &tools,
+        &log,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
+
+    assert_success(&output);
+    assert!(
+        !log.exists(),
+        "cargo should not be invoked when CEFARI_DESKTOP_RUNTIME is set"
+    );
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
 }
 
 #[test]
@@ -152,11 +202,15 @@ fn package_creates_assembly_manifest_after_build() {
     assert_success(&init_output);
 
     let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
-    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
-        .arg("build")
-        .arg(&root)
-        .output()
-        .expect("cefari build should run");
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
     assert_success(&build_output);
 
     let output = with_fake_tools(cefari(), &tools, &log)
@@ -232,11 +286,15 @@ fn package_release_metadata_uses_release_desktop_binary() {
     assert_success(&init_output);
 
     let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
-    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
-        .arg("build")
-        .arg(&root)
-        .output()
-        .expect("cefari build should run");
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
     assert_success(&build_output);
 
     let output = with_only_fake_tools(cefari(), &tools, &log)
@@ -280,11 +338,15 @@ fn package_invokes_cargo_packager_when_available() {
     assert_success(&init_output);
 
     let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
-    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
-        .arg("build")
-        .arg(&root)
-        .output()
-        .expect("cefari build should run");
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
     assert_success(&build_output);
 
     let output = with_fake_tools(cefari(), &tools, &log)
@@ -320,11 +382,15 @@ fn package_invokes_cargo_packager_subcommand_when_binary_is_unavailable() {
     assert_success(&init_output);
 
     let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
-    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
-        .arg("build")
-        .arg(&root)
-        .output()
-        .expect("cefari build should run");
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
     assert_success(&build_output);
 
     let output = with_only_fake_tools(cefari(), &tools, &log)
@@ -388,11 +454,15 @@ fn clean_removes_generated_artifacts() {
     assert_success(&init_output);
 
     let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
-    let build_output = with_fake_cef_resources(cefari(), &cef_fixture)
-        .arg("build")
-        .arg(&root)
-        .output()
-        .expect("cefari build should run");
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
     assert_success(&build_output);
 
     let package_output = with_fake_tools(cefari(), &tools, &log)
@@ -636,13 +706,66 @@ sleep 5"#,
     assert!(devtools_json.contains(r#""browserUrl": "http://127.0.0.1:9333""#));
     let tool_log = fs::read_to_string(&log).expect("tool log should exist");
     assert!(tool_log.contains("deno run --watch --allow-read --allow-net daemon/main.ts"));
-    #[cfg(target_os = "macos")]
     assert!(tool_log.contains("cargo build --manifest-path"));
-    #[cfg(not(target_os = "macos"))]
-    assert!(tool_log.contains("cargo run --manifest-path"));
     assert!(tool_log.contains("cefari-desktop"));
     assert!(tool_log.contains("CEFARI_DEV_MODE=1"));
     assert!(tool_log.contains("CEFARI_DEVTOOLS_PORT=9333"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
+fn dev_uses_desktop_runtime_override_without_cargo() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "deno",
+        r#"echo "deno $@" >> "$CEFARI_TOOL_LOG"
+sleep 20
+exit 0"#,
+    );
+    create_fake_tool(
+        &tools,
+        "cargo",
+        r#"echo "cargo $@" >> "$CEFARI_TOOL_LOG"
+exit 42"#,
+    );
+    let desktop_runtime = create_fake_tool(
+        &tools,
+        desktop_runtime_file_name(),
+        r#"echo "CEFARI_DEV_MODE=$CEFARI_DEV_MODE" >> "$CEFARI_TOOL_LOG"
+echo "CEFARI_DEVTOOLS_PORT=$CEFARI_DEVTOOLS_PORT" >> "$CEFARI_TOOL_LOG"
+exit 0"#,
+    );
+
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Runtime Dev App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .env("CEFARI_DESKTOP_RUNTIME", &desktop_runtime)
+        .arg("dev")
+        .arg(&root)
+        .arg("--frontend-port")
+        .arg("0")
+        .arg("--devtools-port")
+        .arg("9444")
+        .output()
+        .expect("cefari dev should run");
+
+    assert_success(&output);
+    let tool_log = fs::read_to_string(&log).expect("tool log should exist");
+    assert!(!tool_log.contains("cargo "), "dev should not invoke cargo");
+    assert!(tool_log.contains("CEFARI_DEV_MODE=1"));
+    assert!(tool_log.contains("CEFARI_DEVTOOLS_PORT=9444"));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
     fs::remove_dir_all(tools).expect("temp tools should be removable");
@@ -818,6 +941,11 @@ fn with_fake_cef_resources(mut command: Command, fixture: &Path) -> Command {
     command
 }
 
+fn with_fake_desktop_runtime(mut command: Command, runtime: &Path) -> Command {
+    command.env("CEFARI_DESKTOP_RUNTIME", runtime);
+    command
+}
+
 fn create_fake_cef_resources(path: &Path) -> PathBuf {
     fs::create_dir_all(path).expect("CEF fixture dir should be created");
     fs::write(
@@ -834,6 +962,20 @@ fn create_fake_cef_resources(path: &Path) -> PathBuf {
     fs::write(path.join("locales/en-US.pak"), "locale")
         .expect("CEF locale fixture should be written");
     path.to_path_buf()
+}
+
+fn create_fake_desktop_runtime(path: &Path) -> PathBuf {
+    fs::write(path, "fake desktop runtime").expect("fake desktop runtime should be written");
+    make_executable(path);
+    path.to_path_buf()
+}
+
+fn desktop_runtime_file_name() -> &'static str {
+    if cfg!(windows) {
+        "cefari-desktop.exe"
+    } else {
+        "cefari-desktop"
+    }
 }
 
 fn create_fake_tool(tools_dir: &Path, name: &str, body: &str) -> PathBuf {
