@@ -53,6 +53,8 @@ pub struct ProjectApp {
     pub project_name: String,
     pub name: String,
     pub identifier: String,
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
@@ -131,6 +133,7 @@ mod tests {
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
+icon = "assets/icon.png"
 
 [frontend]
 dist = "frontend/dist"
@@ -147,6 +150,7 @@ product_name = "Example App"
 
         assert_eq!(project.app.project_name, "example-app");
         assert_eq!(project.app.name, "Example App");
+        assert_eq!(project.app.icon.as_deref(), Some("assets/icon.png"));
         assert_eq!(project.package.product_name, "Example App");
         assert_eq!(project.frontend.dev_port, 5173);
         assert!(project.frontend.build_command.is_none());

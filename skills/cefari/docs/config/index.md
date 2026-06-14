@@ -7,7 +7,8 @@ The manifest is strict: unknown fields are rejected.
 
 ## Tables
 
-- [`[app]`](app.md): project name, display name, and app identifier.
+- [`[app]`](app.md): project name, display name, app identifier, and optional
+  app icon.
 - [`[frontend]`](frontend.md): frontend dist path and optional build/dev
   commands.
 - [`[daemon]`](daemon.md): Deno daemon entrypoint.

@@ -30,6 +30,7 @@ pub fn package_project(project_dir: &Path, release: bool) -> Result<()> {
     })?;
 
     write_package_metadata(
+        project_dir,
         &package_dir,
         &project,
         &build_dir,
@@ -145,13 +146,14 @@ fn has_payload_file(dir: &Path, ignored_file_name: Option<&str>) -> Result<bool>
 }
 
 fn write_package_metadata(
+    project_dir: &Path,
     package_dir: &Path,
     project: &ProjectConfig,
     build_dir: &Path,
     cef_resources_dir: &Path,
     _release: bool,
 ) -> Result<()> {
-    let icon_path = write_default_package_icon(package_dir)?;
+    let icon_path = package_icon_path(project_dir, package_dir, project)?;
     let frontend_dir = build_dir.join("frontend").canonicalize().with_context(|| {
         format!(
             "failed to resolve frontend resources at {}",
@@ -235,6 +237,28 @@ struct CargoPackagerBinary {
 struct CargoPackagerResource {
     src: PathBuf,
     target: PathBuf,
+}
+
+fn package_icon_path(
+    project_dir: &Path,
+    package_dir: &Path,
+    project: &ProjectConfig,
+) -> Result<PathBuf> {
+    let Some(icon) = &project.app.icon else {
+        return write_default_package_icon(package_dir);
+    };
+
+    let icon_path = project_dir.join(icon);
+    if !icon_path.is_file() {
+        anyhow::bail!(
+            "configured app icon {} does not exist or is not a file",
+            icon_path.display()
+        );
+    }
+
+    icon_path
+        .canonicalize()
+        .with_context(|| format!("failed to resolve app icon at {}", icon_path.display()))
 }
 
 fn write_default_package_icon(package_dir: &Path) -> Result<PathBuf> {

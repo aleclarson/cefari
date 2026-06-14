@@ -267,6 +267,98 @@ fn package_creates_assembly_manifest_after_build() {
 }
 
 #[test]
+fn package_metadata_uses_configured_app_icon() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "cargo-packager",
+        r#"echo "cargo-packager $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Icon App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let icon_path = root.join("assets/icon.png");
+    fs::create_dir_all(icon_path.parent().expect("icon should have parent"))
+        .expect("assets dir should be created");
+    fs::write(&icon_path, "icon").expect("icon should be written");
+    set_app_icon(&root, "assets/icon.png");
+
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+
+    assert_success(&output);
+    let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
+        .expect("package metadata should exist");
+    assert!(metadata.contains("assets/icon.png"));
+    assert!(!root.join("dist/package/icons/cefari.png").exists());
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
+fn package_rejects_missing_configured_app_icon() {
+    let root = temp_project_path();
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Missing Icon App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+    set_app_icon(&root, "assets/missing.png");
+
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = cefari()
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("configured app icon"));
+    assert!(stderr(&output).contains("assets/missing.png"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+}
+
+#[test]
 fn package_release_metadata_uses_release_desktop_binary() {
     let root = temp_project_path();
     let tools = temp_project_path();
@@ -881,6 +973,16 @@ fn json_field<'a>(value: &'a serde_json::Value, field: &str) -> &'a str {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn set_app_icon(root: &Path, icon: &str) {
+    let manifest_path = root.join("cefari.toml");
+    let manifest = fs::read_to_string(&manifest_path).expect("manifest should exist");
+    let manifest = manifest.replace(
+        r#"identifier = "dev.cefari."#,
+        &format!("icon = \"{icon}\"\nidentifier = \"dev.cefari."),
+    );
+    fs::write(manifest_path, manifest).expect("manifest should be updated");
 }
 
 #[cfg(unix)]
