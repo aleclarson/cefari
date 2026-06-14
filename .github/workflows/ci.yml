@@ -180,7 +180,10 @@ jobs:
         run: |
           test -d .ci/cefari-sample/dist/package/output
           scripts/extract-native-package-payload.sh .ci/cefari-sample/dist/package/output .ci/package-inspect
-          ruby scripts/verify-native-package-payload.rb .ci/package-inspect "$RUNNER_OS"
+          ruby scripts/verify-native-package-payload.rb \
+            .ci/package-inspect \
+            "$RUNNER_OS" \
+            .ci/cefari-sample/dist/package/manifest.json
 
       - name: Verify assembled package inputs
         shell: bash
@@ -200,7 +203,10 @@ jobs:
         shell: bash
         run: |
           test -f .ci/cefari-cli-dist/cefari || test -f .ci/cefari-cli-dist/cefari.exe
-          grep -q '"desktop_binary": "cefari-desktop"' .ci/cefari-sample/dist/package/manifest.json
+          ruby -rjson -e '
+            desktop_binary = JSON.parse(File.read(".ci/cefari-sample/dist/package/manifest.json")).fetch("desktop_binary")
+            abort "unexpected desktop_binary: #{desktop_binary}" unless desktop_binary.match?(/\Aci-package-sample(\.exe)?\z/)
+          '
           if grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json; then
             exit 1
           fi

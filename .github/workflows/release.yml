@@ -105,8 +105,8 @@ jobs:
             manifest.fetch("cef_resources")
           ]
 
-          unless manifest.fetch("desktop_binary") == "cefari-desktop"
-            abort "package manifest does not target cefari-desktop"
+          unless manifest.fetch("desktop_binary").match?(/\Acefari-release-sample(\.exe)?\z/)
+            abort "unexpected desktop binary #{manifest.fetch("desktop_binary")}"
           end
 
           missing_files = required_files.reject { |path| File.file?(path) }
@@ -126,7 +126,10 @@ jobs:
           output_dir=".release/cefari-sample/dist/package/output"
           inspect_dir=".release/package-inspect"
           scripts/extract-native-package-payload.sh "$output_dir" "$inspect_dir"
-          ruby scripts/verify-native-package-payload.rb "$inspect_dir" "$RUNNER_OS"
+          ruby scripts/verify-native-package-payload.rb \
+            "$inspect_dir" \
+            "$RUNNER_OS" \
+            .release/cefari-sample/dist/package/manifest.json
 
       - name: Sign package artifacts
         if: env.CEFARI_ENABLE_SIGNING == 'true'
