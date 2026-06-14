@@ -24,8 +24,10 @@ package_dir="$project_path/dist/package"
 update_dir="$project_path/dist/update"
 artifact_dir="$project_path/dist"
 release_artifacts_file="$project_path/dist/release-artifacts.txt"
+github_release_assets_dir="$project_path/dist/github-release-assets"
 release_assets=()
 primary_release_asset=""
+github_release_assets=()
 
 write_outputs() {
   {
@@ -103,6 +105,29 @@ is_notarizable_artifact() {
     *.app|*.dmg) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+archive_directory_artifact() {
+  local artifact="$1"
+  local archive_name
+  archive_name="$(basename "$artifact").tar.gz"
+  mkdir -p "$github_release_assets_dir"
+  run_cmd tar -czf "$github_release_assets_dir/$archive_name" -C "$(dirname "$artifact")" "$(basename "$artifact")"
+  github_release_assets+=("$github_release_assets_dir/$archive_name")
+}
+
+prepare_github_release_assets() {
+  github_release_assets=()
+  rm -rf "$github_release_assets_dir"
+  mkdir -p "$github_release_assets_dir"
+  for artifact in "${release_assets[@]}"; do
+    if [[ -f "$artifact" ]]; then
+      github_release_assets+=("$artifact")
+    elif [[ -d "$artifact" ]]; then
+      archive_directory_artifact "$artifact"
+    fi
+  done
+  [[ "${#github_release_assets[@]}" -gt 0 ]] || fail "no uploadable GitHub release assets were prepared"
 }
 
 collect_release_assets() {
@@ -242,16 +267,18 @@ if [[ "$create_github_release" == "true" ]]; then
     echo "GitHub release skipped: release-tag not provided and GITHUB_REF_NAME is unavailable"
   elif [[ "$dry_run" == "true" ]]; then
     echo "+ gh release upload/create for $release_tag"
-  elif command -v gh >/dev/null 2>&1; then
-    release_args=(gh release create "$release_tag" "$primary_release_asset" --title "${release_name:-$release_tag}")
-    [[ "$mode" == "prerelease" ]] && release_args+=(--prerelease)
-    if gh release view "$release_tag" >/dev/null 2>&1; then
-      run_cmd gh release upload "$release_tag" "$primary_release_asset" --clobber
-    else
-      run_cmd "${release_args[@]}"
-    fi
   else
-    fail "gh is required when create-github-release is true"
+    [[ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]] || fail "GH_TOKEN or GITHUB_TOKEN is required when create-github-release is true"
+    validate_command_available gh
+    prepare_github_release_assets
+    create_release_args=(gh release create "$release_tag" --title "${release_name:-$release_tag}")
+    [[ "$mode" == "prerelease" ]] && create_release_args+=(--prerelease)
+    if gh release view "$release_tag" >/dev/null 2>&1; then
+      echo "GitHub release already exists: $release_tag"
+    else
+      run_cmd "${create_release_args[@]}"
+    fi
+    run_cmd gh release upload "$release_tag" "${github_release_assets[@]}" --clobber
   fi
 else
   echo "GitHub release creation skipped"

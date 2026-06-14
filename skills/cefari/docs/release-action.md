@@ -47,6 +47,10 @@ Update inputs:
 ## Secret-Dependent Behavior
 
 The implementation skips signing when no signing platform or signing config is provided, skips notarization unless `notarize` is `true`, and skips update metadata unless `update-url-base` is provided. If update metadata is requested but the env var named by `update-key-env` is absent, update generation is skipped with a clear log message. GitHub release creation requires `gh` when `create-github-release` is `true`.
+When GitHub release creation is enabled, `GH_TOKEN` or `GITHUB_TOKEN` must be
+available. The action creates the release if it does not exist, otherwise it
+uploads to the existing release with `--clobber`. Directory artifacts such as
+macOS `.app` bundles are archived before upload.
 
 ## CLI Setup
 
