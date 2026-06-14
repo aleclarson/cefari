@@ -8,7 +8,7 @@ projects. These pages are app-developer command references.
 Install released CLI builds through npm:
 
 ```bash
-npm install -g @cefari/cli
+npm install -g cefari
 ```
 
 The npm distribution bundles the native `cefari` binary and matching

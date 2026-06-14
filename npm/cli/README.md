@@ -5,7 +5,7 @@ This package installs the `cefari` command through npm.
 Use it with:
 
 ```bash
-npm install -g @cefari/cli
+npm install -g cefari
 cefari --help
 ```
 

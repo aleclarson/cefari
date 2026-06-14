@@ -22,7 +22,7 @@ function fail(message) {
 }
 
 if (!packageName) {
-  fail(`Unsupported platform for @cefari/cli: ${platformKey}`);
+  fail(`Unsupported platform for cefari: ${platformKey}`);
 }
 
 let packageJsonPath;
@@ -30,7 +30,7 @@ try {
   packageJsonPath = require.resolve(`${packageName}/package.json`);
 } catch (error) {
   fail(
-    `Missing ${packageName}. Reinstall @cefari/cli for ${platformKey} or install ${packageName} explicitly.`
+    `Missing ${packageName}. Reinstall cefari for ${platformKey} or install ${packageName} explicitly.`
   );
 }
 

@@ -25,7 +25,7 @@ cargo install --path crates/cefari-cli --locked
 Released builds are distributed through npm:
 
 ```bash
-npm install -g @cefari/cli
+npm install -g cefari
 ```
 
 The npm package installs a platform-specific native `cefari` binary and the

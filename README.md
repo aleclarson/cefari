@@ -19,7 +19,7 @@ The repository is split into:
 ## Install The CLI
 
 ```bash
-npm install -g @cefari/cli
+npm install -g cefari
 cefari --help
 ```
 
