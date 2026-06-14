@@ -3,7 +3,7 @@ description: Build, package, optionally sign/notarize, create update artifacts, 
 
 inputs:
   project-path:
-    description: Path to the Cefari project containing cefari.toml.
+    description: Path to the Cefari project containing cefari.config.ts.
     required: false
     default: "."
   mode:

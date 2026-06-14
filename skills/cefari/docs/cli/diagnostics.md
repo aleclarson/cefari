@@ -32,10 +32,10 @@ The command reports:
 - Cefari CLI version
 - target operating system
 - target architecture
-- current project name and identifier when `cefari.toml` is present and valid
+- current project name and identifier when `cefari.config.ts` is present and valid
 
 When the current directory is not a Cefari project, `info` reports that no
-project was found. When `cefari.toml` exists but is invalid, it reports the
+project was found. When `cefari.config.ts` exists but is invalid, it reports the
 project as invalid with the parse error.
 
 ## `cefari logs`

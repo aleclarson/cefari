@@ -12,7 +12,7 @@ read:
 
 - Start by confirming the failing command's working directory and whether the
   task is operating on the intended app project.
-- Confirm `cefari.toml` exists and parses before investigating build or package
+- Confirm `cefari.config.ts` exists and validates before investigating build or package
   outputs.
 - Use `cefari doctor` and `cefari info` for local environment and project
   diagnostics.

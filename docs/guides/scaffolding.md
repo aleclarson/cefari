@@ -12,7 +12,7 @@ If no path is supplied, the CLI creates `./cefari-app`.
 
 The default scaffold creates:
 
-- `cefari.toml`
+- `cefari.config.ts`
 - `frontend/index.html`
 - `daemon/main.ts`
 - `.agents/skills/cefari/SKILL.md`
@@ -22,41 +22,46 @@ The command refuses to overwrite an existing path.
 
 ## Project Name Rules
 
-`[app].project_name` is the stable machine name for generated executables. It
+`app.projectName` is the stable machine name for generated executables. It
 must be lowercase and contain only `a-z`, `0-9`, and `-`.
 
 Cefari uses that value for build outputs:
 
-- desktop executable: `<project_name>` or `<project_name>.exe`
-- daemon executable: `<project_name>-daemon` or `<project_name>-daemon.exe`
+- desktop executable: `<projectName>` or `<projectName>.exe`
+- daemon executable: `<projectName>-daemon` or `<projectName>-daemon.exe`
 
 ## Project Manifest Shape
 
-A minimal project manifest looks like this:
+A minimal project config looks like this:
 
-```toml
-[app]
-project_name = "my-cefari-app"
-name = "My Cefari App"
-identifier = "dev.cefari.my-cefari-app"
+```ts
+import { defineConfig } from "@cefari/cli";
 
-[frontend]
-dist = "frontend/dist"
-dev_port = 5173
-
-[daemon]
-entry = "daemon/main.ts"
-
-[package]
-product_name = "My Cefari App"
-version = "0.1.0"
+export default defineConfig({
+  app: {
+    projectName: "my-cefari-app",
+    name: "My Cefari App",
+    identifier: "dev.cefari.my-cefari-app",
+  },
+  frontend: {
+    dist: "frontend/dist",
+    devPort: 5173,
+  },
+  daemon: {
+    entry: "daemon/main.ts",
+  },
+  package: {
+    productName: "My Cefari App",
+    version: "0.1.0",
+  },
+});
 ```
 
-Add `frontend.build_command` and `frontend.dev_command` when a framework owns
+Add `frontend.buildCommand` and `frontend.devCommand` when a framework owns
 frontend builds or dev serving. See [Develop Locally](development.md) for Vite.
 
-For the complete app-developer manifest reference, see
-[`cefari.toml` Reference](../config/index.md).
+For the complete app-developer config reference, see
+[`cefari.config.ts` Reference](../config/index.md).
 
 ## Generated Agent Skill
 

@@ -25,11 +25,12 @@ with a built-in local static server.
 
 Projects can configure a tool-managed frontend dev server:
 
-```toml
-[frontend]
-dist = "frontend/dist"
-dev_command = ["deno", "task", "dev:frontend", "--host", "127.0.0.1", "--port", "{port}"]
-dev_port = 5173
+```ts
+frontend: {
+  dist: "frontend/dist",
+  devCommand: ["deno", "task", "dev:frontend", "--host", "127.0.0.1", "--port", "{port}"],
+  devPort: 5173,
+}
 ```
 
 `{port}` is replaced with the selected frontend port. Override it from the CLI:
@@ -42,7 +43,7 @@ Use `--frontend-port 0` only with the built-in static server, where Cefari can
 bind an available local port itself.
 
 For command syntax, see [Project Commands](../cli/project.md). For all
-frontend manifest fields, see [`[frontend]`](../config/frontend.md).
+frontend config fields, see [`frontend`](../config/frontend.md).
 
 ## Vite React Example
 
@@ -62,7 +63,7 @@ cefari dev templates/vite-react-basic
 ```
 
 The example is a Deno workspace with `frontend/` and `daemon/` members. Its
-Cefari manifest uses `deno task` commands so it can run through the installed
+Cefari config uses `deno task` commands so it can run through the installed
 `cefari` CLI.
 
 ## Built-In CSS For Custom Titlebars

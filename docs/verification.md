@@ -11,10 +11,11 @@ Docs were checked against:
 
 - `crates/cefari-cli/src/lib.rs` for command names, arguments, and scaffold
   outputs
-- `crates/cefari-cli/src/project.rs` for `cefari.toml` parsing and defaults
+- `crates/cefari-cli/src/project.rs` for `cefari.config.ts` loading,
+  Deno execution, and runtime validation
 - `crates/cefari-cli/src/build.rs`, `package.rs`, `dev.rs`, `clean.rs`, and
   `release.rs` for guide behavior
-- `templates/vite-react-basic/cefari.toml`, `deno.json`, frontend and daemon
+- `templates/vite-react-basic/cefari.config.ts`, `deno.json`, frontend and daemon
   workspace manifests, and template workflows
 - `.github/actions/cefari-release/action.yml` and
   `.github/actions/cefari-release/release.sh`

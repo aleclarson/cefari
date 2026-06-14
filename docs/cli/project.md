@@ -16,7 +16,7 @@ Arguments and options:
 - `--name NAME`: application display name.
 
 The command refuses to initialize an existing path. The generated project
-includes `cefari.toml`, `frontend/index.html`, `daemon/main.ts`, an app README,
+includes `cefari.config.ts`, `frontend/index.html`, `daemon/main.ts`, an app README,
 and a Cefari agent skill.
 
 ## `cefari dev`
@@ -30,14 +30,14 @@ cefari dev [PATH] [--frontend-port PORT]
 Arguments and options:
 
 - `PATH`: project directory. Defaults to the current directory.
-- `--frontend-port PORT`: override `[frontend].dev_port`.
+- `--frontend-port PORT`: override `frontend.devPort`.
 
 Dev mode starts the frontend dev server, Deno daemon, and desktop runtime
 together. When one child process exits or fails, Cefari stops the remaining
 processes.
 
 Use `--frontend-port 0` only with the built-in static server. Configured
-`frontend.dev_command` values require a fixed port.
+`frontend.devCommand` values require a fixed port.
 
 ## `cefari build`
 
@@ -76,7 +76,7 @@ Arguments and options:
 - `--release`: package release-profile build output when the desktop runtime
   was built from source.
 - `--release-version VERSION`: package version written to native package
-  metadata. Overrides `[package].version`.
+  metadata. Overrides `package.version`.
 
 `cefari package` expects `cefari build` artifacts to exist first. It writes
 package metadata under `dist/package/` and invokes `cargo-packager` when that
@@ -94,5 +94,5 @@ Arguments:
 
 - `PATH`: project directory. Defaults to the current directory.
 
-The command loads `cefari.toml` first, then removes the project's `build/` and
+The command loads `cefari.config.ts` first, then removes the project's `build/` and
 `dist/` directories when they exist.

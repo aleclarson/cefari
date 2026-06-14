@@ -1,6 +1,6 @@
 ---
 name: cefari
-description: Use when building Cefari app projects, configuring cefari.toml, using the Cefari CLI, packaging apps, adding native capabilities, release workflows, or troubleshooting app builds; use this skill as the entrypoint to app-developer references and copied docs.
+description: Use when building Cefari app projects, configuring cefari.config.ts, using the Cefari CLI, packaging apps, adding native capabilities, release workflows, or troubleshooting app builds; use this skill as the entrypoint to app-developer references and copied docs.
 ---
 
 # Cefari
@@ -29,7 +29,7 @@ documentation.
   [cli/project.md](docs/cli/project.md),
   [cli/release.md](docs/cli/release.md),
   [cli/diagnostics.md](docs/cli/diagnostics.md)
-- `cefari.toml`: [config/index.md](docs/config/index.md),
+- `cefari.config.ts`: [config/index.md](docs/config/index.md),
   [config/app.md](docs/config/app.md),
   [config/frontend.md](docs/config/frontend.md),
   [config/daemon.md](docs/config/daemon.md),

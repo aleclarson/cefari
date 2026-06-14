@@ -375,11 +375,11 @@ impl NamedChild {
 
 fn spawn_frontend_command(project_dir: &Path, command: &[String], port: u16) -> Result<Child> {
     if command.is_empty() {
-        anyhow::bail!("frontend dev_command must contain at least one argument");
+        anyhow::bail!("frontend.devCommand must contain at least one argument");
     }
     if port == 0 {
         anyhow::bail!(
-            "frontend dev_command requires a fixed port; set frontend.dev_port or pass --frontend-port"
+            "frontend.devCommand requires a fixed port; set frontend.devPort or pass --frontend-port"
         );
     }
 

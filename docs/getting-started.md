@@ -11,7 +11,7 @@ Use this page as the entry point. It branches into task-oriented guides under
 Install the tools Cefari uses for local development and release work:
 
 - Rust and Cargo
-- Deno
+- Deno 2.8+
 - `cargo-packager` when creating native packages
 - `cargo-codesign` when signing, notarizing, or generating update signatures
 
@@ -46,15 +46,15 @@ Create a minimal project:
 cefari init my-cefari-app --name "My Cefari App"
 ```
 
-The generated `cefari.toml` includes:
+The generated `cefari.config.ts` includes:
 
-- `[app].project_name`, a lowercase machine name used for executable output
+- `app.projectName`, a lowercase machine name used for executable output
   names
-- `[app].name` and `[app].identifier`
-- `[frontend].dist` and `[frontend].dev_port`
-- `[daemon].entry`
-- `[package].product_name`
-- `[package].version`
+- `app.name` and `app.identifier`
+- `frontend.dist` and `frontend.devPort`
+- `daemon.entry`
+- `package.productName`
+- `package.version`
 
 For full scaffolding guidance, see [Scaffold An App](guides/scaffolding.md).
 
@@ -105,7 +105,7 @@ see [Automated Deployment](guides/deployment.md).
 
 - [CLI Reference](cli/index.md): command syntax for development, release, and
   diagnostics.
-- [`cefari.toml` Reference](config/index.md): project manifest fields and
+- [`cefari.config.ts` Reference](config/index.md): project config fields and
   validation rules.
 - [Cefari CSS Contract](css-contract.md): opt-in drag-region utility classes.
 - [TypeScript App Guide](typescript/index.md): task-oriented `@cefari/app`

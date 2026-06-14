@@ -141,20 +141,35 @@ infer_update_target() {
 }
 
 read_project_package_version() {
-  awk '
-    /^[[:space:]]*\[/ {
-      in_package = ($0 ~ /^[[:space:]]*\[package\][[:space:]]*$/)
-      next
-    }
-    in_package && /^[[:space:]]*version[[:space:]]*=/ {
-      line = $0
-      sub(/^[^=]*=[[:space:]]*/, "", line)
-      sub(/^[[:space:]]*"/, "", line)
-      sub(/".*$/, "", line)
-      print line
-      exit
-    }
-  ' "$project_path/cefari.toml"
+  local loader_dir
+  loader_dir="$(mktemp -d)"
+  trap 'rm -rf "$loader_dir"' RETURN
+  cat > "$loader_dir/cefari-cli-config-api.js" <<'JS'
+export function defineConfig(config) {
+  return config;
+}
+JS
+  cat > "$loader_dir/import_map.json" <<'JSON'
+{
+  "imports": {
+    "@cefari/cli": "./cefari-cli-config-api.js"
+  }
+}
+JSON
+  deno run \
+    --quiet \
+    "--allow-read=$project_path,$loader_dir" \
+    --allow-env \
+    --import-map "$loader_dir/import_map.json" \
+    - "$project_path/cefari.config.ts" <<'JS'
+import { pathToFileURL } from "node:url";
+
+const config = (await import(pathToFileURL(Deno.args[0]).href)).default;
+const version = config?.package?.version;
+if (typeof version === "string") {
+  console.log(version);
+}
+JS
 }
 
 read_package_metadata_version() {
@@ -212,7 +227,7 @@ bool_input "$notarize" || fail "notarize must be true or false"
 bool_input "$dry_run" || fail "dry-run must be true or false"
 [[ -n "$cefari_command" ]] || fail "cefari-command is required"
 [[ "$install_cli" != "true" || -n "$cefari_version" ]] || fail "cefari-version is required when install-cli is true"
-[[ -f "$project_path/cefari.toml" ]] || fail "cefari.toml not found at $project_path"
+[[ -f "$project_path/cefari.config.ts" ]] || fail "cefari.config.ts not found at $project_path"
 [[ -z "$update_url_base" || -n "$update_target" ]] || fail "update-target is required when update-url-base is set"
 [[ -z "$signing_config" || -n "$signing_platform" ]] || fail "signing-platform is required when signing-config is set"
 [[ "$notarize" != "true" || "$signing_platform" == "macos" ]] || fail "signing-platform must be macos when notarize is true"
@@ -221,8 +236,9 @@ if [[ "$create_github_release" == "true" && -z "$release_tag" && -z "${GITHUB_RE
   fail "release-tag or GITHUB_REF_NAME is required when create-github-release is true"
 fi
 if [[ "$dry_run" == "true" && -z "$effective_version" ]]; then
+  validate_command_available deno
   effective_version="$(read_project_package_version)"
-  [[ -n "$effective_version" ]] || fail "release-version was not provided and [package].version could not be read from cefari.toml"
+  [[ -n "$effective_version" ]] || fail "release-version was not provided and package.version could not be read from cefari.config.ts"
 fi
 
 write_outputs

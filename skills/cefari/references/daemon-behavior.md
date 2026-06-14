@@ -11,5 +11,5 @@ product behavior, read:
 ## App Notes
 
 - Keep daemon commands runnable from the app project directory.
-- Confirm daemon paths and commands in `cefari.toml` before investigating
+- Confirm daemon paths and commands in `cefari.config.ts` before investigating
   packaging or service behavior.

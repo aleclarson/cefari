@@ -6,7 +6,6 @@ use std::{
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use serde::Serialize;
 
 mod build;
 mod cef;
@@ -242,8 +241,8 @@ pub fn init_project(path: &Path, name: Option<&str>) -> Result<()> {
     fs::create_dir_all(path.join("daemon"))
         .with_context(|| format!("failed to create daemon directory at {}", path.display()))?;
     write_file(
-        &path.join("cefari.toml"),
-        &initial_project_manifest(&project_name, &display_name, &identifier)?,
+        &path.join(project::CONFIG_FILE_NAME),
+        &initial_project_config(&project_name, &display_name, &identifier)?,
     )?;
     write_file(&path.join("frontend/index.html"), FRONTEND_TEMPLATE)?;
     write_file(&path.join("daemon/main.ts"), DAEMON_TEMPLATE)?;
@@ -268,68 +267,47 @@ cefari package
     Ok(())
 }
 
-fn initial_project_manifest(
+fn initial_project_config(
     project_name: &str,
     display_name: &str,
     identifier: &str,
 ) -> Result<String> {
-    toml::to_string_pretty(&InitialProjectManifest {
-        app: InitialProjectApp {
-            project_name,
-            name: display_name,
-            identifier,
-        },
-        frontend: InitialFrontendConfig {
-            dist: "frontend/dist",
-            dev_port: 5173,
-        },
-        daemon: InitialDaemonConfig {
-            entry: "daemon/main.ts",
-        },
-        package: InitialPackageConfig {
-            product_name: display_name,
-            version: "0.1.0",
-        },
-    })
-    .context("failed to encode project manifest")
-}
+    let project_name =
+        serde_json::to_string(project_name).context("failed to encode project name")?;
+    let display_name =
+        serde_json::to_string(display_name).context("failed to encode display name")?;
+    let identifier =
+        serde_json::to_string(identifier).context("failed to encode app identifier")?;
 
-#[derive(Serialize)]
-struct InitialProjectManifest<'a> {
-    app: InitialProjectApp<'a>,
-    frontend: InitialFrontendConfig<'a>,
-    daemon: InitialDaemonConfig<'a>,
-    package: InitialPackageConfig<'a>,
-}
+    Ok(format!(
+        r#"import {{ defineConfig }} from "@cefari/cli";
 
-#[derive(Serialize)]
-struct InitialProjectApp<'a> {
-    project_name: &'a str,
-    name: &'a str,
-    identifier: &'a str,
-}
-
-#[derive(Serialize)]
-struct InitialFrontendConfig<'a> {
-    dist: &'a str,
-    dev_port: u16,
-}
-
-#[derive(Serialize)]
-struct InitialDaemonConfig<'a> {
-    entry: &'a str,
-}
-
-#[derive(Serialize)]
-struct InitialPackageConfig<'a> {
-    product_name: &'a str,
-    version: &'a str,
+export default defineConfig({{
+  app: {{
+    projectName: {project_name},
+    name: {display_name},
+    identifier: {identifier},
+  }},
+  frontend: {{
+    dist: "frontend/dist",
+    devPort: 5173,
+  }},
+  daemon: {{
+    entry: "daemon/main.ts",
+  }},
+  package: {{
+    productName: {display_name},
+    version: "0.1.0",
+  }},
+}});
+"#
+    ))
 }
 
 fn doctor() {
     println!("Cefari doctor");
     print_tool_status("cargo");
-    print_tool_status("deno");
+    println!("deno: {}", project::deno_status().doctor_message());
     print_tool_status("cargo-packager");
     print_tool_status("cargo-codesign");
 }
@@ -493,8 +471,7 @@ const CEFARI_SKILL_FILES: &[(&str, &str)] = &[
 mod tests {
     use clap::Parser;
 
-    use super::{Cli, Command, identifier_slug, initial_project_manifest, project_name_slug};
-    use crate::project::ProjectConfig;
+    use super::{Cli, Command, identifier_slug, initial_project_config, project_name_slug};
 
     #[test]
     fn parses_planned_commands() {
@@ -587,19 +564,17 @@ mod tests {
     }
 
     #[test]
-    fn initial_project_manifest_escapes_toml_strings() {
-        let manifest = initial_project_manifest(
+    fn initial_project_config_escapes_typescript_strings() {
+        let config = initial_project_config(
             "quoted-app",
             "Quoted \"App\" \\ Demo\nNext",
             "dev.cefari.quoted-app",
         )
-        .expect("manifest should serialize");
+        .expect("config should serialize");
 
-        let project: ProjectConfig = toml::from_str(&manifest).expect("manifest should parse");
-
-        assert_eq!(project.app.project_name, "quoted-app");
-        assert_eq!(project.app.name, "Quoted \"App\" \\ Demo\nNext");
-        assert_eq!(project.package.product_name, "Quoted \"App\" \\ Demo\nNext");
+        assert!(config.contains("projectName: \"quoted-app\""));
+        assert!(config.contains(r#"name: "Quoted \"App\" \\ Demo\nNext""#));
+        assert!(config.contains(r#"productName: "Quoted \"App\" \\ Demo\nNext""#));
     }
 
     #[test]

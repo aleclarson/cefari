@@ -427,7 +427,9 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use crate::project::ProjectConfig;
+    use crate::project::{
+        DaemonConfig, FrontendConfig, PackageConfig, ProjectApp, ProjectCapabilities, ProjectConfig,
+    };
 
     use super::{PackageManifest, verify_cef_package_payload};
 
@@ -502,28 +504,29 @@ mod tests {
     }
 
     fn project_config() -> ProjectConfig {
-        toml::from_str(
-            r#"[app]
-project_name = "example-app"
-name = "Example App"
-identifier = "dev.cefari.example-app"
-tray_icon = "assets/tray-icon.png"
-
-[capabilities]
-tray = true
-
-[frontend]
-dist = "frontend/dist"
-
-[daemon]
-entry = "daemon/main.ts"
-
-[package]
-product_name = "Example App"
-version = "1.2.3"
-"#,
-        )
-        .expect("project should parse")
+        ProjectConfig {
+            app: ProjectApp {
+                project_name: "example-app".to_owned(),
+                name: "Example App".to_owned(),
+                identifier: "dev.cefari.example-app".to_owned(),
+                icon: None,
+                tray_icon: Some("assets/tray-icon.png".to_owned()),
+            },
+            capabilities: ProjectCapabilities { tray: true },
+            frontend: FrontendConfig {
+                dist: "frontend/dist".to_owned(),
+                build_command: None,
+                dev_command: None,
+                dev_port: 5173,
+            },
+            daemon: DaemonConfig {
+                entry: "daemon/main.ts".to_owned(),
+            },
+            package: PackageConfig {
+                product_name: "Example App".to_owned(),
+                version: "1.2.3".to_owned(),
+            },
+        }
     }
 
     fn temp_dir(label: &str) -> PathBuf {

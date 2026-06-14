@@ -26,14 +26,14 @@ cefari --help
 ## App Developers
 
 - [Scaffold An App](docs/guides/scaffolding.md): create a project and understand
-  `cefari.toml`.
+  `cefari.config.ts`.
 - [Develop Locally](docs/guides/development.md): run the frontend, daemon, and
   desktop app together.
 - [Build And Package](docs/guides/build-and-package.md): produce local build
   artifacts and package assembly.
 - [CLI Reference](docs/cli/index.md): command syntax for development, release,
   and diagnostics.
-- [`cefari.toml` Reference](docs/config/index.md): project manifest fields and
+- [`cefari.config.ts` Reference](docs/config/index.md): project config fields and
   validation rules.
 - [Native Capabilities](docs/guides/native-capabilities.md): use Rust-owned
   window, menu, tray, notification, and IPC surfaces.

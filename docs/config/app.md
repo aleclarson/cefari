@@ -1,28 +1,30 @@
-# `[app]`
+# `app`
 
-The `[app]` table defines the app's stable identity.
+The `app` section defines the app's stable identity.
 
-```toml
-[app]
-project_name = "my-cefari-app"
-name = "My Cefari App"
-identifier = "dev.cefari.my-cefari-app"
-icon = "assets/icon.png"
+```ts
+app: {
+  projectName: "my-cefari-app",
+  name: "My Cefari App",
+  identifier: "dev.cefari.my-cefari-app",
+  icon: "assets/icon.png",
+  trayIcon: "assets/tray-icon.png",
+}
 ```
 
 ## Fields
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `project_name` | Yes | Stable machine name for generated executables. |
-| `name` | Yes | Human-readable app name used by developer-facing output. |
+| `projectName` | Yes | Stable machine name for generated executables. |
+| `name` | Yes | Human-readable app name used by developer-facing output and runtime shell chrome. |
 | `identifier` | Yes | Reverse-DNS-style app identifier. |
-| `tray_icon` | Only with `[capabilities].tray = true` | Path to the PNG icon used for OS tray/menu-bar integration. |
 | `icon` | No | Path to the app icon used for native package metadata. |
+| `trayIcon` | Only when `capabilities.tray` is `true` | Path to the PNG icon used for OS tray/menu-bar integration. |
 
-## `project_name`
+## `projectName`
 
-`project_name` must be non-empty and contain only lowercase ASCII letters,
+`projectName` must be non-empty and contain only lowercase ASCII letters,
 digits, and `-`.
 
 Valid examples:
@@ -37,20 +39,18 @@ Invalid examples:
 - `my cefari app`
 - `my.cefari.app`
 
-Cefari uses `project_name` for generated executable names:
+Cefari uses `projectName` for generated executable names:
 
-- desktop executable: `<project_name>` or `<project_name>.exe`
-- daemon executable: `<project_name>-daemon` or
-  `<project_name>-daemon.exe`
+- desktop executable: `<projectName>` or `<projectName>.exe`
+- daemon executable: `<projectName>-daemon` or `<projectName>-daemon.exe`
 
-## `icon`
+## Icons
 
-`icon` is resolved relative to the project root and must point to a file.
-Use a square PNG, ideally `1024x1024`.
+`icon` is resolved relative to the project root and must point to a file when
+provided. Use a square PNG, ideally `1024x1024`.
 
-When omitted, `cefari package` uses Cefari's default package icon.
+When `icon` is omitted, `cefari package` uses Cefari's default package icon.
 
-## `tray_icon`
-
-`tray_icon` is resolved relative to the project root and must point to a PNG
-file. It is required only when `[capabilities].tray = true`.
+`trayIcon` is resolved relative to the project root and must point to a PNG file
+when provided. It is required only when `capabilities.tray` is `true`. Tray
+icons are usually small, high-contrast, and template-style.

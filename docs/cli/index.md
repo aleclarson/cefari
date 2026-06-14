@@ -38,7 +38,7 @@ cefari clean
 
 ## Related App Developer Docs
 
-- [`cefari.toml` Reference](../config/index.md)
+- [`cefari.config.ts` Reference](../config/index.md)
 - [Scaffold An App](../guides/scaffolding.md)
 - [Develop Locally](../guides/development.md)
 - [Build And Package](../guides/build-and-package.md)

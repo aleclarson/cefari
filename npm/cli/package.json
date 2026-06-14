@@ -11,8 +11,19 @@
   "bin": {
     "cefari": "bin/cefari.js"
   },
+  "exports": {
+    ".": {
+      "types": "./config/index.d.ts",
+      "import": "./config/index.mjs",
+      "require": "./config/index.cjs",
+      "default": "./config/index.mjs"
+    }
+  },
   "files": [
     "bin/cefari.js",
+    "config/index.cjs",
+    "config/index.d.ts",
+    "config/index.mjs",
     "README.md"
   ],
   "optionalDependencies": {

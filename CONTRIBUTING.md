@@ -146,7 +146,7 @@ deno task --config templates/vite-react-basic/deno.json build:frontend
 ## Verify With The Vite React Template
 
 Use `templates/vite-react-basic/` as the first real-project check for changes
-that affect app scaffolding, `cefari.toml`, frontend dev servers, daemon
+that affect app scaffolding, `cefari.config.ts`, frontend dev servers, daemon
 startup, desktop runtime behavior, IPC, packaging, release assembly, or
 `@cefari/app`. The template is checked into this repository, so it exercises the
 same project shape users get without requiring a separate app clone.

@@ -20,8 +20,8 @@ If `PATH` is omitted, Cefari uses the current directory.
 
 - `build/frontend/`
 - `build/daemon/main.ts`
-- `build/daemon/<project_name>-daemon`
-- `build/desktop/<project_name>`
+- `build/daemon/<projectName>-daemon`
+- `build/desktop/<projectName>`
 - `build/cef/resources/`
 - `build/cef/resources/archive.json`
 - `build/cef/manifest.json`
@@ -36,21 +36,21 @@ cefari build PATH --release
 
 ## Frontend Builds
 
-When `[frontend].build_command` is configured, Cefari runs it before copying
-`[frontend].dist` into `build/frontend/`.
+When `frontend.buildCommand` is configured, Cefari runs it before copying
+`frontend.dist` into `build/frontend/`.
 
 Without a build command, Cefari copies the scaffolded `frontend/index.html`.
 
 ## Daemon Builds
 
-The daemon entry is configured by `[daemon].entry`. Cefari keeps a source copy
+The daemon entry is configured by `daemon.entry`. Cefari keeps a source copy
 at `build/daemon/main.ts` and compiles the daemon into the project-named daemon
 executable.
 
 ## Desktop Runtime
 
 `cefari build` copies a matching `cefari-desktop` runtime into
-`build/desktop/<project_name>`. Installed Cefari CLI distributions should bundle
+`build/desktop/<projectName>`. Installed Cefari CLI distributions should bundle
 that runtime beside the `cefari` executable so app developers do not need to
 compile the Rust desktop dependency tree.
 
@@ -95,8 +95,8 @@ For release-profile packaging:
 cefari package PATH --release --release-version 1.2.3
 ```
 
-Without `--release-version`, package metadata uses `[package].version` from
-`cefari.toml`.
+Without `--release-version`, package metadata uses `package.version` from
+`cefari.config.ts`.
 
 ## Clean Generated Artifacts
 
@@ -107,4 +107,4 @@ cefari clean PATH
 ```
 
 For command syntax, see [Project Commands](../cli/project.md). For package
-manifest fields, see [`cefari.toml` Reference](../config/index.md).
+config fields, see [`cefari.config.ts` Reference](../config/index.md).

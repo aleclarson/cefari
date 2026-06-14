@@ -48,7 +48,7 @@ fn init_creates_project_scaffold() {
         .expect("cefari init should run");
 
     assert_success(&output);
-    assert!(root.join("cefari.toml").exists());
+    assert!(root.join("cefari.config.ts").exists());
     assert!(root.join("frontend/index.html").exists());
     assert!(root.join("daemon/main.ts").exists());
     assert!(root.join("README.md").exists());
@@ -58,13 +58,13 @@ fn init_creates_project_scaffold() {
             .exists()
     );
 
-    let manifest = fs::read_to_string(root.join("cefari.toml")).expect("manifest should exist");
-    assert!(manifest.contains(r#"project_name = "example-app""#));
-    assert!(manifest.contains(r#"name = "Example App""#));
-    assert!(manifest.contains(r#"identifier = "dev.cefari.example-app""#));
-    assert!(!manifest.contains("tray_icon"));
-    assert!(!manifest.contains("[capabilities]"));
-    assert!(manifest.contains(r#"version = "0.1.0""#));
+    let config = fs::read_to_string(root.join("cefari.config.ts")).expect("config should exist");
+    assert!(config.contains(r#"projectName: "example-app""#));
+    assert!(config.contains(r#"name: "Example App""#));
+    assert!(config.contains(r#"identifier: "dev.cefari.example-app""#));
+    assert!(!config.contains("trayIcon"));
+    assert!(!config.contains("capabilities"));
+    assert!(config.contains(r#"version: "0.1.0""#));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
 }
@@ -580,13 +580,13 @@ fn package_metadata_uses_project_package_version_by_default() {
         .expect("cefari init should run");
     assert_success(&init_output);
 
-    let manifest_path = root.join("cefari.toml");
-    let manifest = fs::read_to_string(&manifest_path).expect("manifest should exist");
+    let manifest_path = root.join("cefari.config.ts");
+    let manifest = fs::read_to_string(&manifest_path).expect("config should exist");
     fs::write(
         &manifest_path,
-        manifest.replace(r#"version = "0.1.0""#, r#"version = "2.3.4""#),
+        manifest.replace(r#"version: "0.1.0""#, r#"version: "2.3.4""#),
     )
-    .expect("manifest should be updated");
+    .expect("config should be updated");
 
     let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
     let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
@@ -1121,17 +1121,17 @@ sleep 5"#,
         .output()
         .expect("cefari init should run");
     assert_success(&init_output);
-    let manifest_path = root.join("cefari.toml");
-    let manifest = fs::read_to_string(&manifest_path).expect("project manifest should exist");
+    let manifest_path = root.join("cefari.config.ts");
+    let manifest = fs::read_to_string(&manifest_path).expect("project config should exist");
     fs::write(
         &manifest_path,
         manifest.replace(
-            "dev_port = 5173",
-            r#"dev_command = ["frontend-dev", "--port", "{port}"]
-dev_port = 5173"#,
+            "devPort: 5173,",
+            r#"devCommand: ["frontend-dev", "--port", "{port}"],
+    devPort: 5173,"#,
         ),
     )
-    .expect("project manifest should be updated");
+    .expect("project config should be updated");
 
     let output = with_fake_tools(cefari(), &tools, &log)
         .env("CEFARI_FRONTEND_PID_FILE", &frontend_pid_file)
@@ -1195,23 +1195,27 @@ fn stderr(output: &Output) -> String {
 }
 
 fn set_app_icon(root: &Path, icon: &str) {
-    let manifest_path = root.join("cefari.toml");
-    let manifest = fs::read_to_string(&manifest_path).expect("manifest should exist");
-    let manifest = manifest.replace(
-        r#"identifier = "dev.cefari."#,
-        &format!("icon = \"{icon}\"\nidentifier = \"dev.cefari."),
+    let config_path = root.join("cefari.config.ts");
+    let config = fs::read_to_string(&config_path).expect("config should exist");
+    let config = config.replace(
+        r#"identifier: "dev.cefari."#,
+        &format!("icon: \"{icon}\",\n    identifier: \"dev.cefari."),
     );
-    fs::write(manifest_path, manifest).expect("manifest should be updated");
+    fs::write(config_path, config).expect("config should be updated");
 }
 
 fn enable_tray(root: &Path, icon: &str) {
-    let manifest_path = root.join("cefari.toml");
-    let manifest = fs::read_to_string(&manifest_path).expect("manifest should exist");
-    let manifest = manifest.replace(
-        "\n[frontend]\n",
-        &format!("\ntray_icon = \"{icon}\"\n\n[capabilities]\ntray = true\n\n[frontend]\n"),
+    let config_path = root.join("cefari.config.ts");
+    let config = fs::read_to_string(&config_path).expect("config should exist");
+    let config = config.replace(
+        r#"identifier: "dev.cefari."#,
+        &format!("trayIcon: \"{icon}\",\n    identifier: \"dev.cefari."),
     );
-    fs::write(manifest_path, manifest).expect("manifest should be updated");
+    let config = config.replace(
+        "  frontend: {",
+        "  capabilities: {\n    tray: true,\n  },\n  frontend: {",
+    );
+    fs::write(config_path, config).expect("config should be updated");
 }
 
 #[cfg(unix)]
@@ -1258,13 +1262,27 @@ fn with_fake_tools(mut command: Command, tools_dir: &Path, log: &Path) -> Comman
     let path = std::env::join_paths(paths).expect("PATH should be joinable");
     command.env("PATH", path);
     command.env("CEFARI_TOOL_LOG", log);
+    if let Some(deno) = real_deno_path() {
+        command.env("CEFARI_DENO", deno);
+    }
     command
 }
 
 fn with_only_fake_tools(mut command: Command, tools_dir: &Path, log: &Path) -> Command {
     command.env("PATH", tools_dir);
     command.env("CEFARI_TOOL_LOG", log);
+    if let Some(deno) = real_deno_path() {
+        command.env("CEFARI_DENO", deno);
+    }
     command
+}
+
+fn real_deno_path() -> Option<PathBuf> {
+    std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+        .map(|path| path.join(if cfg!(windows) { "deno.exe" } else { "deno" }))
+        .find(|path| path.is_file())
 }
 
 fn with_fake_cef_resources(mut command: Command, fixture: &Path) -> Command {

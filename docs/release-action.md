@@ -22,7 +22,7 @@ Common optional inputs:
   commands. Defaults to `false`.
 - `cefari-version`: npm CLI version to install when `install-cli` is `true`.
 - `release-version`: version advertised in package and update metadata.
-  Defaults to `[package].version` from `cefari.toml`.
+  Defaults to `package.version` from `cefari.config.ts`.
 - `release-tag`: Git tag used for GitHub release assets.
 - `create-github-release`: whether to create or update a GitHub release.
   Defaults to `false`.

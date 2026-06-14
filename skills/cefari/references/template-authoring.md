@@ -11,7 +11,8 @@ Use this reference when changing files under `templates/`.
 
 ## Frontend
 
-- Frontend dev servers should be declared through `cefari.toml` using `frontend.dev_command` and `frontend.dev_port`.
+- Frontend dev servers should be declared through `cefari.config.ts` using
+  `frontend.devCommand` and `frontend.devPort`.
 - Frontend build output should match `frontend.dist`.
 
 ## Release Workflows

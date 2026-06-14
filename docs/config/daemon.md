@@ -1,10 +1,11 @@
-# `[daemon]`
+# `daemon`
 
-The `[daemon]` table points Cefari at the Deno daemon entrypoint.
+The `daemon` section points Cefari at the Deno daemon entrypoint.
 
-```toml
-[daemon]
-entry = "daemon/main.ts"
+```ts
+daemon: {
+  entry: "daemon/main.ts",
+}
 ```
 
 ## Fields
