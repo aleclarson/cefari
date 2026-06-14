@@ -108,24 +108,24 @@ fn bundled_desktop_runtime() -> Result<Option<PathBuf>> {
         exe_dir
             .join("cefari-runtime")
             .join(desktop_crate_binary_name()),
-        exe_dir
-            .parent()
-            .map(|parent| {
+        exe_dir.parent().map_or_else(
+            || exe_dir.join("missing"),
+            |parent| {
                 parent
                     .join("lib")
                     .join("cefari")
                     .join(desktop_crate_binary_name())
-            })
-            .unwrap_or_else(|| exe_dir.join("missing")),
-        exe_dir
-            .parent()
-            .map(|parent| {
+            },
+        ),
+        exe_dir.parent().map_or_else(
+            || exe_dir.join("missing"),
+            |parent| {
                 parent
                     .join("libexec")
                     .join("cefari")
                     .join(desktop_crate_binary_name())
-            })
-            .unwrap_or_else(|| exe_dir.join("missing")),
+            },
+        ),
     ];
 
     Ok(candidates.into_iter().find(|path| path.is_file()))

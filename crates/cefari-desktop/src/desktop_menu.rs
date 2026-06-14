@@ -90,10 +90,9 @@ pub fn ipc_command_for_menu_command(command: MenuCommand) -> Option<CefariIpcCom
         MenuCommand::CheckForUpdates => Some(CefariIpcCommand::UpdateCheck),
         MenuCommand::OpenLogs => Some(CefariIpcCommand::OpenLogs),
         MenuCommand::ReloadUi => Some(CefariIpcCommand::ReloadUi),
-        MenuCommand::OpenDevTools => None,
+        MenuCommand::OpenDevTools | MenuCommand::Unhandled => None,
         MenuCommand::ServiceStatus => Some(CefariIpcCommand::ServiceStatus),
         MenuCommand::Quit => Some(CefariIpcCommand::AppQuit),
-        MenuCommand::Unhandled => None,
     }
 }
 

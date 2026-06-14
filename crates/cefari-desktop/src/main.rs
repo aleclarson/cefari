@@ -481,11 +481,11 @@ fn configure_smoke_background_event_loop(
     event_loop: &mut EventLoop<UserEvent>,
     background_smoke: bool,
 ) {
+    use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
+
     if !background_smoke {
         return;
     }
-
-    use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 
     event_loop.set_activation_policy(ActivationPolicy::Prohibited);
     event_loop.set_dock_visibility(false);

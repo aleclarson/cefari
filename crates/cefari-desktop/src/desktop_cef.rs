@@ -31,17 +31,15 @@ struct CefRuntimePathConfig {
 }
 
 fn resolve_cef_runtime_paths(paths: &RuntimePaths) -> CefRuntimePathConfig {
-    cef_runtime_path_config(
-        paths,
-        cef_resource_dir_candidates(paths),
-        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("cefari-desktop")),
-    )
+    let executable_path =
+        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("cefari-desktop"));
+    cef_runtime_path_config(paths, cef_resource_dir_candidates(paths), &executable_path)
 }
 
 fn cef_runtime_path_config(
     paths: &RuntimePaths,
     resource_candidates: Vec<PathBuf>,
-    executable_path: PathBuf,
+    executable_path: &Path,
 ) -> CefRuntimePathConfig {
     let resources_dir_path = resource_candidates
         .into_iter()
@@ -54,14 +52,14 @@ fn cef_runtime_path_config(
         .as_ref()
         .and_then(|resources_dir| cef_framework_dir(resources_dir));
     let root_cache_path = paths.cache_dir.join("cef");
-    let browser_subprocess_path = cef_browser_subprocess_path(&root_cache_path, &executable_path);
-    let main_bundle_path = cef_main_bundle_path(&executable_path);
+    let browser_subprocess_path = cef_browser_subprocess_path(&root_cache_path, executable_path);
+    let main_bundle_path = cef_main_bundle_path(executable_path);
 
     CefRuntimePathConfig {
         cache_path: root_cache_path.join("profile"),
         root_cache_path,
         log_file: paths.log_dir.join("cef.log"),
-        executable_path: executable_path.clone(),
+        executable_path: executable_path.to_path_buf(),
         browser_subprocess_path,
         main_bundle_path,
         resources_dir_path,
@@ -101,9 +99,10 @@ fn cef_main_bundle_path(_executable_path: &Path) -> Option<PathBuf> {
 
 #[cfg(target_os = "macos")]
 fn macos_frameworks_dir(root_cache_path: &Path, executable_path: &Path) -> PathBuf {
-    macos_host_app_contents_dir(executable_path)
-        .map(|contents_dir| contents_dir.join("Frameworks"))
-        .unwrap_or_else(|| root_cache_path.join("loader-layout").join("Frameworks"))
+    macos_host_app_contents_dir(executable_path).map_or_else(
+        || root_cache_path.join("loader-layout").join("Frameworks"),
+        |contents_dir| contents_dir.join("Frameworks"),
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -1839,9 +1838,10 @@ mod imp {
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(clippy::cast_possible_truncation)]
     fn cef_bounds_dimension(physical_size: u32, scale_factor: f64) -> i32 {
         if scale_factor.is_finite() && scale_factor > 0.0 {
-            return ((physical_size as f64) / scale_factor)
+            return (f64::from(physical_size) / scale_factor)
                 .round()
                 .clamp(0.0, f64::from(i32::MAX)) as i32;
         }
@@ -1950,7 +1950,7 @@ mod path_tests {
         let paths = test_paths(&root);
         let subprocess = root.join("bin/cefari-desktop");
 
-        let config = cef_runtime_path_config(&paths, Vec::new(), subprocess.clone());
+        let config = cef_runtime_path_config(&paths, Vec::new(), &subprocess);
 
         assert_eq!(config.cache_path, root.join("cache/cef/profile"));
         assert_eq!(config.root_cache_path, root.join("cache/cef"));
@@ -1983,7 +1983,7 @@ mod path_tests {
         let executable =
             root.join("cache/dev-app/cefari-desktop.app/Contents/MacOS/cefari-desktop");
 
-        let config = cef_runtime_path_config(&paths, Vec::new(), executable.clone());
+        let config = cef_runtime_path_config(&paths, Vec::new(), &executable);
 
         assert_eq!(config.executable_path, executable);
         assert_eq!(config.browser_subprocess_path, None);
@@ -2011,7 +2011,7 @@ mod path_tests {
         let config = cef_runtime_path_config(
             &paths,
             vec![missing, resources.clone()],
-            root.join("cefari-desktop"),
+            &root.join("cefari-desktop"),
         );
 
         assert_eq!(config.resources_dir_path, Some(resources.clone()));
@@ -2032,7 +2032,8 @@ mod path_tests {
         fs::create_dir_all(&cef_dir).expect("CEF resource dir should exist");
         fs::write(cef_dir.join("archive.json"), "{}").expect("archive metadata should exist");
 
-        let config = cef_runtime_path_config(&paths, vec![cef_dir.clone()], root.join("desktop"));
+        let desktop = root.join("desktop");
+        let config = cef_runtime_path_config(&paths, vec![cef_dir.clone()], &desktop);
 
         assert_eq!(config.resources_dir_path, Some(cef_dir));
 

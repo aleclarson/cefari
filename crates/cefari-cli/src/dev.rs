@@ -566,8 +566,8 @@ fn static_file_path(frontend_dir: &Path, request_path: &str) -> PathBuf {
 fn mime_type_for_path(path: &Path) -> &'static str {
     match path.extension().and_then(|extension| extension.to_str()) {
         Some("css") => "text/css; charset=utf-8",
-        Some("html") | Some("htm") => "text/html; charset=utf-8",
-        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("html" | "htm") => "text/html; charset=utf-8",
+        Some("js" | "mjs") => "text/javascript; charset=utf-8",
         Some("json") => "application/json; charset=utf-8",
         Some("svg") => "image/svg+xml",
         Some("wasm") => "application/wasm",

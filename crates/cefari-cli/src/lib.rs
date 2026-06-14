@@ -51,7 +51,7 @@ pub enum Command {
         #[arg(long)]
         frontend_port: Option<u16>,
 
-        /// Chrome DevTools Protocol port for the embedded CEF browser. Defaults to any free local port.
+        /// Chrome `DevTools` Protocol port for the embedded CEF browser. Defaults to any free local port.
         #[arg(long)]
         devtools_port: Option<u16>,
     },
