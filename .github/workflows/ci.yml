@@ -190,7 +190,7 @@ jobs:
         run: |
           test -f .ci/cefari-sample/build/frontend/index.html
           test -f .ci/cefari-sample/build/daemon/main.ts
-          test -f .ci/cefari-sample/build/daemon/cefari-daemon || test -f .ci/cefari-sample/build/daemon/cefari-daemon.exe
+          test -f .ci/cefari-sample/build/daemon/ci-package-sample-daemon || test -f .ci/cefari-sample/build/daemon/ci-package-sample-daemon.exe
           test -d .ci/cefari-sample/build/cef/resources
           test -f .ci/cefari-sample/build/cef/resources/archive.json
           test -f .ci/cefari-sample/build/cef/resources/libcef.fixture
