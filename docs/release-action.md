@@ -6,7 +6,10 @@ For step-by-step setup, see [Automated Deployment](guides/deployment.md).
 
 ## Interface
 
-The action accepts a Cefari project path, release mode, target platforms, signing/notarization options, update metadata inputs, and artifact upload controls. The full machine-readable contract is in `.github/actions/cefari-release/action.yml`.
+The action accepts a Cefari project path, release mode, current-runner target
+label, CLI setup options, signing/notarization options, update metadata inputs,
+and artifact upload controls. The full machine-readable contract is in
+`.github/actions/cefari-release/action.yml`.
 
 Required input:
 
@@ -16,7 +19,13 @@ Common optional inputs:
 
 - `project-path`: path to the app project. Defaults to `.`.
 - `mode`: `release` or `prerelease`. Defaults to `release`.
-- `targets`: comma-separated target platform list.
+- `targets`: informational current-runner target label. Use a workflow matrix
+  for platform fan-out.
+- `cefari-command`: Cefari CLI command or path. Defaults to `cefari`.
+- `install-cli`: whether to install `@cefari/cli` from npm before release
+  commands. Defaults to `false`.
+- `cefari-version`: npm CLI version to install when `install-cli` is `true`.
+  Defaults to `latest`.
 - `release-tag`: Git tag used for GitHub release assets.
 - `create-github-release`: whether to create or update a GitHub release.
 - `upload-artifacts`: whether to upload packaged files to GitHub Actions artifacts.
@@ -39,6 +48,21 @@ Update inputs:
 
 The implementation skips signing when no signing platform or signing config is provided, skips notarization unless `notarize` is `true`, and skips update metadata unless `update-url-base` is provided. If update metadata is requested but the env var named by `update-key-env` is absent, update generation is skipped with a clear log message. GitHub release creation requires `gh` when `create-github-release` is `true`.
 
+## CLI Setup
+
+By default the action expects a `cefari` command to already be available on
+`PATH`. Generated app repositories can either install the npm CLI before
+calling the action or set:
+
+```yaml
+with:
+  install-cli: "true"
+  cefari-version: "latest"
+```
+
+When `install-cli` is `true`, the action installs `@cefari/cli` from npm and
+then runs release commands through the configured `cefari-command`.
+
 Expected secret families:
 
 - Code-signing certificates and passwords for platform signing.
@@ -55,4 +79,6 @@ Expected secret families:
 
 ## Implementation Boundary
 
-The implementation delegates build, package, signing, notarization, and update generation to `cefari-cli` commands instead of duplicating release logic in workflow YAML.
+The implementation delegates build, package, signing, notarization, and update
+generation to the configured Cefari CLI command instead of duplicating release
+logic in workflow YAML.

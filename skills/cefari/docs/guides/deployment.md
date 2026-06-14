@@ -11,8 +11,9 @@ The shared action lives at:
 .github/actions/cefari-release/action.yml
 ```
 
-It validates release inputs, then delegates to Cefari CLI commands for build,
-package, signing, notarization, update metadata, and GitHub release upload.
+It validates release inputs, then delegates to the configured Cefari CLI command
+for build, package, signing, notarization, update metadata, and GitHub release
+upload.
 
 Required input:
 
@@ -22,7 +23,11 @@ Common inputs:
 
 - `project-path`
 - `mode`: `release` or `prerelease`
-- `targets`
+- `targets`: informational current-runner target label; use workflow matrices
+  for platform fan-out
+- `cefari-command`
+- `install-cli`
+- `cefari-version`
 - `release-tag`
 - `create-github-release`
 - `upload-artifacts`
@@ -59,8 +64,8 @@ targets: macos-aarch64
 ```
 
 Copy these workflow files and `.github/actions/cefari-release/` into a generated
-project, then adjust `project-path`, target platforms, signing configuration,
-and update URLs for that repository.
+project, then adjust `project-path`, workflow matrix targets, Cefari CLI setup,
+signing configuration, and update URLs for that repository.
 
 ## Dry-Run A Release
 
@@ -72,6 +77,9 @@ GITHUB_OUTPUT=/tmp/cefari-release-output.txt \
 GITHUB_ACTION_PATH=.github/actions/cefari-release \
 CEFARI_PROJECT_PATH=templates/vite-react-basic \
 CEFARI_RELEASE_MODE=prerelease \
+CEFARI_COMMAND=cefari \
+CEFARI_INSTALL_CLI=false \
+CEFARI_CLI_VERSION=latest \
 CEFARI_RELEASE_VERSION=0.0.0-verification \
 CEFARI_RELEASE_TAG=verification-0.0.0 \
 CEFARI_DRY_RUN=true \

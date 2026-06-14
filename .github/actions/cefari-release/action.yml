@@ -11,9 +11,21 @@ inputs:
     required: false
     default: "release"
   targets:
-    description: Comma-separated target platform list, such as macos-aarch64,windows-x86_64,linux-x86_64.
+    description: Informational target platform label for the current runner. Platform fan-out should be handled by the workflow matrix.
     required: false
     default: ""
+  cefari-command:
+    description: Cefari CLI command or path to execute. Defaults to a cefari binary already available on PATH.
+    required: false
+    default: "cefari"
+  install-cli:
+    description: Whether to install the Cefari CLI from npm before running release commands.
+    required: false
+    default: "false"
+  cefari-version:
+    description: Version of @cefari/cli to install when install-cli is true.
+    required: false
+    default: "latest"
   release-version:
     description: Version advertised in package and update metadata.
     required: true
@@ -93,6 +105,9 @@ runs:
         CEFARI_PROJECT_PATH: ${{ inputs.project-path }}
         CEFARI_RELEASE_MODE: ${{ inputs.mode }}
         CEFARI_TARGETS: ${{ inputs.targets }}
+        CEFARI_COMMAND: ${{ inputs.cefari-command }}
+        CEFARI_INSTALL_CLI: ${{ inputs.install-cli }}
+        CEFARI_CLI_VERSION: ${{ inputs.cefari-version }}
         CEFARI_RELEASE_VERSION: ${{ inputs.release-version }}
         CEFARI_RELEASE_TAG: ${{ inputs.release-tag }}
         CEFARI_RELEASE_NAME: ${{ inputs.release-name }}
