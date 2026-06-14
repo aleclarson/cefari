@@ -23,12 +23,16 @@ dry_run="${CEFARI_DRY_RUN:-false}"
 package_dir="$project_path/dist/package"
 update_dir="$project_path/dist/update"
 artifact_dir="$project_path/dist"
+release_artifacts_file="$project_path/dist/release-artifacts.txt"
+release_assets=()
+primary_release_asset=""
 
 write_outputs() {
   {
     echo "package-dir=$package_dir"
     echo "update-dir=$update_dir"
     echo "artifact-dir=$artifact_dir"
+    echo "release-artifacts=$release_artifacts_file"
     echo "release-mode=$mode"
   } >> "$GITHUB_OUTPUT"
 }
@@ -74,11 +78,64 @@ validate_command_available() {
   command_available "$command_name" || fail "$command_name is required but was not found"
 }
 
-find_release_asset() {
-  find "$package_dir/output" -type f \
-    \( -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.exe' -o -name '*.msi' -o -name '*.zip' -o -name '*.tar.gz' \) \
-    | sort \
-    | head -n 1
+is_release_artifact() {
+  local path="$1"
+  case "$path" in
+    *.app|*.dmg|*.app.tar.gz|*.AppImage|*.deb|*.rpm|*.exe|*.msi|*.zip|*.tar.gz) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_signable_artifact() {
+  local path="$1"
+  local platform="$2"
+  case "$platform:$path" in
+    macos:*.app|macos:*.dmg) return 0 ;;
+    linux:*.AppImage|linux:*.deb|linux:*.rpm|linux:*.tar.gz|linux:*.zip) return 0 ;;
+    windows:*.exe|windows:*.msi|windows:*.zip) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_notarizable_artifact() {
+  local path="$1"
+  case "$path" in
+    *.app|*.dmg) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+collect_release_assets() {
+  local output_dir="$package_dir/output"
+  [[ -d "$output_dir" ]] || fail "package output directory not found at $output_dir"
+
+  release_assets=()
+  while IFS= read -r artifact; do
+    if is_release_artifact "$artifact"; then
+      release_assets+=("$artifact")
+    fi
+  done < <(find "$output_dir" -mindepth 1 -maxdepth 1 \( -type f -o -type d \) -print | sort)
+
+  [[ "${#release_assets[@]}" -gt 0 ]] || fail "no release artifacts found under $output_dir"
+  mkdir -p "$(dirname "$release_artifacts_file")"
+  : > "$release_artifacts_file"
+  for artifact in "${release_assets[@]}"; do
+    echo "$artifact" >> "$release_artifacts_file"
+    echo "collected release artifact: $artifact"
+  done
+}
+
+select_primary_release_asset() {
+  primary_release_asset=""
+  for artifact in "${release_assets[@]}"; do
+    if [[ -f "$artifact" ]]; then
+      primary_release_asset="$artifact"
+      return 0
+    fi
+  done
+  if [[ "${#release_assets[@]}" -gt 0 ]]; then
+    primary_release_asset="${release_assets[0]}"
+  fi
 }
 
 [[ "$mode" == "release" || "$mode" == "prerelease" ]] || fail "mode must be release or prerelease"
@@ -112,28 +169,51 @@ validate_command_available "$cefari_command"
 run_cmd "$cefari_command" build "$project_path" --release
 run_cmd "$cefari_command" package "$project_path" --release
 
-asset=""
 if [[ "$dry_run" != "true" ]]; then
-  asset="$(find_release_asset || true)"
-  [[ -n "$asset" ]] || fail "no release asset found under $package_dir/output"
-  echo "selected release asset: $asset"
+  collect_release_assets
+  select_primary_release_asset
+else
+  echo "artifact collection skipped in dry-run"
 fi
 
 if [[ -n "$signing_config" || -n "$signing_platform" ]]; then
-  [[ "$dry_run" == "true" || -n "$asset" ]] || fail "cannot sign without a release asset"
-  sign_args=("$cefari_command" codesign "$asset")
-  [[ -n "$signing_platform" ]] && sign_args+=(--platform "$signing_platform")
-  [[ -n "$signing_config" ]] && sign_args+=(--config "$signing_config")
-  run_cmd "${sign_args[@]}"
+  if [[ "$dry_run" == "true" ]]; then
+    echo "signing skipped in dry-run: release artifacts are not collected"
+  else
+    effective_signing_platform="${signing_platform:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
+    case "$effective_signing_platform" in
+      darwin) effective_signing_platform="macos" ;;
+      mingw*|msys*|cygwin*) effective_signing_platform="windows" ;;
+    esac
+    for asset in "${release_assets[@]}"; do
+      if is_signable_artifact "$asset" "$effective_signing_platform"; then
+        sign_args=("$cefari_command" codesign "$asset")
+        [[ -n "$signing_platform" ]] && sign_args+=(--platform "$signing_platform")
+        [[ -n "$signing_config" ]] && sign_args+=(--config "$signing_config")
+        run_cmd "${sign_args[@]}"
+      else
+        echo "signing skipped for unsupported artifact: $asset"
+      fi
+    done
+  fi
 else
   echo "signing skipped: no signing platform or signing config provided"
 fi
 
 if [[ "$notarize" == "true" ]]; then
-  [[ "$dry_run" == "true" || -n "$asset" ]] || fail "cannot notarize without a release asset"
-  notarize_args=("$cefari_command" notarize "$asset")
-  [[ -n "$signing_config" ]] && notarize_args+=(--config "$signing_config")
-  run_cmd "${notarize_args[@]}"
+  if [[ "$dry_run" == "true" ]]; then
+    echo "notarization skipped in dry-run: release artifacts are not collected"
+  else
+    for asset in "${release_assets[@]}"; do
+      if is_notarizable_artifact "$asset"; then
+        notarize_args=("$cefari_command" notarize "$asset")
+        [[ -n "$signing_config" ]] && notarize_args+=(--config "$signing_config")
+        run_cmd "${notarize_args[@]}"
+      else
+        echo "notarization skipped for unsupported artifact: $asset"
+      fi
+    done
+  fi
 else
   echo "notarization skipped"
 fi
@@ -142,10 +222,10 @@ if [[ -n "$update_url_base" ]]; then
   if [[ -z "${!update_key_env:-}" && "$dry_run" != "true" ]]; then
     echo "update metadata skipped: $update_key_env is not set"
   else
-    [[ "$dry_run" == "true" || -n "$asset" ]] || fail "cannot make update metadata without a release asset"
-    archive_name="${asset##*/}"
+    [[ "$dry_run" == "true" || -n "$primary_release_asset" ]] || fail "cannot make update metadata without a release asset"
+    archive_name="${primary_release_asset##*/}"
     update_url="${update_url_base%/}/$archive_name"
-    update_args=("$cefari_command" make-update "$asset" --url "$update_url" --version "$version" --key-env "$update_key_env" --output-dir "$update_dir")
+    update_args=("$cefari_command" make-update "$primary_release_asset" --url "$update_url" --version "$version" --key-env "$update_key_env" --output-dir "$update_dir")
     [[ -n "$update_target" ]] && update_args+=(--target "$update_target")
     [[ -n "$update_format" ]] && update_args+=(--format "$update_format")
     run_cmd "${update_args[@]}"
@@ -163,10 +243,10 @@ if [[ "$create_github_release" == "true" ]]; then
   elif [[ "$dry_run" == "true" ]]; then
     echo "+ gh release upload/create for $release_tag"
   elif command -v gh >/dev/null 2>&1; then
-    release_args=(gh release create "$release_tag" "$asset" --title "${release_name:-$release_tag}")
+    release_args=(gh release create "$release_tag" "$primary_release_asset" --title "${release_name:-$release_tag}")
     [[ "$mode" == "prerelease" ]] && release_args+=(--prerelease)
     if gh release view "$release_tag" >/dev/null 2>&1; then
-      run_cmd gh release upload "$release_tag" "$asset" --clobber
+      run_cmd gh release upload "$release_tag" "$primary_release_asset" --clobber
     else
       run_cmd "${release_args[@]}"
     fi

@@ -92,6 +92,9 @@ outputs:
   artifact-dir:
     description: Directory containing upload-ready release artifacts.
     value: ${{ steps.release.outputs.artifact-dir }}
+  release-artifacts:
+    description: Newline-delimited file listing package artifacts collected for release processing.
+    value: ${{ steps.release.outputs.release-artifacts }}
   release-mode:
     description: Effective release mode.
     value: ${{ steps.release.outputs.release-mode }}

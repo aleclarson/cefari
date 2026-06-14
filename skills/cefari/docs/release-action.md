@@ -78,6 +78,8 @@ Expected secret families:
 - `package-dir`: prepared package assembly directory.
 - `update-dir`: generated update metadata directory.
 - `artifact-dir`: upload-ready artifact directory.
+- `release-artifacts`: newline-delimited file listing package artifacts
+  collected for release processing.
 - `release-mode`: effective release mode.
 
 ## Implementation Boundary
