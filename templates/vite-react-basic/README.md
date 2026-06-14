@@ -30,15 +30,17 @@ cefari build templates/vite-react-basic
 This template includes production and prerelease workflow stubs in
 `.github/workflows/`.
 
-- `release.yml` runs for `v*` tags or manual dispatch and calls the Cefari
-  release action in production mode.
+- `release.yml` runs for `v*` tags or manual dispatch, installs release
+  prerequisites, and calls the Cefari release action in production mode across
+  macOS, Linux, and Windows matrix jobs.
 - `prerelease.yml` runs manually and calls the Cefari release action in
-  prerelease mode, with a dry-run option for validation.
+  prerelease mode across the same matrix, with a dry-run option for validation.
 
 Both workflows use the repository-local action path
 `./.github/actions/cefari-release` and set
 `project-path: templates/vite-react-basic` so this checked-in template can be
-validated with the installed `cefari` CLI.
+validated in this repository. Generated app repositories should usually change
+`project-path` to `.`.
 
 Expected secrets and variables:
 
@@ -48,11 +50,15 @@ Expected secrets and variables:
   generated.
 - `CEFARI_UPDATE_URL_BASE`: optional repository variable containing the public
   download URL prefix for update metadata.
+- `CEFARI_CLI_VERSION`: optional repository variable pinning the `@cefari/cli`
+  version installed by the release action. Defaults to `latest`.
 
 Expected artifacts:
 
 - Native package output under `dist/package/output`.
 - GitHub Actions artifact upload named from the Cefari release action's
   `artifact-name` input.
+- Release artifact list at `dist/release-artifacts.txt`.
+- Per-target update input archive under `dist/update-input/`.
 - Update metadata under `dist/update` when `CEFARI_UPDATE_URL_BASE` and
   `UPDATE_SIGNING_KEY` are configured.

@@ -56,16 +56,21 @@ The Vite React template includes:
 The production workflow runs for `v*` tags and manual dispatch. The prerelease
 workflow runs manually and includes a `dry_run` input.
 
-Both workflows call the repository-local Cefari release action with:
+Both workflows run a matrix across macOS, Linux, and Windows, install Node,
+Deno, Rust, platform CEF build tools, `cargo-packager`, and `cargo-codesign`,
+then call the repository-local Cefari release action with the current matrix
+target:
 
 ```yaml
 project-path: templates/vite-react-basic
-targets: macos-aarch64
+targets: ${{ matrix.target.name }}
+install-cli: "true"
+cefari-version: ${{ vars.CEFARI_CLI_VERSION || 'latest' }}
 ```
 
 Copy these workflow files and `.github/actions/cefari-release/` into a generated
-project, then adjust `project-path`, workflow matrix targets, Cefari CLI setup,
-signing configuration, and update URLs for that repository.
+project, then change `project-path` to `.`, adjust workflow matrix targets,
+review signing configuration, and set update URLs for that repository.
 
 ## Dry-Run A Release
 
