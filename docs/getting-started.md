@@ -50,7 +50,7 @@ The generated `cefari.toml` includes:
 
 - `[app].project_name`, a lowercase machine name used for executable output
   names
-- `[app].name`, `[app].identifier`, and `[app].tray_icon`
+- `[app].name` and `[app].identifier`
 - `[frontend].dist` and `[frontend].dev_port`
 - `[daemon].entry`
 - `[package].product_name`

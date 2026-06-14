@@ -51,7 +51,6 @@ fn init_creates_project_scaffold() {
     assert!(root.join("cefari.toml").exists());
     assert!(root.join("frontend/index.html").exists());
     assert!(root.join("daemon/main.ts").exists());
-    assert!(root.join("assets/tray-icon.png").exists());
     assert!(root.join("README.md").exists());
     assert!(root.join(".agents/skills/cefari/SKILL.md").exists());
     assert!(
@@ -63,7 +62,8 @@ fn init_creates_project_scaffold() {
     assert!(manifest.contains(r#"project_name = "example-app""#));
     assert!(manifest.contains(r#"name = "Example App""#));
     assert!(manifest.contains(r#"identifier = "dev.cefari.example-app""#));
-    assert!(manifest.contains(r#"tray_icon = "assets/tray-icon.png""#));
+    assert!(!manifest.contains("tray_icon"));
+    assert!(!manifest.contains("[capabilities]"));
     assert!(manifest.contains(r#"version = "0.1.0""#));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
@@ -248,7 +248,7 @@ fn package_creates_assembly_manifest_after_build() {
     );
     assert!(PathBuf::from(json_field(&manifest_json, "daemon_executable")).exists());
     assert!(PathBuf::from(json_field(&manifest_json, "cef_archive_json")).exists());
-    assert_eq!(json_field(&manifest_json, "tray_icon"), "tray-icon.png");
+    assert!(json_optional_string(&manifest_json, "tray_icon").is_none());
     assert!(
         PathBuf::from(json_field(&manifest_json, "cef_resources"))
             .join("libcef.fixture")
@@ -262,12 +262,71 @@ fn package_creates_assembly_manifest_after_build() {
     assert!(metadata.contains("dist/package/icons/cefari.png"));
     assert!(metadata.contains("build/desktop"));
     assert!(metadata.contains("build/cef/resources"));
-    assert!(metadata.contains("assets/tray-icon.png"));
-    assert!(metadata.contains(r#"target = "tray-icon.png""#));
+    assert!(!metadata.contains("assets/tray-icon.png"));
+    assert!(!metadata.contains(r#"target = "tray-icon.png""#));
     assert!(metadata.contains(&format!(
         r#"path = "{}""#,
         desktop_executable_name("package-app")
     )));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
+fn package_includes_tray_icon_when_tray_capability_is_enabled() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "cargo-packager",
+        r#"echo "cargo-packager $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Tray Package App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+    fs::create_dir_all(root.join("assets")).expect("assets dir should be created");
+    fs::write(root.join("assets/tray-icon.png"), "tray icon").expect("tray icon should be written");
+    enable_tray(&root, "assets/tray-icon.png");
+
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+
+    assert_success(&output);
+    let manifest =
+        fs::read_to_string(root.join("dist/package/manifest.json")).expect("manifest should exist");
+    let manifest_json: serde_json::Value =
+        serde_json::from_str(&manifest).expect("manifest should be valid JSON");
+    assert_eq!(
+        json_optional_string(&manifest_json, "tray_icon"),
+        Some("tray-icon.png")
+    );
+    let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
+        .expect("package metadata should exist");
+    assert!(metadata.contains("assets/tray-icon.png"));
+    assert!(metadata.contains(r#"target = "tray-icon.png""#));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
     fs::remove_dir_all(tools).expect("temp tools should be removable");
@@ -376,7 +435,7 @@ fn package_rejects_missing_configured_tray_icon() {
         .output()
         .expect("cefari init should run");
     assert_success(&init_output);
-    set_tray_icon(&root, "assets/missing-tray.png");
+    enable_tray(&root, "assets/missing-tray.png");
 
     let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
     let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
@@ -1118,6 +1177,19 @@ fn json_field<'a>(value: &'a serde_json::Value, field: &str) -> &'a str {
         .unwrap_or_else(|| panic!("manifest field {field} should be a string"))
 }
 
+fn json_optional_string<'a>(value: &'a serde_json::Value, field: &str) -> Option<&'a str> {
+    match value
+        .get(field)
+        .unwrap_or_else(|| panic!("manifest field {field} should exist"))
+    {
+        serde_json::Value::Null => None,
+        value => value.as_str().map_or_else(
+            || panic!("manifest field {field} should be a string or null"),
+            Some,
+        ),
+    }
+}
+
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
@@ -1132,12 +1204,12 @@ fn set_app_icon(root: &Path, icon: &str) {
     fs::write(manifest_path, manifest).expect("manifest should be updated");
 }
 
-fn set_tray_icon(root: &Path, icon: &str) {
+fn enable_tray(root: &Path, icon: &str) {
     let manifest_path = root.join("cefari.toml");
     let manifest = fs::read_to_string(&manifest_path).expect("manifest should exist");
     let manifest = manifest.replace(
-        r#"tray_icon = "assets/tray-icon.png""#,
-        &format!("tray_icon = \"{icon}\""),
+        "\n[frontend]\n",
+        &format!("\ntray_icon = \"{icon}\"\n\n[capabilities]\ntray = true\n\n[frontend]\n"),
     );
     fs::write(manifest_path, manifest).expect("manifest should be updated");
 }

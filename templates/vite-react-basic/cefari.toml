@@ -2,7 +2,6 @@
 project_name = "vite-react-basic"
 name = "Vite React Basic"
 identifier = "dev.cefari.vite-react-basic"
-tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"

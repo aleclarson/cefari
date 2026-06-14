@@ -165,21 +165,29 @@ impl DevProcesses {
         devtools: &DevtoolsEndpoint,
     ) -> Result<()> {
         let frontend_url = self.frontend_url.as_deref();
-        let tray_icon = project_dir.join(&project.app.tray_icon);
-        let tray_icon = tray_icon.canonicalize().with_context(|| {
-            format!(
-                "configured tray icon {} does not exist or is not a file",
-                tray_icon.display()
-            )
-        })?;
+        let tray_icon = if project.capabilities.tray {
+            let configured_tray_icon = project.app.tray_icon.as_deref().ok_or_else(|| {
+                anyhow::anyhow!("app.tray_icon is required when capabilities.tray is true")
+            })?;
+            let tray_icon = project_dir.join(configured_tray_icon);
+            Some(tray_icon.canonicalize().with_context(|| {
+                format!(
+                    "configured tray icon {} does not exist or is not a file",
+                    tray_icon.display()
+                )
+            })?)
+        } else {
+            None
+        };
         let mut command = desktop_launch_command()?;
-        let child = command
+        command
             .envs(frontend_url.map(|url| ("CEFARI_FRONTEND_URL", url)))
             .env(CEFARI_DEV_MODE_ENV, "1")
             .env(CEFARI_DEVTOOLS_PORT_ENV, devtools.port.to_string())
             .env("CEFARI_RESOURCE_DIR", project_dir)
-            .env("CEFARI_TRAY_ICON", tray_icon)
             .stdin(Stdio::null())
+            .envs(tray_icon.map(|path| ("CEFARI_TRAY_ICON", path)));
+        let child = command
             .spawn()
             .context("failed to start Rust desktop app for cefari dev")?;
         self.children

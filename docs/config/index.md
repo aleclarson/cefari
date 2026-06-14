@@ -7,8 +7,9 @@ The manifest is strict: unknown fields are rejected.
 
 ## Tables
 
-- [`[app]`](app.md): project name, display name, app identifier, tray icon, and
-  optional app icon.
+- [`[app]`](app.md): project name, display name, app identifier, and optional
+  icons.
+- [`[capabilities]`](capabilities.md): opt-in native desktop integrations.
 - [`[frontend]`](frontend.md): frontend dist path and optional build/dev
   commands.
 - [`[daemon]`](daemon.md): Deno daemon entrypoint.
@@ -21,7 +22,6 @@ The manifest is strict: unknown fields are rejected.
 project_name = "my-cefari-app"
 name = "My Cefari App"
 identifier = "dev.cefari.my-cefari-app"
-tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"

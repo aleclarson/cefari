@@ -241,16 +241,12 @@ pub fn init_project(path: &Path, name: Option<&str>) -> Result<()> {
         .with_context(|| format!("failed to create frontend directory at {}", path.display()))?;
     fs::create_dir_all(path.join("daemon"))
         .with_context(|| format!("failed to create daemon directory at {}", path.display()))?;
-    fs::create_dir_all(path.join("assets"))
-        .with_context(|| format!("failed to create assets directory at {}", path.display()))?;
-
     write_file(
         &path.join("cefari.toml"),
         &initial_project_manifest(&project_name, &display_name, &identifier)?,
     )?;
     write_file(&path.join("frontend/index.html"), FRONTEND_TEMPLATE)?;
     write_file(&path.join("daemon/main.ts"), DAEMON_TEMPLATE)?;
-    write_bytes(&path.join("assets/tray-icon.png"), DEFAULT_TRAY_ICON_PNG)?;
     write_cefari_skill(path)?;
     write_file(
         &path.join("README.md"),
@@ -282,7 +278,6 @@ fn initial_project_manifest(
             project_name,
             name: display_name,
             identifier,
-            tray_icon: "assets/tray-icon.png",
         },
         frontend: InitialFrontendConfig {
             dist: "frontend/dist",
@@ -312,10 +307,7 @@ struct InitialProjectApp<'a> {
     project_name: &'a str,
     name: &'a str,
     identifier: &'a str,
-    tray_icon: &'a str,
 }
-
-const DEFAULT_TRAY_ICON_PNG: &[u8] = include_bytes!("../assets/default-tray-icon.png");
 
 #[derive(Serialize)]
 struct InitialFrontendConfig<'a> {

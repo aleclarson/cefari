@@ -45,6 +45,12 @@ impl DesktopTray {
     }
 }
 
+pub(crate) fn tray_enabled(paths: &RuntimePaths) -> bool {
+    tray_icon_candidates(paths)
+        .into_iter()
+        .any(|candidate| candidate.is_file())
+}
+
 pub fn ipc_command_for_event(event: &TrayIconEvent) -> Option<CefariIpcCommand> {
     if is_restore_window_event(event) {
         Some(CefariIpcCommand::TrayRestoreWindow)
@@ -196,9 +202,18 @@ fn platform_package_formats() -> &'static [PackageFormat] {
 
 #[cfg(test)]
 mod tests {
-    use cefari_core::AppConfig;
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
-    use super::{decode_tray_icon_png, ipc_command_for_event, tray_quit_label};
+    use cefari_core::{AppConfig, RuntimePaths};
+
+    use super::{
+        PACKAGED_TRAY_ICON, decode_tray_icon_png, ipc_command_for_event, tray_enabled,
+        tray_quit_label,
+    };
 
     #[test]
     fn tray_menu_labels_use_app_config() {
@@ -225,6 +240,22 @@ mod tests {
     }
 
     #[test]
+    fn tray_is_enabled_when_resource_icon_exists() {
+        let root = temp_dir("tray-enabled");
+        let paths = runtime_paths(&root);
+
+        assert!(!tray_enabled(&paths));
+
+        fs::create_dir_all(&paths.resource_dir).expect("resource dir should be created");
+        fs::write(paths.resource_dir.join(PACKAGED_TRAY_ICON), "icon")
+            .expect("tray icon should be written");
+
+        assert!(tray_enabled(&paths));
+
+        fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    #[test]
     fn non_primary_tray_events_do_not_emit_ipc_commands() {
         let event = tray_icon::TrayIconEvent::Click {
             id: tray_icon::TrayIconId("test".to_owned()),
@@ -235,5 +266,25 @@ mod tests {
         };
 
         assert_eq!(ipc_command_for_event(&event), None);
+    }
+
+    fn runtime_paths(root: &Path) -> RuntimePaths {
+        RuntimePaths {
+            config_dir: root.join("config"),
+            config_file: root.join("config/cefari.json"),
+            data_dir: root.join("data"),
+            cache_dir: root.join("cache"),
+            log_dir: root.join("logs"),
+            resource_dir: root.join("resources"),
+            update_dir: root.join("updates"),
+        }
+    }
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("cefari-desktop-{label}-{suffix}"))
     }
 }

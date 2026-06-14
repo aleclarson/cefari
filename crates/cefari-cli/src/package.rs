@@ -160,8 +160,7 @@ fn write_package_metadata(
     release_version: Option<&str>,
 ) -> Result<()> {
     let icon_path = package_icon_path(project_dir, package_dir, project)?;
-    let tray_icon_path =
-        required_project_file(project_dir, &project.app.tray_icon, "configured tray icon")?;
+    let tray_icon_path = package_tray_icon_path(project_dir, project)?;
     let frontend_dir = build_dir.join("frontend").canonicalize().with_context(|| {
         format!(
             "failed to resolve frontend resources at {}",
@@ -186,6 +185,27 @@ fn write_package_metadata(
             cef_resources_dir.display()
         )
     })?;
+    let mut resources = vec![
+        CargoPackagerResource {
+            src: frontend_dir,
+            target: "frontend".into(),
+        },
+        CargoPackagerResource {
+            src: daemon_dir,
+            target: "daemon".into(),
+        },
+        CargoPackagerResource {
+            src: cef_resources_dir,
+            target: "cef".into(),
+        },
+    ];
+    if let Some(tray_icon_path) = tray_icon_path {
+        resources.push(CargoPackagerResource {
+            src: tray_icon_path,
+            target: "tray-icon.png".into(),
+        });
+    }
+
     let metadata = CargoPackagerConfig {
         name: project.app.identifier.clone(),
         product_name: project.package.product_name.clone(),
@@ -199,24 +219,7 @@ fn write_package_metadata(
             path: desktop_executable_name(project).into(),
             main: true,
         }],
-        resources: vec![
-            CargoPackagerResource {
-                src: frontend_dir,
-                target: "frontend".into(),
-            },
-            CargoPackagerResource {
-                src: daemon_dir,
-                target: "daemon".into(),
-            },
-            CargoPackagerResource {
-                src: cef_resources_dir,
-                target: "cef".into(),
-            },
-            CargoPackagerResource {
-                src: tray_icon_path,
-                target: "tray-icon.png".into(),
-            },
-        ],
+        resources,
     };
     let metadata =
         toml::to_string_pretty(&metadata).context("failed to encode package metadata")?;
@@ -263,6 +266,17 @@ fn package_icon_path(
     };
 
     required_project_file(project_dir, icon, "configured app icon")
+}
+
+fn package_tray_icon_path(project_dir: &Path, project: &ProjectConfig) -> Result<Option<PathBuf>> {
+    if !project.capabilities.tray {
+        return Ok(None);
+    }
+
+    let tray_icon = project.app.tray_icon.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("app.tray_icon is required when capabilities.tray is true")
+    })?;
+    required_project_file(project_dir, tray_icon, "configured tray icon").map(Some)
 }
 
 fn required_project_file(project_dir: &Path, relative_path: &str, label: &str) -> Result<PathBuf> {
@@ -324,7 +338,10 @@ fn write_package_manifest(
     let manifest = PackageManifest {
         product_name: project.package.product_name.clone(),
         identifier: project.app.identifier.clone(),
-        tray_icon: "tray-icon.png".to_owned(),
+        tray_icon: project
+            .capabilities
+            .tray
+            .then_some("tray-icon.png".to_owned()),
         desktop_binary: desktop_executable_name(project),
         frontend_dir: normalize(&build_dir.join("frontend")),
         daemon_dir: normalize(&build_dir.join("daemon")),
@@ -383,7 +400,7 @@ fn run_cargo_packager_if_available(package_dir: &Path) -> Result<()> {
 struct PackageManifest {
     product_name: String,
     identifier: String,
-    tray_icon: String,
+    tray_icon: Option<String>,
     desktop_binary: String,
     frontend_dir: String,
     daemon_dir: String,
@@ -451,7 +468,7 @@ mod tests {
         let manifest = PackageManifest {
             product_name: "Quoted \"App\" \\ Demo\nNext".to_owned(),
             identifier: "dev.cefari.quoted-app".to_owned(),
-            tray_icon: "tray-icon.png".to_owned(),
+            tray_icon: Some("tray-icon.png".to_owned()),
             desktop_binary: "quoted-app".to_owned(),
             frontend_dir: "/tmp/frontend".to_owned(),
             daemon_dir: "/tmp/daemon".to_owned(),
@@ -491,6 +508,9 @@ project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
 tray_icon = "assets/tray-icon.png"
+
+[capabilities]
+tray = true
 
 [frontend]
 dist = "frontend/dist"

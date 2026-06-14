@@ -217,7 +217,7 @@ fn run_event_loop(
 
         match event {
             Event::NewEvents(start_cause) => match start_cause {
-                StartCause::Init => {
+                StartCause::Init if desktop_tray::tray_enabled(&paths) => {
                     match desktop_tray::DesktopTray::new(runtime_operations.app_config(), &paths) {
                         Ok(desktop_tray) => {
                             tray = Some(desktop_tray);

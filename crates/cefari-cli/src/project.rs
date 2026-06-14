@@ -10,6 +10,8 @@ use thiserror::Error;
 #[serde(deny_unknown_fields)]
 pub struct ProjectConfig {
     pub app: ProjectApp,
+    #[serde(default)]
+    pub capabilities: ProjectCapabilities,
     pub frontend: FrontendConfig,
     pub daemon: DaemonConfig,
     pub package: PackageConfig,
@@ -29,10 +31,18 @@ impl ProjectConfig {
                 },
             })?;
 
-        toml::from_str(&contents).map_err(|source| LoadProjectError::Parse {
-            path: manifest_path,
-            source,
-        })
+        let project: Self =
+            toml::from_str(&contents).map_err(|source| LoadProjectError::Parse {
+                path: manifest_path.clone(),
+                source,
+            })?;
+        project
+            .validate()
+            .map_err(|message| LoadProjectError::Invalid {
+                path: manifest_path,
+                message,
+            })?;
+        Ok(project)
     }
 
     #[must_use]
@@ -44,6 +54,14 @@ impl ProjectConfig {
     pub fn dist_dir(path: impl AsRef<Path>) -> PathBuf {
         path.as_ref().join("dist")
     }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.capabilities.tray && self.app.tray_icon.is_none() {
+            return Err("app.tray_icon is required when capabilities.tray is true".to_owned());
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
@@ -53,9 +71,16 @@ pub struct ProjectApp {
     pub project_name: String,
     pub name: String,
     pub identifier: String,
-    pub tray_icon: String,
+    #[serde(default)]
+    pub tray_icon: Option<String>,
     #[serde(default)]
     pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProjectCapabilities {
+    pub tray: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
@@ -122,6 +147,9 @@ pub enum LoadProjectError {
         path: PathBuf,
         source: toml::de::Error,
     },
+
+    #[error("invalid project manifest at {path}: {message}")]
+    Invalid { path: PathBuf, message: String },
 }
 
 #[cfg(test)]
@@ -137,6 +165,9 @@ name = "Example App"
 identifier = "dev.cefari.example-app"
 tray_icon = "assets/tray-icon.png"
 icon = "assets/icon.png"
+
+[capabilities]
+tray = true
 
 [frontend]
 dist = "frontend/dist"
@@ -154,7 +185,11 @@ version = "1.2.3"
 
         assert_eq!(project.app.project_name, "example-app");
         assert_eq!(project.app.name, "Example App");
-        assert_eq!(project.app.tray_icon, "assets/tray-icon.png");
+        assert_eq!(
+            project.app.tray_icon.as_deref(),
+            Some("assets/tray-icon.png")
+        );
+        assert!(project.capabilities.tray);
         assert_eq!(project.app.icon.as_deref(), Some("assets/icon.png"));
         assert_eq!(project.package.product_name, "Example App");
         assert_eq!(project.package.version, "1.2.3");
@@ -170,7 +205,6 @@ version = "1.2.3"
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
-tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"
@@ -189,6 +223,8 @@ version = "1.2.3"
         .expect("manifest should parse");
 
         assert_eq!(project.frontend.dev_port, 5174);
+        assert!(!project.capabilities.tray);
+        assert!(project.app.tray_icon.is_none());
         assert_eq!(
             project.frontend.build_command.as_deref(),
             Some(
@@ -209,7 +245,6 @@ version = "1.2.3"
             r#"[app]
 name = "Example App"
 identifier = "dev.cefari.example-app"
-tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"
@@ -228,12 +263,15 @@ version = "1.2.3"
     }
 
     #[test]
-    fn rejects_missing_tray_icon() {
-        let error = toml::from_str::<ProjectConfig>(
+    fn validates_tray_icon_when_tray_capability_is_enabled() {
+        let project: ProjectConfig = toml::from_str(
             r#"[app]
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
+
+[capabilities]
+tray = true
 
 [frontend]
 dist = "frontend/dist"
@@ -246,9 +284,13 @@ product_name = "Example App"
 version = "1.2.3"
 "#,
         )
-        .expect_err("manifest without tray_icon should fail");
+        .expect("manifest should parse");
 
-        assert!(error.to_string().contains("missing field `tray_icon`"));
+        let error = project
+            .validate()
+            .expect_err("tray without icon should fail");
+
+        assert!(error.contains("app.tray_icon is required"));
     }
 
     #[test]
@@ -266,7 +308,6 @@ version = "1.2.3"
 project_name = "{project_name}"
 name = "Example App"
 identifier = "dev.cefari.example-app"
-tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"
@@ -296,7 +337,6 @@ version = "1.2.3"
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
-tray_icon = "assets/tray-icon.png"
 extra = true
 
 [frontend]
