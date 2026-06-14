@@ -14,7 +14,11 @@ use crate::{
     run_process, tool_available,
 };
 
-pub fn package_project(project_dir: &Path, release: bool) -> Result<()> {
+pub fn package_project(
+    project_dir: &Path,
+    release: bool,
+    release_version: Option<&str>,
+) -> Result<()> {
     let project = ProjectConfig::load_from_dir(project_dir)?;
     let build_dir = ProjectConfig::build_dir(project_dir);
     let package_dir = ProjectConfig::dist_dir(project_dir).join("package");
@@ -36,6 +40,7 @@ pub fn package_project(project_dir: &Path, release: bool) -> Result<()> {
         &build_dir,
         &cef_resources_dir,
         release,
+        release_version,
     )?;
     write_package_manifest(&package_dir, &project, &build_dir, &cef_resources_dir)?;
 
@@ -152,6 +157,7 @@ fn write_package_metadata(
     build_dir: &Path,
     cef_resources_dir: &Path,
     _release: bool,
+    release_version: Option<&str>,
 ) -> Result<()> {
     let icon_path = package_icon_path(project_dir, package_dir, project)?;
     let frontend_dir = build_dir.join("frontend").canonicalize().with_context(|| {
@@ -181,7 +187,9 @@ fn write_package_metadata(
     let metadata = CargoPackagerConfig {
         name: project.app.identifier.clone(),
         product_name: project.package.product_name.clone(),
-        version: env!("CARGO_PKG_VERSION").to_owned(),
+        version: release_version
+            .unwrap_or(env!("CARGO_PKG_VERSION"))
+            .to_owned(),
         identifier: Some(project.app.identifier.clone()),
         binaries_dir: Some(desktop_dir),
         icons: vec![normalize(&icon_path)],

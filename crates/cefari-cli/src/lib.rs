@@ -74,6 +74,10 @@ pub enum Command {
         /// Package the desktop runtime from Cargo's release profile.
         #[arg(long)]
         release: bool,
+
+        /// Version to write into native package metadata. Defaults to the Cefari CLI version.
+        #[arg(long)]
+        release_version: Option<String>,
     },
     /// Code sign a packaged app.
     Codesign {
@@ -178,7 +182,11 @@ pub fn run_command(command: Command) -> Result<()> {
             devtools_port,
         } => dev::dev_project(&path, frontend_port, devtools_port),
         Command::Build { path, release } => build::build_project(&path, release),
-        Command::Package { path, release } => package::package_project(&path, release),
+        Command::Package {
+            path,
+            release,
+            release_version,
+        } => package::package_project(&path, release, release_version.as_deref()),
         Command::Codesign {
             artifact,
             platform,

@@ -93,7 +93,7 @@ metadata in place and reports that native package generation was skipped.
 For release-profile packaging:
 
 ```bash
-cefari package PATH --release
+cefari package PATH --release --release-version 1.2.3
 ```
 
 ## Clean Generated Artifacts

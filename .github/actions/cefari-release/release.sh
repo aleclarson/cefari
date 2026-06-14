@@ -235,7 +235,7 @@ fi
 validate_command_available "$cefari_command"
 
 run_cmd "$cefari_command" build "$project_path" --release
-run_cmd "$cefari_command" package "$project_path" --release
+run_cmd "$cefari_command" package "$project_path" --release --release-version "$version"
 
 if [[ "$dry_run" != "true" ]]; then
   collect_release_assets

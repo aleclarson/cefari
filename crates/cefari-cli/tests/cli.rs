@@ -410,6 +410,54 @@ fn package_release_metadata_uses_release_desktop_binary() {
 }
 
 #[test]
+fn package_metadata_uses_release_version_override() {
+    let root = temp_project_path();
+    let tools = temp_project_path();
+    let log = tools.join("tool.log");
+    create_fake_tool(
+        &tools,
+        "cargo-packager",
+        r#"echo "cargo-packager $@" >> "$CEFARI_TOOL_LOG""#,
+    );
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Version Package App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = with_fake_tools(cefari(), &tools, &log)
+        .arg("package")
+        .arg(&root)
+        .arg("--release-version")
+        .arg("9.8.7")
+        .output()
+        .expect("cefari package should run");
+    assert_success(&output);
+
+    let metadata = fs::read_to_string(root.join("dist/package/cargo-packager.toml"))
+        .expect("package metadata should exist");
+    assert!(metadata.contains(r#"version = "9.8.7""#));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+    fs::remove_dir_all(tools).expect("temp tools should be removable");
+}
+
+#[test]
 fn package_invokes_cargo_packager_when_available() {
     let root = temp_project_path();
     let tools = temp_project_path();
