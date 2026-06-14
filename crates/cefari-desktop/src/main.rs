@@ -153,7 +153,7 @@ fn run_native_shell(
         .cef_runtime
         .create_browser(&window, &shell_ui.url())
         .context("failed to create CEF browser")?;
-    let menu = desktop_menu::DesktopMenu::new(devtools_enabled)?;
+    let menu = desktop_menu::DesktopMenu::new(runtime_operations.app_config(), devtools_enabled)?;
     menu.install();
 
     info!(window = ?window.id(), "cefari native shell started");
@@ -217,14 +217,16 @@ fn run_event_loop(
 
         match event {
             Event::NewEvents(start_cause) => match start_cause {
-                StartCause::Init => match desktop_tray::DesktopTray::new() {
-                    Ok(desktop_tray) => {
-                        tray = Some(desktop_tray);
+                StartCause::Init => {
+                    match desktop_tray::DesktopTray::new(runtime_operations.app_config()) {
+                        Ok(desktop_tray) => {
+                            tray = Some(desktop_tray);
+                        }
+                        Err(error) => {
+                            error!(%error, "failed to initialize tray icon");
+                        }
                     }
-                    Err(error) => {
-                        error!(%error, "failed to initialize tray icon");
-                    }
-                },
+                }
                 StartCause::ResumeTimeReached { .. } | StartCause::WaitCancelled { .. } => {
                     pump_due_cef_message_loop(&guards.cef_runtime, &mut cef_message_pump_deadline);
                 }

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use cefari_core::CefariIpcCommand;
+use cefari_core::{AppConfig, CefariIpcCommand};
 use muda::{
     AboutMetadata, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu,
     accelerator::{Accelerator, CMD_OR_CTRL, Code},
@@ -15,8 +15,6 @@ pub const RELOAD_UI_ID: &str = "cefari.menu.reload_ui";
 pub const OPEN_DEV_TOOLS_ID: &str = "cefari.menu.open_dev_tools";
 pub const SERVICE_STATUS_ID: &str = "cefari.menu.service_status";
 pub const QUIT_ID: &str = "cefari.menu.quit";
-#[cfg(test)]
-const ROOT_MENU_LABELS: [&str; 6] = ["Cefari", "File", "Edit", "View", "Window", "Help"];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuCommand {
@@ -38,13 +36,13 @@ pub struct DesktopMenu {
 }
 
 impl DesktopMenu {
-    pub fn new(devtools_enabled: bool) -> Result<Self> {
-        let app_menu = app_menu()?;
+    pub fn new(app_config: &AppConfig, devtools_enabled: bool) -> Result<Self> {
+        let app_menu = app_menu(app_config)?;
         let file_menu = file_menu()?;
         let edit_menu = edit_menu()?;
         let view_menu = view_menu(devtools_enabled)?;
         let window_menu = window_menu()?;
-        let help_menu = help_menu()?;
+        let help_menu = help_menu(app_config)?;
         let menu = Menu::with_items(&[
             &app_menu,
             &file_menu,
@@ -96,12 +94,14 @@ pub fn ipc_command_for_menu_command(command: MenuCommand) -> Option<CefariIpcCom
     }
 }
 
-fn app_menu() -> Result<Submenu> {
+fn app_menu(app_config: &AppConfig) -> Result<Submenu> {
+    let about_label = about_menu_label(app_config);
+    let quit_label = quit_menu_label(app_config);
     let about = PredefinedMenuItem::about(
-        Some("About Cefari"),
+        Some(&about_label),
         Some(AboutMetadata {
-            name: Some("Cefari".to_string()),
-            version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            name: Some(app_config.display_name.clone()),
+            version: Some(app_config.version.clone()),
             ..Default::default()
         }),
     );
@@ -119,13 +119,13 @@ fn app_menu() -> Result<Submenu> {
     );
     let quit = MenuItem::with_id(
         QUIT_ID,
-        "Quit Cefari",
+        quit_label,
         true,
         Some(Accelerator::new(Some(CMD_OR_CTRL), Code::KeyQ)),
     );
 
     Submenu::with_items(
-        "Cefari",
+        app_menu_label(app_config),
         true,
         &[
             &about,
@@ -214,9 +214,26 @@ fn window_menu() -> Result<Submenu> {
     .context("failed to build Cefari window menu")
 }
 
-fn help_menu() -> Result<Submenu> {
-    Submenu::with_items("Help", true, &[&MenuItem::new("Cefari Help", false, None)])
+fn help_menu(app_config: &AppConfig) -> Result<Submenu> {
+    let help_label = help_menu_label(app_config);
+    Submenu::with_items("Help", true, &[&MenuItem::new(help_label, false, None)])
         .context("failed to build Cefari help menu")
+}
+
+fn app_menu_label(app_config: &AppConfig) -> &str {
+    &app_config.display_name
+}
+
+fn about_menu_label(app_config: &AppConfig) -> String {
+    format!("About {}", app_config.display_name)
+}
+
+fn quit_menu_label(app_config: &AppConfig) -> String {
+    format!("Quit {}", app_config.display_name)
+}
+
+fn help_menu_label(app_config: &AppConfig) -> String {
+    format!("{} Help", app_config.display_name)
 }
 
 fn accelerator(shortcut: &str) -> Result<Accelerator> {
@@ -246,15 +263,22 @@ mod tests {
 
     use super::{
         CHECK_FOR_UPDATES_ID, MenuCommand, OPEN_DEV_TOOLS_ID, OPEN_LOGS_ID, QUIT_ID, RELOAD_UI_ID,
-        ROOT_MENU_LABELS, SERVICE_STATUS_ID, command_for_id, ipc_command_for_menu_command,
+        SERVICE_STATUS_ID, about_menu_label, app_menu_label, command_for_id, help_menu_label,
+        ipc_command_for_menu_command, quit_menu_label,
     };
 
     #[test]
-    fn desktop_menu_spec_has_expected_root_items() {
-        assert_eq!(
-            ROOT_MENU_LABELS,
-            ["Cefari", "File", "Edit", "View", "Window", "Help"]
-        );
+    fn desktop_menu_labels_use_app_config() {
+        let config = cefari_core::AppConfig {
+            identifier: "dev.cefari.custom".to_owned(),
+            display_name: "Custom App".to_owned(),
+            version: "2.3.4".to_owned(),
+        };
+
+        assert_eq!(app_menu_label(&config), "Custom App");
+        assert_eq!(about_menu_label(&config), "About Custom App");
+        assert_eq!(quit_menu_label(&config), "Quit Custom App");
+        assert_eq!(help_menu_label(&config), "Custom App Help");
     }
 
     #[test]
