@@ -204,6 +204,7 @@ mod tests {
         let config = AppConfig {
             identifier: "  ".to_owned(),
             display_name: "Cefari".to_owned(),
+            version: "1.2.3".to_owned(),
         };
         let error =
             DesktopNotifier::from_app_config(&config).expect_err("blank app id should fail");

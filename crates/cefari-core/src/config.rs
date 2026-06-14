@@ -17,6 +17,7 @@ pub struct CefariConfig {
 pub struct AppConfig {
     pub identifier: String,
     pub display_name: String,
+    pub version: String,
 }
 
 impl Default for AppConfig {
@@ -24,6 +25,7 @@ impl Default for AppConfig {
         Self {
             identifier: "dev.cefari.app".to_owned(),
             display_name: "Cefari".to_owned(),
+            version: "0.0.0".to_owned(),
         }
     }
 }
@@ -91,7 +93,8 @@ mod tests {
             r#"{
               "app": {
                 "identifier": "dev.cefari.test",
-                "display_name": "Test Cefari"
+                "display_name": "Test Cefari",
+                "version": "1.2.3"
               }
             }"#,
         )
@@ -102,6 +105,7 @@ mod tests {
             AppConfig {
                 identifier: "dev.cefari.test".to_owned(),
                 display_name: "Test Cefari".to_owned(),
+                version: "1.2.3".to_owned(),
             }
         );
         assert_eq!(config.service, ServiceConfig::default());

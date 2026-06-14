@@ -51,7 +51,7 @@ impl RuntimeOperations {
             .collect();
 
         UpdateCheckConfig {
-            current_version: env!("CARGO_PKG_VERSION").to_owned(),
+            current_version: self.config.app.version.clone(),
             endpoints,
             public_key: self.config.updates.public_key.clone().unwrap_or_default(),
         }
@@ -217,6 +217,7 @@ mod tests {
 
         let update_config = runtime.update_check_config();
 
+        assert_eq!(update_config.current_version, "0.0.0");
         assert!(!update_config.is_configured());
         assert_eq!(
             runtime.update_state().expect("unconfigured update check"),
