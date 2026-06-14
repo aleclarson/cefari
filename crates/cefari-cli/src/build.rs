@@ -333,6 +333,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "Example App"
+version = "1.2.3"
 "#,
         )
         .expect("project should parse")

@@ -31,6 +31,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "My Cefari App"
+version = "0.1.0"
 ```
 
 ## Path Rules

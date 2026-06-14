@@ -54,6 +54,7 @@ The generated `cefari.toml` includes:
 - `[frontend].dist` and `[frontend].dev_port`
 - `[daemon].entry`
 - `[package].product_name`
+- `[package].version`
 
 For full scaffolding guidance, see [Scaffold An App](guides/scaffolding.md).
 

@@ -39,8 +39,7 @@ cefari build PATH --release
 When `[frontend].build_command` is configured, Cefari runs it before copying
 `[frontend].dist` into `build/frontend/`.
 
-Without a build command, Cefari preserves the minimal scaffold behavior by
-copying `frontend/index.html`.
+Without a build command, Cefari copies the scaffolded `frontend/index.html`.
 
 ## Daemon Builds
 
@@ -95,6 +94,9 @@ For release-profile packaging:
 ```bash
 cefari package PATH --release --release-version 1.2.3
 ```
+
+Without `--release-version`, package metadata uses `[package].version` from
+`cefari.toml`.
 
 ## Clean Generated Artifacts
 

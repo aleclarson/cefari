@@ -79,6 +79,7 @@ pub struct DaemonConfig {
 #[serde(deny_unknown_fields)]
 pub struct PackageConfig {
     pub product_name: String,
+    pub version: String,
 }
 
 fn default_frontend_dev_port() -> u16 {
@@ -144,6 +145,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "Example App"
+version = "1.2.3"
 "#,
         )
         .expect("manifest should parse");
@@ -152,6 +154,7 @@ product_name = "Example App"
         assert_eq!(project.app.name, "Example App");
         assert_eq!(project.app.icon.as_deref(), Some("assets/icon.png"));
         assert_eq!(project.package.product_name, "Example App");
+        assert_eq!(project.package.version, "1.2.3");
         assert_eq!(project.frontend.dev_port, 5173);
         assert!(project.frontend.build_command.is_none());
         assert!(project.frontend.dev_command.is_none());
@@ -176,6 +179,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "Example App"
+version = "1.2.3"
 "#,
         )
         .expect("manifest should parse");
@@ -210,6 +214,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "Example App"
+version = "1.2.3"
 "#,
         )
         .expect_err("manifest without project_name should fail");
@@ -241,6 +246,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "Example App"
+version = "1.2.3"
 "#
             ))
             .expect_err("manifest with invalid project_name should fail");
@@ -270,6 +276,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "Example App"
+version = "1.2.3"
 "#,
         )
         .expect_err("manifest with extra field should fail");

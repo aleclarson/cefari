@@ -14,3 +14,4 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "Vite React Basic"
+version = "0.1.0"

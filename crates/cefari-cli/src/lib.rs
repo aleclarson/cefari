@@ -75,7 +75,7 @@ pub enum Command {
         #[arg(long)]
         release: bool,
 
-        /// Version to write into native package metadata. Defaults to the Cefari CLI version.
+        /// Version to write into native package metadata. Overrides [package].version.
         #[arg(long)]
         release_version: Option<String>,
     },
@@ -289,6 +289,7 @@ fn initial_project_manifest(
         },
         package: InitialPackageConfig {
             product_name: display_name,
+            version: "0.1.0",
         },
     })
     .context("failed to encode project manifest")
@@ -323,6 +324,7 @@ struct InitialDaemonConfig<'a> {
 #[derive(Serialize)]
 struct InitialPackageConfig<'a> {
     product_name: &'a str,
+    version: &'a str,
 }
 
 fn doctor() {

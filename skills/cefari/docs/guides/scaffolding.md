@@ -49,6 +49,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "My Cefari App"
+version = "0.1.0"
 ```
 
 Add `frontend.build_command` and `frontend.dev_command` when a framework owns

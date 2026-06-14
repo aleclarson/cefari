@@ -188,7 +188,7 @@ fn write_package_metadata(
         name: project.app.identifier.clone(),
         product_name: project.package.product_name.clone(),
         version: release_version
-            .unwrap_or(env!("CARGO_PKG_VERSION"))
+            .unwrap_or(&project.package.version)
             .to_owned(),
         identifier: Some(project.app.identifier.clone()),
         binaries_dir: Some(desktop_dir),
@@ -490,6 +490,7 @@ entry = "daemon/main.ts"
 
 [package]
 product_name = "Example App"
+version = "1.2.3"
 "#,
         )
         .expect("project should parse")

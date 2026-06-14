@@ -76,7 +76,7 @@ Arguments and options:
 - `--release`: package release-profile build output when the desktop runtime
   was built from source.
 - `--release-version VERSION`: package version written to native package
-  metadata. Defaults to the Cefari CLI version.
+  metadata. Overrides `[package].version`.
 
 `cefari package` expects `cefari build` artifacts to exist first. It writes
 package metadata under `dist/package/` and invokes `cargo-packager` when that
