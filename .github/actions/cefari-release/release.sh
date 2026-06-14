@@ -27,7 +27,6 @@ release_artifacts_file="$project_path/dist/release-artifacts.txt"
 github_release_assets_dir="$project_path/dist/github-release-assets"
 update_input_dir="$project_path/dist/update-input"
 release_assets=()
-primary_release_asset=""
 github_release_assets=()
 
 write_outputs() {
@@ -193,19 +192,6 @@ collect_release_assets() {
   done
 }
 
-select_primary_release_asset() {
-  primary_release_asset=""
-  for artifact in "${release_assets[@]}"; do
-    if [[ -f "$artifact" ]]; then
-      primary_release_asset="$artifact"
-      return 0
-    fi
-  done
-  if [[ "${#release_assets[@]}" -gt 0 ]]; then
-    primary_release_asset="${release_assets[0]}"
-  fi
-}
-
 [[ "$mode" == "release" || "$mode" == "prerelease" ]] || fail "mode must be release or prerelease"
 bool_input "$create_github_release" || fail "create-github-release must be true or false"
 bool_input "$install_cli" || fail "install-cli must be true or false"
@@ -239,7 +225,6 @@ run_cmd "$cefari_command" package "$project_path" --release --release-version "$
 
 if [[ "$dry_run" != "true" ]]; then
   collect_release_assets
-  select_primary_release_asset
 else
   echo "artifact collection skipped in dry-run"
 fi

@@ -65,6 +65,133 @@ jobs:
           cargo packager --help
           cargo codesign --help
 
+  release-action-validation:
+    name: Release Action Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install Linux desktop build libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libgtk-3-dev libayatana-appindicator3-dev libxdo-dev shellcheck
+
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Lint release action and workflows
+        shell: bash
+        run: |
+          shellcheck .github/actions/cefari-release/release.sh
+          actionlint \
+            .github/workflows/*.yml \
+            templates/vite-react-basic/.github/workflows/release.yml \
+            templates/vite-react-basic/.github/workflows/prerelease.yml \
+            docs/examples/cefari-release-workflow.yml
+          ruby -e 'require "yaml"; ARGV.each { |p| YAML.load_file(p) }' .github/actions/cefari-release/action.yml
+
+      - name: Validate release action dry run
+        shell: bash
+        run: |
+          mkdir -p .ci
+          output_file="$(mktemp)"
+          GITHUB_OUTPUT="$output_file" \
+          GITHUB_ACTION_PATH="$GITHUB_WORKSPACE/.github/actions/cefari-release" \
+          CEFARI_PROJECT_PATH=templates/vite-react-basic \
+          CEFARI_RELEASE_MODE=prerelease \
+          CEFARI_TARGETS=linux-x86_64 \
+          CEFARI_COMMAND="$GITHUB_WORKSPACE/target/debug/cefari" \
+          CEFARI_INSTALL_CLI=false \
+          CEFARI_RELEASE_VERSION=0.0.0-ci \
+          CEFARI_RELEASE_TAG=release-action-ci-dry-run \
+          CEFARI_CREATE_GITHUB_RELEASE=false \
+          CEFARI_UPLOAD_ARTIFACTS=false \
+          CEFARI_DRY_RUN=true \
+            .github/actions/cefari-release/release.sh | tee .ci/release-action-dry-run.log
+
+          grep -q 'artifact collection skipped in dry-run' .ci/release-action-dry-run.log
+          grep -q -- '--release-version 0.0.0-ci' .ci/release-action-dry-run.log
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --version 0.11.8 --locked
+
+      - name: Build cefari CLI
+        run: cargo build -p cefari-cli
+
+      - name: Create release action sample
+        run: target/debug/cefari init .ci/release-action-sample --name "Release Action CI"
+
+      - name: Create CEF fixture
+        shell: bash
+        run: |
+          mkdir -p .ci/cef-fixture/locales
+          cat > .ci/cef-fixture/archive.json <<'JSON'
+          {
+            "type": "minimal",
+            "name": "cef_binary_148.0.10+gfixture+chromium-148.0.0_linux64_minimal.tar.bz2",
+            "sha1": "fixture-sha1"
+          }
+          JSON
+          echo fixture > .ci/cef-fixture/libcef.fixture
+          echo fixture > .ci/cef-fixture/locales/en-US.pak
+
+      - name: Run release action package validation
+        id: release-action
+        uses: ./.github/actions/cefari-release
+        with:
+          project-path: .ci/release-action-sample
+          mode: prerelease
+          release-version: 0.0.0-ci
+          release-tag: release-action-ci
+          targets: linux-x86_64
+          cefari-command: ${{ github.workspace }}/target/debug/cefari
+          install-cli: "false"
+          create-github-release: "false"
+          upload-artifacts: "true"
+          artifact-name: release-action-validation
+        env:
+          CEFARI_CEF_RESOURCES_DIR: ${{ github.workspace }}/.ci/cef-fixture
+
+      - name: Verify release action outputs
+        shell: bash
+        env:
+          PACKAGE_DIR: ${{ steps.release-action.outputs.package-dir }}
+          ARTIFACT_DIR: ${{ steps.release-action.outputs.artifact-dir }}
+          RELEASE_ARTIFACTS: ${{ steps.release-action.outputs.release-artifacts }}
+          RELEASE_MODE: ${{ steps.release-action.outputs.release-mode }}
+        run: |
+          test "$RELEASE_MODE" = prerelease
+          test -d "$PACKAGE_DIR/output"
+          test -d "$ARTIFACT_DIR"
+          test -f "$RELEASE_ARTIFACTS"
+          grep -q . "$RELEASE_ARTIFACTS"
+          grep -q 'version = "0.0.0-ci"' "$PACKAGE_DIR/cargo-packager.toml"
+          scripts/extract-native-package-payload.sh "$PACKAGE_DIR/output" .ci/release-action-package-inspect
+          ruby scripts/verify-native-package-payload.rb \
+            .ci/release-action-package-inspect \
+            "$RUNNER_OS" \
+            "$PACKAGE_DIR/manifest.json"
+
   service-platform:
     name: Service Helpers (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

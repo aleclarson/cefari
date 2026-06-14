@@ -3,7 +3,7 @@
 This page records the evidence used to keep the documentation grounded in the
 current repository state.
 
-Last checked: 2026-06-11.
+Last checked: 2026-06-13.
 
 ## Source Evidence
 
@@ -39,11 +39,35 @@ cargo test -p cefari-cli
 cargo test -p cefari-desktop desktop_notifications
 deno task --cwd templates/vite-react-basic/frontend check
 actionlint docs/examples/cefari-release-workflow.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml
+actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml docs/examples/cefari-release-workflow.yml
+shellcheck .github/actions/cefari-release/release.sh
+bash -n .github/actions/cefari-release/release.sh
+cargo run -p cefari-cli -- init .ci/release-action-sample --name "Release Action CI"
+GITHUB_OUTPUT=/tmp/cefari-release-output.txt GITHUB_ACTION_PATH="$PWD/.github/actions/cefari-release" CEFARI_PROJECT_PATH=templates/vite-react-basic CEFARI_RELEASE_MODE=prerelease CEFARI_TARGETS=linux-x86_64 CEFARI_COMMAND="$PWD/target/debug/cefari" CEFARI_INSTALL_CLI=false CEFARI_RELEASE_VERSION=0.0.0-ci CEFARI_RELEASE_TAG=release-action-ci-dry-run CEFARI_CREATE_GITHUB_RELEASE=false CEFARI_UPLOAD_ARTIFACTS=false CEFARI_DRY_RUN=true .github/actions/cefari-release/release.sh
 cargo test -p cefari-core ipc::tests::generated_typescript_bindings_are_current
 cargo test -p cefari-desktop
 deno task --cwd packages/cefari-app check
 deno task --cwd packages/cefari-app test
 ```
+
+## Release Action CI
+
+The `Release Action Validation` CI job lint-checks the shared release action,
+template workflows, and example workflow. It also runs the action script in
+dry-run mode, then invokes the composite action against a generated app fixture
+with GitHub release creation disabled and GitHub Actions artifact upload
+enabled.
+
+The real action invocation verifies:
+
+- release action outputs are populated
+- `dist/release-artifacts.txt` exists and lists package output
+- package metadata uses the requested release version
+- native package payload inspection passes for the generated fixture
+
+This keeps PR validation credential-free. Production signing, notarization, and
+GitHub release publication still require repository secrets and tag or manual
+release workflows.
 
 ## Live CEF Smoke
 
