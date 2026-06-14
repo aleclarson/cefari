@@ -50,8 +50,8 @@ Expected secrets and variables:
   generated.
 - `CEFARI_UPDATE_URL_BASE`: optional repository variable containing the public
   download URL prefix for update metadata.
-- `CEFARI_CLI_VERSION`: optional repository variable pinning the `@cefari/cli`
-  version installed by the release action. Defaults to `latest`.
+- `CEFARI_CLI_VERSION`: required repository variable pinning the `@cefari/cli`
+  version installed by the release action.
 
 Expected artifacts:
 

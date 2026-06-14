@@ -6,11 +6,12 @@ mode="${CEFARI_RELEASE_MODE:-release}"
 targets="${CEFARI_TARGETS:-}"
 cefari_command="${CEFARI_COMMAND:-cefari}"
 install_cli="${CEFARI_INSTALL_CLI:-false}"
-cefari_version="${CEFARI_CLI_VERSION:-latest}"
-version="${CEFARI_RELEASE_VERSION:-}"
+cefari_version="${CEFARI_CLI_VERSION:-}"
+release_version="${CEFARI_RELEASE_VERSION:-}"
+effective_version="$release_version"
 release_tag="${CEFARI_RELEASE_TAG:-}"
 release_name="${CEFARI_RELEASE_NAME:-}"
-create_github_release="${CEFARI_CREATE_GITHUB_RELEASE:-true}"
+create_github_release="${CEFARI_CREATE_GITHUB_RELEASE:-false}"
 signing_platform="${CEFARI_SIGNING_PLATFORM:-}"
 signing_config="${CEFARI_SIGNING_CONFIG:-}"
 notarize="${CEFARI_NOTARIZE:-false}"
@@ -136,27 +137,39 @@ prepare_github_release_assets() {
 }
 
 infer_update_target() {
-  if [[ -n "$update_target" ]]; then
-    echo "$update_target"
-    return 0
-  fi
-  if [[ -n "$targets" ]]; then
-    echo "${targets%%,*}"
-    return 0
-  fi
+  echo "$update_target"
+}
 
-  local os arch
-  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-  arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
-  case "$os" in
-    darwin) os="macos" ;;
-    mingw*|msys*|cygwin*) os="windows" ;;
-  esac
-  case "$arch" in
-    arm64) arch="aarch64" ;;
-    amd64) arch="x86_64" ;;
-  esac
-  echo "$os-$arch"
+read_project_package_version() {
+  awk '
+    /^[[:space:]]*\[/ {
+      in_package = ($0 ~ /^[[:space:]]*\[package\][[:space:]]*$/)
+      next
+    }
+    in_package && /^[[:space:]]*version[[:space:]]*=/ {
+      line = $0
+      sub(/^[^=]*=[[:space:]]*/, "", line)
+      sub(/^[[:space:]]*"/, "", line)
+      sub(/".*$/, "", line)
+      print line
+      exit
+    }
+  ' "$project_path/cefari.toml"
+}
+
+read_package_metadata_version() {
+  local metadata="$package_dir/cargo-packager.toml"
+  [[ -f "$metadata" ]] || fail "package metadata not found at $metadata"
+  awk '
+    /^[[:space:]]*version[[:space:]]*=/ {
+      line = $0
+      sub(/^[^=]*=[[:space:]]*/, "", line)
+      sub(/^[[:space:]]*"/, "", line)
+      sub(/".*$/, "", line)
+      print line
+      exit
+    }
+  ' "$metadata"
 }
 
 create_update_input_archive() {
@@ -199,15 +212,25 @@ bool_input "$notarize" || fail "notarize must be true or false"
 bool_input "$dry_run" || fail "dry-run must be true or false"
 [[ -n "$cefari_command" ]] || fail "cefari-command is required"
 [[ "$install_cli" != "true" || -n "$cefari_version" ]] || fail "cefari-version is required when install-cli is true"
-[[ -n "$version" ]] || fail "release-version is required"
 [[ -f "$project_path/cefari.toml" ]] || fail "cefari.toml not found at $project_path"
+[[ -z "$update_url_base" || -n "$update_target" ]] || fail "update-target is required when update-url-base is set"
+[[ -z "$signing_config" || -n "$signing_platform" ]] || fail "signing-platform is required when signing-config is set"
+[[ "$notarize" != "true" || "$signing_platform" == "macos" ]] || fail "signing-platform must be macos when notarize is true"
+[[ "$notarize" != "true" || -n "$signing_config" ]] || fail "signing-config is required when notarize is true"
+if [[ "$create_github_release" == "true" && -z "$release_tag" && -z "${GITHUB_REF_NAME:-}" ]]; then
+  fail "release-tag or GITHUB_REF_NAME is required when create-github-release is true"
+fi
+if [[ "$dry_run" == "true" && -z "$effective_version" ]]; then
+  effective_version="$(read_project_package_version)"
+  [[ -n "$effective_version" ]] || fail "release-version was not provided and [package].version could not be read from cefari.toml"
+fi
 
 write_outputs
 
 echo "Cefari release plan"
 echo "  project: $project_path"
 echo "  mode: $mode"
-echo "  version: $version"
+echo "  version: ${effective_version:-from package metadata}"
 echo "  targets: ${targets:-current runner}"
 echo "  cefari command: $cefari_command"
 echo "  install cli: $install_cli"
@@ -221,9 +244,13 @@ fi
 validate_command_available "$cefari_command"
 
 run_cmd "$cefari_command" build "$project_path" --release
-run_cmd "$cefari_command" package "$project_path" --release --release-version "$version"
+package_args=("$cefari_command" package "$project_path" --release)
+[[ -n "$release_version" ]] && package_args+=(--release-version "$release_version")
+run_cmd "${package_args[@]}"
 
 if [[ "$dry_run" != "true" ]]; then
+  effective_version="$(read_package_metadata_version)"
+  [[ -n "$effective_version" ]] || fail "package metadata did not contain a version"
   collect_release_assets
 else
   echo "artifact collection skipped in dry-run"
@@ -276,7 +303,7 @@ if [[ -n "$update_url_base" ]]; then
     echo "update metadata skipped: $update_key_env is not set"
   else
     effective_update_target="$(infer_update_target)"
-    [[ -n "$effective_update_target" ]] || fail "update target could not be inferred"
+    [[ -n "$effective_update_target" ]] || fail "update-target is required when update-url-base is set"
     if [[ "$dry_run" == "true" ]]; then
       archive="$update_input_dir/$effective_update_target.zip"
     else
@@ -285,7 +312,7 @@ if [[ -n "$update_url_base" ]]; then
     fi
     archive_name="${archive##*/}"
     update_url="${update_url_base%/}/$archive_name"
-    update_args=("$cefari_command" make-update "$archive" --url "$update_url" --version "$version" --key-env "$update_key_env" --output-dir "$update_dir" --target "$effective_update_target")
+    update_args=("$cefari_command" make-update "$archive" --url "$update_url" --version "$effective_version" --key-env "$update_key_env" --output-dir "$update_dir" --target "$effective_update_target")
     [[ -n "$update_format" ]] && update_args+=(--format "$update_format")
     run_cmd "${update_args[@]}"
   fi
@@ -297,9 +324,7 @@ if [[ "$create_github_release" == "true" ]]; then
   if [[ -z "$release_tag" ]]; then
     release_tag="${GITHUB_REF_NAME:-}"
   fi
-  if [[ -z "$release_tag" ]]; then
-    echo "GitHub release skipped: release-tag not provided and GITHUB_REF_NAME is unavailable"
-  elif [[ "$dry_run" == "true" ]]; then
+  if [[ "$dry_run" == "true" ]]; then
     echo "+ gh release upload/create for $release_tag"
   else
     [[ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]] || fail "GH_TOKEN or GITHUB_TOKEN is required when create-github-release is true"

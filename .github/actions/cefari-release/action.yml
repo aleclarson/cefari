@@ -25,10 +25,11 @@ inputs:
   cefari-version:
     description: Version of @cefari/cli to install when install-cli is true.
     required: false
-    default: "latest"
+    default: ""
   release-version:
-    description: Version advertised in package and update metadata.
-    required: true
+    description: Version advertised in package and update metadata. Defaults to [package].version from cefari.toml.
+    required: false
+    default: ""
   release-tag:
     description: Git tag to attach release assets to. Defaults to the current ref name when omitted by the implementation.
     required: false
@@ -40,7 +41,7 @@ inputs:
   create-github-release:
     description: Whether the action should create or update the GitHub release.
     required: false
-    default: "true"
+    default: "false"
   upload-artifacts:
     description: Whether packaged release assets should be uploaded to GitHub Actions artifacts.
     required: false
@@ -54,7 +55,7 @@ inputs:
     required: false
     default: "cefari-release"
   signing-platform:
-    description: Signing platform passed to cefari codesign when signing is enabled. Defaults to the runner platform.
+    description: Signing platform passed to cefari codesign when signing is enabled.
     required: false
     default: ""
   signing-config:
@@ -70,7 +71,7 @@ inputs:
     required: false
     default: ""
   update-target:
-    description: Updater target key. Defaults to cefari-cli's platform-derived target when omitted.
+    description: Updater target key. Required when update-url-base is set.
     required: false
     default: ""
   update-format:

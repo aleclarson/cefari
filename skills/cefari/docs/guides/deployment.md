@@ -15,10 +15,6 @@ It validates release inputs, then delegates to the configured Cefari CLI command
 for build, package, signing, notarization, update metadata, and GitHub release
 upload.
 
-Required input:
-
-- `release-version`
-
 Common inputs:
 
 - `project-path`
@@ -33,6 +29,7 @@ Common inputs:
 - `upload-artifacts`
 - `dry-run`
 - `artifact-name`
+- `release-version`: optional override for `[package].version`
 
 Signing and update inputs:
 
@@ -65,12 +62,14 @@ target:
 project-path: templates/vite-react-basic
 targets: ${{ matrix.target.name }}
 install-cli: "true"
-cefari-version: ${{ vars.CEFARI_CLI_VERSION || 'latest' }}
+cefari-version: ${{ vars.CEFARI_CLI_VERSION }}
+update-target: ${{ matrix.target.name }}
 ```
 
 Copy these workflow files and `.github/actions/cefari-release/` into a generated
 project, then change `project-path` to `.`, adjust workflow matrix targets,
-review signing configuration, and set update URLs for that repository.
+set the `CEFARI_CLI_VERSION` repository variable, review signing configuration,
+and set update URLs for that repository.
 
 ## Dry-Run A Release
 
@@ -84,7 +83,6 @@ CEFARI_PROJECT_PATH=templates/vite-react-basic \
 CEFARI_RELEASE_MODE=prerelease \
 CEFARI_COMMAND=cefari \
 CEFARI_INSTALL_CLI=false \
-CEFARI_CLI_VERSION=latest \
 CEFARI_RELEASE_VERSION=0.0.0-verification \
 CEFARI_RELEASE_TAG=verification-0.0.0 \
 CEFARI_DRY_RUN=true \

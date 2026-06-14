@@ -65,6 +65,11 @@ jobs:
       - name: Resolve release metadata
         shell: bash
         run: |
+          if [[ -z "${{ vars.CEFARI_CLI_VERSION }}" ]]; then
+            echo "Set the CEFARI_CLI_VERSION repository variable to the @cefari/cli version used for releases." >&2
+            exit 1
+          fi
+
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             version="${{ inputs.version }}"
             tag="v${version}"
@@ -84,11 +89,12 @@ jobs:
           release-tag: ${{ env.CEFARI_RELEASE_TAG }}
           targets: ${{ matrix.target.name }}
           install-cli: "true"
-          cefari-version: ${{ vars.CEFARI_CLI_VERSION || 'latest' }}
+          cefari-version: ${{ vars.CEFARI_CLI_VERSION }}
           create-github-release: "true"
           upload-artifacts: "true"
           artifact-name: cefari-release-${{ matrix.target.name }}
           update-url-base: ${{ vars.CEFARI_UPDATE_URL_BASE }}
+          update-target: ${{ matrix.target.name }}
           update-key-env: UPDATE_SIGNING_KEY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
