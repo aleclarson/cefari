@@ -25,6 +25,7 @@ update_dir="$project_path/dist/update"
 artifact_dir="$project_path/dist"
 release_artifacts_file="$project_path/dist/release-artifacts.txt"
 github_release_assets_dir="$project_path/dist/github-release-assets"
+update_input_dir="$project_path/dist/update-input"
 release_assets=()
 primary_release_asset=""
 github_release_assets=()
@@ -127,7 +128,49 @@ prepare_github_release_assets() {
       archive_directory_artifact "$artifact"
     fi
   done
+  if [[ -d "$update_dir" ]]; then
+    while IFS= read -r artifact; do
+      github_release_assets+=("$artifact")
+    done < <(find "$update_dir" -type f -print | sort)
+  fi
   [[ "${#github_release_assets[@]}" -gt 0 ]] || fail "no uploadable GitHub release assets were prepared"
+}
+
+infer_update_target() {
+  if [[ -n "$update_target" ]]; then
+    echo "$update_target"
+    return 0
+  fi
+  if [[ -n "$targets" ]]; then
+    echo "${targets%%,*}"
+    return 0
+  fi
+
+  local os arch
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
+  case "$os" in
+    darwin) os="macos" ;;
+    mingw*|msys*|cygwin*) os="windows" ;;
+  esac
+  case "$arch" in
+    arm64) arch="aarch64" ;;
+    amd64) arch="x86_64" ;;
+  esac
+  echo "$os-$arch"
+}
+
+create_update_input_archive() {
+  local target="$1"
+  local archive="$update_input_dir/$target.zip"
+  rm -rf "$update_input_dir"
+  mkdir -p "$update_input_dir"
+  rm -f "$archive"
+  (
+    cd "$package_dir/output"
+    zip -qr "$archive" .
+  )
+  echo "$archive"
 }
 
 collect_release_assets() {
@@ -247,11 +290,17 @@ if [[ -n "$update_url_base" ]]; then
   if [[ -z "${!update_key_env:-}" && "$dry_run" != "true" ]]; then
     echo "update metadata skipped: $update_key_env is not set"
   else
-    [[ "$dry_run" == "true" || -n "$primary_release_asset" ]] || fail "cannot make update metadata without a release asset"
-    archive_name="${primary_release_asset##*/}"
+    effective_update_target="$(infer_update_target)"
+    [[ -n "$effective_update_target" ]] || fail "update target could not be inferred"
+    if [[ "$dry_run" == "true" ]]; then
+      archive="$update_input_dir/$effective_update_target.zip"
+    else
+      validate_command_available zip
+      archive="$(create_update_input_archive "$effective_update_target")"
+    fi
+    archive_name="${archive##*/}"
     update_url="${update_url_base%/}/$archive_name"
-    update_args=("$cefari_command" make-update "$primary_release_asset" --url "$update_url" --version "$version" --key-env "$update_key_env" --output-dir "$update_dir")
-    [[ -n "$update_target" ]] && update_args+=(--target "$update_target")
+    update_args=("$cefari_command" make-update "$archive" --url "$update_url" --version "$version" --key-env "$update_key_env" --output-dir "$update_dir" --target "$effective_update_target")
     [[ -n "$update_format" ]] && update_args+=(--format "$update_format")
     run_cmd "${update_args[@]}"
   fi

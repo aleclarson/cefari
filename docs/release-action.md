@@ -40,9 +40,15 @@ Signing and notarization inputs:
 Update inputs:
 
 - `update-url-base`: public download URL prefix for generated update metadata.
-- `update-target`: updater target key.
+- `update-target`: updater target key. Defaults to the current `targets`
+  value, or an inferred current-runner target when `targets` is omitted.
 - `update-format`: updater package format.
 - `update-key-env`: environment variable containing the update signing key. Defaults to `UPDATE_SIGNING_KEY`.
+
+When update generation runs, the action creates a deterministic per-target
+archive under `dist/update-input/<target>.zip`, signs that archive with
+`cefari make-update`, and includes generated update files in the GitHub release
+upload set.
 
 ## Secret-Dependent Behavior
 
