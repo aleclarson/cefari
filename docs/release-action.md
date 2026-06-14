@@ -62,6 +62,9 @@ with:
 
 When `install-cli` is `true`, the action installs `@cefari/cli` from npm and
 then runs release commands through the configured `cefari-command`.
+Dry runs print the planned install and release commands without requiring the
+CLI to exist. Non-dry runs fail early when `npm` or the configured Cefari
+command is unavailable.
 
 Expected secret families:
 

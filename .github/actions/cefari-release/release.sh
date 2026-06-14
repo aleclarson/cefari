@@ -4,6 +4,9 @@ set -euo pipefail
 project_path="${CEFARI_PROJECT_PATH:-.}"
 mode="${CEFARI_RELEASE_MODE:-release}"
 targets="${CEFARI_TARGETS:-}"
+cefari_command="${CEFARI_COMMAND:-cefari}"
+install_cli="${CEFARI_INSTALL_CLI:-false}"
+cefari_version="${CEFARI_CLI_VERSION:-latest}"
 version="${CEFARI_RELEASE_VERSION:-}"
 release_tag="${CEFARI_RELEASE_TAG:-}"
 release_name="${CEFARI_RELEASE_NAME:-}"
@@ -42,11 +45,33 @@ bool_input() {
   esac
 }
 
+quote_args() {
+  printf "%q" "$1"
+  shift
+  for arg in "$@"; do
+    printf " %q" "$arg"
+  done
+}
+
 run_cmd() {
-  echo "+ $*"
+  printf "+ "
+  quote_args "$@"
+  printf "\n"
   if [[ "$dry_run" != "true" ]]; then
     "$@"
   fi
+}
+
+command_available() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+validate_command_available() {
+  local command_name="$1"
+  if [[ "$dry_run" == "true" ]]; then
+    return 0
+  fi
+  command_available "$command_name" || fail "$command_name is required but was not found"
 }
 
 find_release_asset() {
@@ -58,8 +83,11 @@ find_release_asset() {
 
 [[ "$mode" == "release" || "$mode" == "prerelease" ]] || fail "mode must be release or prerelease"
 bool_input "$create_github_release" || fail "create-github-release must be true or false"
+bool_input "$install_cli" || fail "install-cli must be true or false"
 bool_input "$notarize" || fail "notarize must be true or false"
 bool_input "$dry_run" || fail "dry-run must be true or false"
+[[ -n "$cefari_command" ]] || fail "cefari-command is required"
+[[ "$install_cli" != "true" || -n "$cefari_version" ]] || fail "cefari-version is required when install-cli is true"
 [[ -n "$version" ]] || fail "release-version is required"
 [[ -f "$project_path/cefari.toml" ]] || fail "cefari.toml not found at $project_path"
 
@@ -70,10 +98,19 @@ echo "  project: $project_path"
 echo "  mode: $mode"
 echo "  version: $version"
 echo "  targets: ${targets:-current runner}"
+echo "  cefari command: $cefari_command"
+echo "  install cli: $install_cli"
 echo "  dry-run: $dry_run"
 
-run_cmd cargo run -p cefari-cli -- build "$project_path" --release
-run_cmd cargo run -p cefari-cli -- package "$project_path" --release
+if [[ "$install_cli" == "true" ]]; then
+  validate_command_available npm
+  run_cmd npm install -g "@cefari/cli@$cefari_version"
+fi
+
+validate_command_available "$cefari_command"
+
+run_cmd "$cefari_command" build "$project_path" --release
+run_cmd "$cefari_command" package "$project_path" --release
 
 asset=""
 if [[ "$dry_run" != "true" ]]; then
@@ -84,7 +121,7 @@ fi
 
 if [[ -n "$signing_config" || -n "$signing_platform" ]]; then
   [[ "$dry_run" == "true" || -n "$asset" ]] || fail "cannot sign without a release asset"
-  sign_args=(cargo run -p cefari-cli -- codesign "$asset")
+  sign_args=("$cefari_command" codesign "$asset")
   [[ -n "$signing_platform" ]] && sign_args+=(--platform "$signing_platform")
   [[ -n "$signing_config" ]] && sign_args+=(--config "$signing_config")
   run_cmd "${sign_args[@]}"
@@ -94,7 +131,7 @@ fi
 
 if [[ "$notarize" == "true" ]]; then
   [[ "$dry_run" == "true" || -n "$asset" ]] || fail "cannot notarize without a release asset"
-  notarize_args=(cargo run -p cefari-cli -- notarize "$asset")
+  notarize_args=("$cefari_command" notarize "$asset")
   [[ -n "$signing_config" ]] && notarize_args+=(--config "$signing_config")
   run_cmd "${notarize_args[@]}"
 else
@@ -108,7 +145,7 @@ if [[ -n "$update_url_base" ]]; then
     [[ "$dry_run" == "true" || -n "$asset" ]] || fail "cannot make update metadata without a release asset"
     archive_name="${asset##*/}"
     update_url="${update_url_base%/}/$archive_name"
-    update_args=(cargo run -p cefari-cli -- make-update "$asset" --url "$update_url" --version "$version" --key-env "$update_key_env" --output-dir "$update_dir")
+    update_args=("$cefari_command" make-update "$asset" --url "$update_url" --version "$version" --key-env "$update_key_env" --output-dir "$update_dir")
     [[ -n "$update_target" ]] && update_args+=(--target "$update_target")
     [[ -n "$update_format" ]] && update_args+=(--format "$update_format")
     run_cmd "${update_args[@]}"
