@@ -46,6 +46,8 @@ cat > cef-fixture/archive.json <<'JSON'
 }
 JSON
 echo fixture > cef-fixture/libcef.fixture
+mkdir -p cef-fixture/locales
+echo fixture > cef-fixture/locales/en-US.pak
 
 env -u CEFARI_DESKTOP_RUNTIME CEFARI_CEF_RESOURCES_DIR="$install_dir/cef-fixture" "$cefari" build sample >/dev/null
 test -f sample/build/desktop/npm-package-sample || test -f sample/build/desktop/npm-package-sample.exe

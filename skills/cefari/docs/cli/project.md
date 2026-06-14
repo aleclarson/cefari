@@ -32,8 +32,9 @@ Arguments and options:
 - `PATH`: project directory. Defaults to the current directory.
 - `--frontend-port PORT`: override `[frontend].dev_port`.
 
-Dev mode starts the frontend dev server, Deno daemon, and desktop app together.
-When one child process exits or fails, Cefari stops the remaining processes.
+Dev mode starts the frontend dev server, Deno daemon, and desktop runtime
+together. When one child process exits or fails, Cefari stops the remaining
+processes.
 
 Use `--frontend-port 0` only with the built-in static server. Configured
 `frontend.dev_command` values require a fixed port.
@@ -49,7 +50,14 @@ cefari build [PATH] [--release]
 Arguments and options:
 
 - `PATH`: project directory. Defaults to the current directory.
-- `--release`: build the desktop runtime with Cargo's release profile.
+- `--release`: use Cargo's release profile when Cefari builds the desktop
+  runtime from source.
+
+Installed Cefari CLI distributions should bundle a matching `cefari-desktop`
+runtime beside the `cefari` executable. Source-checkout CLI builds
+`cefari-desktop` with Cargo so runtime changes are picked up during Cefari
+development. Set `CEFARI_DESKTOP_RUNTIME=/path/to/cefari-desktop` to force a
+specific prebuilt runtime and skip the Cargo build.
 
 Build output is written under `build/`. See
 [Build And Package](../guides/build-and-package.md) for output details.
@@ -65,7 +73,8 @@ cefari package [PATH] [--release]
 Arguments and options:
 
 - `PATH`: project directory. Defaults to the current directory.
-- `--release`: package the desktop runtime from Cargo's release profile output.
+- `--release`: package release-profile build output when the desktop runtime
+  was built from source.
 
 `cefari package` expects `cefari build` artifacts to exist first. It writes
 package metadata under `dist/package/` and invokes `cargo-packager` when that

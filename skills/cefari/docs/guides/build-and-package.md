@@ -48,6 +48,18 @@ The daemon entry is configured by `[daemon].entry`. Cefari keeps a source copy
 at `build/daemon/main.ts` and compiles the daemon into the project-named daemon
 executable.
 
+## Desktop Runtime
+
+`cefari build` copies a matching `cefari-desktop` runtime into
+`build/desktop/<project_name>`. Installed Cefari CLI distributions should bundle
+that runtime beside the `cefari` executable so app developers do not need to
+compile the Rust desktop dependency tree.
+
+When Cefari is running from a source checkout, the CLI still builds
+`cefari-desktop` with Cargo so local runtime changes are picked up. Set
+`CEFARI_DESKTOP_RUNTIME=/path/to/cefari-desktop` to force a specific prebuilt
+runtime and skip the Cargo build.
+
 ## CEF Resources
 
 `cefari build` prepares CEF resources as part of the build. The package step

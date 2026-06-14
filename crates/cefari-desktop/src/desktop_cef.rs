@@ -1817,7 +1817,7 @@ mod imp {
             RawWindowHandle::AppKit(handle) => Ok(handle.ns_view.as_ptr().cast()),
             #[cfg(target_os = "windows")]
             RawWindowHandle::Win32(handle) => {
-                Ok(handle.hwnd.get() as cef::sys::cef_window_handle_t)
+                Ok(cef::sys::HWND(handle.hwnd.get() as *mut cef::sys::HWND__))
             }
             #[cfg(all(unix, not(target_os = "macos")))]
             RawWindowHandle::Xlib(handle) => Ok(handle.window as cef::sys::cef_window_handle_t),

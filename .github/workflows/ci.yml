@@ -164,6 +164,8 @@ jobs:
           }
           JSON
           echo fixture > .ci/cef-fixture/libcef.fixture
+          mkdir -p .ci/cef-fixture/locales
+          echo fixture > .ci/cef-fixture/locales/en-US.pak
 
       - name: Build sample project
         run: cargo run -p cefari-cli -- build .ci/cefari-sample
