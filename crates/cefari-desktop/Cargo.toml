@@ -15,6 +15,7 @@ cef.workspace = true
 cefari-core = { path = "../cefari-core" }
 muda.workspace = true
 open.workspace = true
+png.workspace = true
 raw-window-handle.workspace = true
 serde_json.workspace = true
 single-instance.workspace = true

@@ -50,7 +50,7 @@ pub fn dev_project(
         devtools.browser_url
     );
     processes.spawn_daemon(project_dir, &project)?;
-    processes.spawn_desktop(project_dir, &devtools)?;
+    processes.spawn_desktop(project_dir, &project, &devtools)?;
     processes.wait()
 }
 
@@ -158,14 +158,27 @@ impl DevProcesses {
         Ok(())
     }
 
-    fn spawn_desktop(&mut self, project_dir: &Path, devtools: &DevtoolsEndpoint) -> Result<()> {
+    fn spawn_desktop(
+        &mut self,
+        project_dir: &Path,
+        project: &ProjectConfig,
+        devtools: &DevtoolsEndpoint,
+    ) -> Result<()> {
         let frontend_url = self.frontend_url.as_deref();
+        let tray_icon = project_dir.join(&project.app.tray_icon);
+        let tray_icon = tray_icon.canonicalize().with_context(|| {
+            format!(
+                "configured tray icon {} does not exist or is not a file",
+                tray_icon.display()
+            )
+        })?;
         let mut command = desktop_launch_command()?;
         let child = command
             .envs(frontend_url.map(|url| ("CEFARI_FRONTEND_URL", url)))
             .env(CEFARI_DEV_MODE_ENV, "1")
             .env(CEFARI_DEVTOOLS_PORT_ENV, devtools.port.to_string())
             .env("CEFARI_RESOURCE_DIR", project_dir)
+            .env("CEFARI_TRAY_ICON", tray_icon)
             .stdin(Stdio::null())
             .spawn()
             .context("failed to start Rust desktop app for cefari dev")?;

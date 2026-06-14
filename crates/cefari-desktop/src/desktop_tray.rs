@@ -1,5 +1,14 @@
+use std::{
+    fs::File,
+    io::BufReader,
+    path::{Path, PathBuf},
+};
+
 use anyhow::{Context, Result};
-use cefari_core::{AppConfig, CefariIpcCommand};
+use cefari_core::{
+    AppConfig, CefariIpcCommand, PackageFormat, RuntimePaths, packaged_resources_dir,
+};
+use png::{ColorType, Transformations};
 use tracing::{debug, info};
 use tray_icon::{
     Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent,
@@ -8,17 +17,17 @@ use tray_icon::{
 
 use crate::desktop_menu::{CHECK_FOR_UPDATES_ID, OPEN_LOGS_ID, QUIT_ID};
 
-const TRAY_ICON_SIZE: u32 = 18;
-const TRAY_ICON_PIXEL_COUNT: usize = (TRAY_ICON_SIZE * TRAY_ICON_SIZE) as usize;
+const CEFARI_TRAY_ICON_ENV: &str = "CEFARI_TRAY_ICON";
+const PACKAGED_TRAY_ICON: &str = "tray-icon.png";
 
 pub struct DesktopTray {
     _tray_icon: TrayIcon,
 }
 
 impl DesktopTray {
-    pub fn new(app_config: &AppConfig) -> Result<Self> {
+    pub fn new(app_config: &AppConfig, paths: &RuntimePaths) -> Result<Self> {
         let menu = tray_menu(app_config)?;
-        let icon = tray_icon().context("failed to create Cefari tray icon")?;
+        let icon = tray_icon(paths).context("failed to create Cefari tray icon")?;
         let tray_icon = TrayIconBuilder::new()
             .with_tooltip(&app_config.display_name)
             .with_icon(icon)
@@ -79,55 +88,117 @@ fn tray_quit_label(app_config: &AppConfig) -> String {
     format!("Quit {}", app_config.display_name)
 }
 
-fn tray_icon() -> Result<Icon> {
-    Icon::from_rgba(tray_icon_rgba(), TRAY_ICON_SIZE, TRAY_ICON_SIZE)
-        .map_err(|error| anyhow::anyhow!("{error}"))
+fn tray_icon(paths: &RuntimePaths) -> Result<Icon> {
+    let icon_path = tray_icon_path(paths)?;
+    let (rgba, width, height) = decode_tray_icon_png(&icon_path)
+        .with_context(|| format!("failed to decode tray icon at {}", icon_path.display()))?;
+    Icon::from_rgba(rgba, width, height).map_err(|error| anyhow::anyhow!("{error}"))
 }
 
-fn tray_icon_rgba() -> Vec<u8> {
-    let mut rgba = Vec::with_capacity(TRAY_ICON_PIXEL_COUNT * 4);
-    let center = f64::from(TRAY_ICON_SIZE - 1) / 2.0;
-    let outer_radius = center;
-    let inner_radius = center * 0.45;
-
-    for y in 0..TRAY_ICON_SIZE {
-        for x in 0..TRAY_ICON_SIZE {
-            let dx = f64::from(x) - center;
-            let dy = f64::from(y) - center;
-            let distance = dx.hypot(dy);
-            let alpha = if distance <= inner_radius {
-                0
-            } else if distance <= outer_radius {
-                255
-            } else {
-                0
-            };
-
-            rgba.extend_from_slice(&[0, 0, 0, alpha]);
+fn tray_icon_path(paths: &RuntimePaths) -> Result<PathBuf> {
+    for candidate in tray_icon_candidates(paths) {
+        if candidate.is_file() {
+            return Ok(candidate);
         }
     }
 
-    rgba
+    anyhow::bail!(
+        "tray icon is required; configure app.tray_icon and package it as {PACKAGED_TRAY_ICON}"
+    )
+}
+
+fn tray_icon_candidates(paths: &RuntimePaths) -> Vec<PathBuf> {
+    let mut candidates = std::env::var_os(CEFARI_TRAY_ICON_ENV)
+        .map(PathBuf::from)
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    candidates.extend(platform_package_formats().iter().filter_map(|format| {
+        packaged_resources_dir(*format)
+            .ok()
+            .map(|resources_dir| resources_dir.join(PACKAGED_TRAY_ICON))
+    }));
+    candidates.push(paths.resource_dir.join(PACKAGED_TRAY_ICON));
+    candidates
+}
+
+fn decode_tray_icon_png(path: &Path) -> Result<(Vec<u8>, u32, u32)> {
+    let file = File::open(path)
+        .with_context(|| format!("failed to open tray icon at {}", path.display()))?;
+    let mut decoder = png::Decoder::new(BufReader::new(file));
+    decoder.set_transformations(Transformations::normalize_to_color8() | Transformations::ALPHA);
+    let mut reader = decoder
+        .read_info()
+        .with_context(|| format!("failed to read tray icon metadata at {}", path.display()))?;
+    let buffer_size = reader
+        .output_buffer_size()
+        .context("tray icon PNG is too large to decode")?;
+    let mut buffer = vec![0; buffer_size];
+    let output = reader
+        .next_frame(&mut buffer)
+        .with_context(|| format!("failed to read tray icon pixels at {}", path.display()))?;
+    let pixels = &buffer[..output.buffer_size()];
+    let rgba = pixels_to_rgba(pixels, output.color_type)?;
+    Ok((rgba, output.width, output.height))
+}
+
+fn pixels_to_rgba(pixels: &[u8], color_type: ColorType) -> Result<Vec<u8>> {
+    match color_type {
+        ColorType::Rgba => Ok(pixels.to_vec()),
+        ColorType::Rgb => {
+            let mut rgba = Vec::with_capacity(pixels.len() / 3 * 4);
+            for pixel in pixels.chunks_exact(3) {
+                rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
+            }
+            Ok(rgba)
+        }
+        ColorType::Grayscale => {
+            let mut rgba = Vec::with_capacity(pixels.len() * 4);
+            for &gray in pixels {
+                rgba.extend_from_slice(&[gray, gray, gray, 255]);
+            }
+            Ok(rgba)
+        }
+        ColorType::GrayscaleAlpha => {
+            let mut rgba = Vec::with_capacity(pixels.len() / 2 * 4);
+            for pixel in pixels.chunks_exact(2) {
+                rgba.extend_from_slice(&[pixel[0], pixel[0], pixel[0], pixel[1]]);
+            }
+            Ok(rgba)
+        }
+        ColorType::Indexed => anyhow::bail!("indexed tray icon did not expand to RGBA"),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn platform_package_formats() -> &'static [PackageFormat] {
+    &[PackageFormat::App, PackageFormat::Dmg]
+}
+
+#[cfg(target_os = "windows")]
+fn platform_package_formats() -> &'static [PackageFormat] {
+    &[PackageFormat::Nsis, PackageFormat::Wix]
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn platform_package_formats() -> &'static [PackageFormat] {
+    &[
+        PackageFormat::Deb,
+        PackageFormat::AppImage,
+        PackageFormat::Pacman,
+    ]
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+fn platform_package_formats() -> &'static [PackageFormat] {
+    &[]
 }
 
 #[cfg(test)]
 mod tests {
     use cefari_core::AppConfig;
 
-    use super::{
-        TRAY_ICON_PIXEL_COUNT, TRAY_ICON_SIZE, ipc_command_for_event, tray_icon_rgba,
-        tray_quit_label,
-    };
-
-    #[test]
-    fn tray_icon_rgba_has_expected_dimensions() {
-        let rgba = tray_icon_rgba();
-
-        assert_eq!(rgba.len(), TRAY_ICON_PIXEL_COUNT * 4);
-        assert_eq!(TRAY_ICON_SIZE, 18);
-        assert!(rgba.chunks_exact(4).any(|pixel| pixel[3] == 255));
-        assert!(rgba.chunks_exact(4).any(|pixel| pixel[3] == 0));
-    }
+    use super::{decode_tray_icon_png, ipc_command_for_event, tray_quit_label};
 
     #[test]
     fn tray_menu_labels_use_app_config() {
@@ -138,6 +209,19 @@ mod tests {
         };
 
         assert_eq!(tray_quit_label(&config), "Quit Custom App");
+    }
+
+    #[test]
+    fn decodes_png_tray_icon() {
+        let icon_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../cefari-cli/assets/default-tray-icon.png");
+        let (rgba, width, height) =
+            decode_tray_icon_png(&icon_path).expect("tray icon should decode");
+
+        assert_eq!((width, height), (18, 18));
+        assert_eq!(rgba.len(), 18 * 18 * 4);
+        assert!(rgba.chunks_exact(4).any(|pixel| pixel[3] == 255));
+        assert!(rgba.chunks_exact(4).any(|pixel| pixel[3] == 0));
     }
 
     #[test]

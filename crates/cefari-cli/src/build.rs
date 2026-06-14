@@ -324,6 +324,7 @@ mod tests {
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
+tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"

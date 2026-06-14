@@ -39,6 +39,7 @@ A minimal project manifest looks like this:
 project_name = "my-cefari-app"
 name = "My Cefari App"
 identifier = "dev.cefari.my-cefari-app"
+tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"

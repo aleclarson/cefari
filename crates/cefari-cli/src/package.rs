@@ -160,6 +160,8 @@ fn write_package_metadata(
     release_version: Option<&str>,
 ) -> Result<()> {
     let icon_path = package_icon_path(project_dir, package_dir, project)?;
+    let tray_icon_path =
+        required_project_file(project_dir, &project.app.tray_icon, "configured tray icon")?;
     let frontend_dir = build_dir.join("frontend").canonicalize().with_context(|| {
         format!(
             "failed to resolve frontend resources at {}",
@@ -210,6 +212,10 @@ fn write_package_metadata(
                 src: cef_resources_dir,
                 target: "cef".into(),
             },
+            CargoPackagerResource {
+                src: tray_icon_path,
+                target: "tray-icon.png".into(),
+            },
         ],
     };
     let metadata =
@@ -256,17 +262,17 @@ fn package_icon_path(
         return write_default_package_icon(package_dir);
     };
 
-    let icon_path = project_dir.join(icon);
-    if !icon_path.is_file() {
-        anyhow::bail!(
-            "configured app icon {} does not exist or is not a file",
-            icon_path.display()
-        );
+    required_project_file(project_dir, icon, "configured app icon")
+}
+
+fn required_project_file(project_dir: &Path, relative_path: &str, label: &str) -> Result<PathBuf> {
+    let path = project_dir.join(relative_path);
+    if !path.is_file() {
+        anyhow::bail!("{label} {} does not exist or is not a file", path.display());
     }
 
-    icon_path
-        .canonicalize()
-        .with_context(|| format!("failed to resolve app icon at {}", icon_path.display()))
+    path.canonicalize()
+        .with_context(|| format!("failed to resolve {label} at {}", path.display()))
 }
 
 fn write_default_package_icon(package_dir: &Path) -> Result<PathBuf> {
@@ -318,6 +324,7 @@ fn write_package_manifest(
     let manifest = PackageManifest {
         product_name: project.package.product_name.clone(),
         identifier: project.app.identifier.clone(),
+        tray_icon: "tray-icon.png".to_owned(),
         desktop_binary: desktop_executable_name(project),
         frontend_dir: normalize(&build_dir.join("frontend")),
         daemon_dir: normalize(&build_dir.join("daemon")),
@@ -376,6 +383,7 @@ fn run_cargo_packager_if_available(package_dir: &Path) -> Result<()> {
 struct PackageManifest {
     product_name: String,
     identifier: String,
+    tray_icon: String,
     desktop_binary: String,
     frontend_dir: String,
     daemon_dir: String,
@@ -443,6 +451,7 @@ mod tests {
         let manifest = PackageManifest {
             product_name: "Quoted \"App\" \\ Demo\nNext".to_owned(),
             identifier: "dev.cefari.quoted-app".to_owned(),
+            tray_icon: "tray-icon.png".to_owned(),
             desktop_binary: "quoted-app".to_owned(),
             frontend_dir: "/tmp/frontend".to_owned(),
             daemon_dir: "/tmp/daemon".to_owned(),
@@ -481,6 +490,7 @@ mod tests {
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
+tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"

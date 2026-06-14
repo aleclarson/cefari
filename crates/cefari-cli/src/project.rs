@@ -53,6 +53,7 @@ pub struct ProjectApp {
     pub project_name: String,
     pub name: String,
     pub identifier: String,
+    pub tray_icon: String,
     #[serde(default)]
     pub icon: Option<String>,
 }
@@ -134,6 +135,7 @@ mod tests {
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
+tray_icon = "assets/tray-icon.png"
 icon = "assets/icon.png"
 
 [frontend]
@@ -152,6 +154,7 @@ version = "1.2.3"
 
         assert_eq!(project.app.project_name, "example-app");
         assert_eq!(project.app.name, "Example App");
+        assert_eq!(project.app.tray_icon, "assets/tray-icon.png");
         assert_eq!(project.app.icon.as_deref(), Some("assets/icon.png"));
         assert_eq!(project.package.product_name, "Example App");
         assert_eq!(project.package.version, "1.2.3");
@@ -167,6 +170,7 @@ version = "1.2.3"
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
+tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"
@@ -205,6 +209,7 @@ version = "1.2.3"
             r#"[app]
 name = "Example App"
 identifier = "dev.cefari.example-app"
+tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"
@@ -223,6 +228,30 @@ version = "1.2.3"
     }
 
     #[test]
+    fn rejects_missing_tray_icon() {
+        let error = toml::from_str::<ProjectConfig>(
+            r#"[app]
+project_name = "example-app"
+name = "Example App"
+identifier = "dev.cefari.example-app"
+
+[frontend]
+dist = "frontend/dist"
+
+[daemon]
+entry = "daemon/main.ts"
+
+[package]
+product_name = "Example App"
+version = "1.2.3"
+"#,
+        )
+        .expect_err("manifest without tray_icon should fail");
+
+        assert!(error.to_string().contains("missing field `tray_icon`"));
+    }
+
+    #[test]
     fn rejects_invalid_project_names() {
         for project_name in [
             "",
@@ -237,6 +266,7 @@ version = "1.2.3"
 project_name = "{project_name}"
 name = "Example App"
 identifier = "dev.cefari.example-app"
+tray_icon = "assets/tray-icon.png"
 
 [frontend]
 dist = "frontend/dist"
@@ -266,6 +296,7 @@ version = "1.2.3"
 project_name = "example-app"
 name = "Example App"
 identifier = "dev.cefari.example-app"
+tray_icon = "assets/tray-icon.png"
 extra = true
 
 [frontend]

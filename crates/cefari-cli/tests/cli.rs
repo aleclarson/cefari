@@ -51,6 +51,7 @@ fn init_creates_project_scaffold() {
     assert!(root.join("cefari.toml").exists());
     assert!(root.join("frontend/index.html").exists());
     assert!(root.join("daemon/main.ts").exists());
+    assert!(root.join("assets/tray-icon.png").exists());
     assert!(root.join("README.md").exists());
     assert!(root.join(".agents/skills/cefari/SKILL.md").exists());
     assert!(
@@ -62,6 +63,7 @@ fn init_creates_project_scaffold() {
     assert!(manifest.contains(r#"project_name = "example-app""#));
     assert!(manifest.contains(r#"name = "Example App""#));
     assert!(manifest.contains(r#"identifier = "dev.cefari.example-app""#));
+    assert!(manifest.contains(r#"tray_icon = "assets/tray-icon.png""#));
     assert!(manifest.contains(r#"version = "0.1.0""#));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
@@ -246,6 +248,7 @@ fn package_creates_assembly_manifest_after_build() {
     );
     assert!(PathBuf::from(json_field(&manifest_json, "daemon_executable")).exists());
     assert!(PathBuf::from(json_field(&manifest_json, "cef_archive_json")).exists());
+    assert_eq!(json_field(&manifest_json, "tray_icon"), "tray-icon.png");
     assert!(
         PathBuf::from(json_field(&manifest_json, "cef_resources"))
             .join("libcef.fixture")
@@ -259,6 +262,8 @@ fn package_creates_assembly_manifest_after_build() {
     assert!(metadata.contains("dist/package/icons/cefari.png"));
     assert!(metadata.contains("build/desktop"));
     assert!(metadata.contains("build/cef/resources"));
+    assert!(metadata.contains("assets/tray-icon.png"));
+    assert!(metadata.contains(r#"target = "tray-icon.png""#));
     assert!(metadata.contains(&format!(
         r#"path = "{}""#,
         desktop_executable_name("package-app")
@@ -356,6 +361,44 @@ fn package_rejects_missing_configured_app_icon() {
     assert!(!output.status.success());
     assert!(stderr(&output).contains("configured app icon"));
     assert!(stderr(&output).contains("assets/missing.png"));
+
+    fs::remove_dir_all(root).expect("temp project should be removable");
+}
+
+#[test]
+fn package_rejects_missing_configured_tray_icon() {
+    let root = temp_project_path();
+    let init_output = cefari()
+        .arg("init")
+        .arg(&root)
+        .arg("--name")
+        .arg("Missing Tray Icon App")
+        .output()
+        .expect("cefari init should run");
+    assert_success(&init_output);
+    set_tray_icon(&root, "assets/missing-tray.png");
+
+    let cef_fixture = create_fake_cef_resources(&root.join("cef-fixture"));
+    let desktop_runtime = create_fake_desktop_runtime(&root.join("cefari-desktop-runtime"));
+    let build_output = with_fake_desktop_runtime(
+        with_fake_cef_resources(cefari(), &cef_fixture),
+        &desktop_runtime,
+    )
+    .arg("build")
+    .arg(&root)
+    .output()
+    .expect("cefari build should run");
+    assert_success(&build_output);
+
+    let output = cefari()
+        .arg("package")
+        .arg(&root)
+        .output()
+        .expect("cefari package should run");
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("configured tray icon"));
+    assert!(stderr(&output).contains("assets/missing-tray.png"));
 
     fs::remove_dir_all(root).expect("temp project should be removable");
 }
@@ -1085,6 +1128,16 @@ fn set_app_icon(root: &Path, icon: &str) {
     let manifest = manifest.replace(
         r#"identifier = "dev.cefari."#,
         &format!("icon = \"{icon}\"\nidentifier = \"dev.cefari."),
+    );
+    fs::write(manifest_path, manifest).expect("manifest should be updated");
+}
+
+fn set_tray_icon(root: &Path, icon: &str) {
+    let manifest_path = root.join("cefari.toml");
+    let manifest = fs::read_to_string(&manifest_path).expect("manifest should exist");
+    let manifest = manifest.replace(
+        r#"tray_icon = "assets/tray-icon.png""#,
+        &format!("tray_icon = \"{icon}\""),
     );
     fs::write(manifest_path, manifest).expect("manifest should be updated");
 }

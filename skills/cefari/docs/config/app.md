@@ -7,6 +7,7 @@ The `[app]` table defines the app's stable identity.
 project_name = "my-cefari-app"
 name = "My Cefari App"
 identifier = "dev.cefari.my-cefari-app"
+tray_icon = "assets/tray-icon.png"
 icon = "assets/icon.png"
 ```
 
@@ -17,6 +18,7 @@ icon = "assets/icon.png"
 | `project_name` | Yes | Stable machine name for generated executables. |
 | `name` | Yes | Human-readable app name used by developer-facing output. |
 | `identifier` | Yes | Reverse-DNS-style app identifier. |
+| `tray_icon` | Yes | Path to the PNG icon used for OS tray/menu-bar integration. |
 | `icon` | No | Path to the app icon used for native package metadata. |
 
 ## `project_name`
@@ -47,6 +49,10 @@ Cefari uses `project_name` for generated executable names:
 `icon` is resolved relative to the project root and must point to a file.
 Use a square PNG, ideally `1024x1024`.
 
-When omitted, `cefari package` uses Cefari's default package icon. The app icon
-currently affects native package metadata only; runtime tray and menu-bar icons
-remain Cefari-provided.
+When omitted, `cefari package` uses Cefari's default package icon.
+
+## `tray_icon`
+
+`tray_icon` is resolved relative to the project root and must point to a PNG
+file. Cefari requires a tray icon because the desktop shell enables tray/menu-bar
+integration.

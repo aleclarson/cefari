@@ -674,6 +674,7 @@ dependencies = [
  "cefari-core",
  "muda",
  "open",
+ "png",
  "raw-window-handle",
  "serde_json",
  "single-instance",
