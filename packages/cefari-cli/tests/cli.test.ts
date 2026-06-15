@@ -45,6 +45,13 @@ test("prints version", async () => {
   assert.equal(stdout.trim(), "0.1.0");
 });
 
+test("documents Vite dev port flag", async () => {
+  const { stdout } = await cefari(["dev", "--help"]);
+
+  assert.match(stdout, /--vite-port/);
+  assert.doesNotMatch(stdout, /--frontend-port/);
+});
+
 test("routes nested package subcommands", async () => {
   const { stdout } = await cefari(["package", "release"]);
 

@@ -6,6 +6,16 @@ export {
   type CliTopLevelCommand,
 } from "./cli.js";
 export {
+  createViteDevConfig,
+  runCefariDev,
+  startCefariDev,
+  type ChildLike,
+  type DevDependencies,
+  type DevOptions,
+  type DevSession,
+  type ViteServerLike,
+} from "./dev.js";
+export {
   defineConfig,
   loadCefariConfig,
   toSerializableProjectConfig,

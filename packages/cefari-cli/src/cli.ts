@@ -1,4 +1,5 @@
-import { binary, command, flag, option, optional, positional, run, string, subcommands } from "cmd-ts";
+import { binary, command, flag, number, option, optional, positional, run, string, subcommands } from "cmd-ts";
+import { runCefariDev } from "./dev.js";
 
 export const VERSION = "0.1.0";
 
@@ -63,8 +64,20 @@ const dev = command({
   description: "Run the Cefari app with Vite-powered development services.",
   args: {
     path: projectPath,
+    vitePort: option({
+      type: optional(number),
+      long: "vite-port",
+      description: "Override the fixed Vite dev server port.",
+    }),
+    devtoolsPort: option({
+      type: optional(number),
+      long: "devtools-port",
+      description: "Chrome DevTools Protocol port for the embedded CEF browser.",
+    }),
   },
-  handler: () => placeholder("dev"),
+  handler: async ({ path, vitePort, devtoolsPort }) => {
+    await runCefariDev({ root: path, vitePort, devtoolsPort });
+  },
 });
 
 const build = command({
