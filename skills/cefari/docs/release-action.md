@@ -31,7 +31,7 @@ Common optional inputs:
 
 Signing and notarization inputs:
 
-- `signing-platform`: platform passed to `cefari codesign`.
+- `signing-platform`: platform passed to `cefari package sign`.
 - `signing-config`: optional path to `sign.toml`.
 - `notarize`: whether macOS notarization should run after signing.
 
@@ -44,7 +44,7 @@ Update inputs:
 
 When update generation runs, the action creates a deterministic per-target
 archive under `dist/update-input/<target>.zip`, signs that archive with
-`cefari make-update`, and includes generated update files in the GitHub release
+`cefari package update`, and includes generated update files in the GitHub release
 upload set.
 
 ## Secret-Dependent Behavior

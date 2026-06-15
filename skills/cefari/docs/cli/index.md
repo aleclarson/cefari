@@ -1,7 +1,7 @@
 # CLI Reference
 
-The `cefari` CLI creates, runs, builds, packages, signs, and inspects Cefari app
-projects. These pages are app-developer command references.
+The `cefari` CLI creates, runs, builds, and packages Cefari apps. The top-level
+surface is intentionally small: `init`, `dev`, `build`, and `package`.
 
 ## Installation
 
@@ -11,16 +11,14 @@ Install released CLI builds through npm:
 npm install -g cefari
 ```
 
-The npm distribution bundles the native `cefari` binary and matching
-`cefari-desktop` runtime for supported macOS arm64, macOS x64, Linux x64, and
-Windows x64 hosts.
+The npm distribution provides the TypeScript/Node `@cefari/cli` command and the
+native desktop runtime helpers needed by Cefari apps.
 
 ## Commands
 
-- [Project Commands](project.md): `init`, `dev`, `build`, `package`, and
-  `clean`.
-- [Release Commands](release.md): `codesign`, `notarize`, and `make-update`.
-- [Diagnostics Commands](diagnostics.md): `doctor`, `info`, and `logs`.
+- [Project Commands](project.md): `init`, `dev`, `build`, and `package`.
+- [Release Commands](release.md): `package sign`, `package notarize`, and
+  `package update`.
 
 ## Project Path Defaults
 
@@ -31,7 +29,6 @@ current directory:
 cefari dev
 cefari build
 cefari package
-cefari clean
 ```
 
 `cefari init` is different: when omitted, its path defaults to `./cefari-app`.

@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn decodes_png_tray_icon() {
         let icon_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../cefari-cli/assets/default-tray-icon.png");
+            .join("assets/default-tray-icon.png");
         let (rgba, width, height) =
             decode_tray_icon_png(&icon_path).expect("tray icon should decode");
 

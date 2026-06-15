@@ -24,20 +24,17 @@ and a Cefari agent skill.
 Run the local development environment:
 
 ```bash
-cefari dev [PATH] [--frontend-port PORT]
+cefari dev [PATH] [--vite-port PORT]
 ```
 
 Arguments and options:
 
 - `PATH`: project directory. Defaults to the current directory.
-- `--frontend-port PORT`: override `frontend.devPort`.
+- `--vite-port PORT`: override `vite.devPort`.
 
-Dev mode starts the frontend dev server, Deno daemon, and desktop runtime
-together. When one child process exits or fails, Cefari stops the remaining
-processes.
-
-Use `--frontend-port 0` only with the built-in static server. Configured
-`frontend.devCommand` values require a fixed port.
+Dev mode starts Vite through its JavaScript API, the Deno daemon, and the
+desktop runtime together. When one child process exits or fails, Cefari stops
+the remaining processes. The Vite port is strict and fixed.
 
 ## `cefari build`
 
@@ -81,18 +78,3 @@ Arguments and options:
 `cefari package` expects `cefari build` artifacts to exist first. It writes
 package metadata under `dist/package/` and invokes `cargo-packager` when that
 tool is available.
-
-## `cefari clean`
-
-Remove generated build and dist artifacts:
-
-```bash
-cefari clean [PATH]
-```
-
-Arguments:
-
-- `PATH`: project directory. Defaults to the current directory.
-
-The command loads `cefari.config.ts` first, then removes the project's `build/` and
-`dist/` directories when they exist.

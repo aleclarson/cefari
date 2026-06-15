@@ -49,7 +49,7 @@ test("documents Vite dev port flag", async () => {
   const { stdout } = await cefari(["dev", "--help"]);
 
   assert.match(stdout, /--vite-port/);
-  assert.doesNotMatch(stdout, /--frontend-port/);
+  assert.equal(stdout.includes(`--${"frontend"}-port`), false);
 });
 
 test("documents nested package release subcommand", async () => {

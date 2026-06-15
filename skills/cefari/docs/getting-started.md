@@ -1,7 +1,7 @@
 # Getting Started With Cefari
 
-Cefari is a Rust desktop app runtime and a developer CLI for building apps with
-a web frontend, a Deno daemon, and native desktop capabilities.
+Cefari builds Vite apps with a native desktop shell, a Deno daemon, packaging,
+updater support, and native desktop capabilities.
 
 Use this page as the entry point. It branches into task-oriented guides under
 `docs/guides/`.
@@ -10,33 +10,19 @@ Use this page as the entry point. It branches into task-oriented guides under
 
 Install the tools Cefari uses for local development and release work:
 
+- Node.js
 - Rust and Cargo
 - Deno 2.8+
 - `cargo-packager` when creating native packages
 - `cargo-codesign` when signing, notarizing, or generating update signatures
 
-From a Cefari repository checkout, install the CLI globally so app projects can
-run `cefari` directly:
-
-```bash
-cargo install --path crates/cefari-cli --locked
-```
-
-Released builds are distributed through npm:
+Install the developer-facing CLI through npm:
 
 ```bash
 npm install -g cefari
 ```
 
-The npm package installs a platform-specific native `cefari` binary and the
-matching `cefari-desktop` runtime for supported macOS arm64, macOS x64, Linux
-x64, and Windows x64 hosts.
-
-Check the local environment:
-
-```bash
-cefari doctor
-```
+The npm package installs the TypeScript/Node `cefari` command.
 
 ## Create An App
 
@@ -51,7 +37,7 @@ The generated `cefari.config.ts` includes:
 - `app.projectName`, a lowercase machine name used for executable output
   names
 - `app.name` and `app.identifier`
-- `frontend.dist` and `frontend.devPort`
+- `vite.root`, `vite.configFile`, and `vite.devPort`
 - `daemon.entry`
 - `package.productName`
 - `package.version`
@@ -66,11 +52,10 @@ Start the local development environment:
 cefari dev my-cefari-app
 ```
 
-Cefari starts the frontend, Deno daemon, and Rust desktop app together. Use
-`--frontend-port PORT` when a project needs a specific frontend port.
+Cefari starts Vite, the Deno daemon, and the desktop app together. Use
+`--vite-port PORT` when a project needs a specific Vite port.
 
-For Vite and custom frontend commands, see
-[Develop Locally](guides/development.md).
+For Vite development details, see [Develop Locally](guides/development.md).
 
 For frontend TypeScript code that calls native Cefari actions, see
 [TypeScript App Guide](typescript/index.md).
@@ -103,8 +88,8 @@ see [Automated Deployment](guides/deployment.md).
 
 ## App Developer References
 
-- [CLI Reference](cli/index.md): command syntax for development, release, and
-  diagnostics.
+- [CLI Reference](cli/index.md): command syntax for development, package, and
+  release workflows.
 - [`cefari.config.ts` Reference](config/index.md): project config fields and
   validation rules.
 - [Cefari CSS Contract](css-contract.md): opt-in drag-region utility classes.

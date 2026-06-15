@@ -45,8 +45,8 @@ cargo install cargo-codesign --version 0.4.2 --locked
 Check the local environment with the CLI:
 
 ```bash
-cargo run -p cefari-cli -- doctor
-cargo run -p cefari-cli -- info
+node packages/cefari-cli/dist/bin/cefari.js --help
+node packages/cefari-cli/dist/bin/cefari.js package
 ```
 
 ## Build And Run Cefari
@@ -60,22 +60,22 @@ cargo build --workspace
 Build only the CLI:
 
 ```bash
-cargo build -p cefari-cli
+npm run --prefix packages/cefari-cli build
 ```
 
 Run the CLI from source:
 
 ```bash
-cargo run -p cefari-cli -- --help
-cargo run -p cefari-cli -- init .tmp/cefari-sample --name "Cefari Sample"
-cargo run -p cefari-cli -- dev .tmp/cefari-sample
+node packages/cefari-cli/dist/bin/cefari.js --help
+node packages/cefari-cli/dist/bin/cefari.js init .tmp/cefari-sample --name "Cefari Sample"
+node packages/cefari-cli/dist/bin/cefari.js dev .tmp/cefari-sample
 ```
 
 Install the local CLI when you want to use `cefari` directly while testing
 projects or templates:
 
 ```bash
-cargo install --path crates/cefari-cli --locked
+npm install -g ./packages/cefari-cli
 cefari --help
 ```
 
@@ -89,7 +89,7 @@ cefari dev templates/vite-react-basic
 Use a different frontend port when the default is occupied:
 
 ```bash
-cefari dev templates/vite-react-basic --frontend-port 5273
+cefari dev templates/vite-react-basic --vite-port 5273
 ```
 
 ## Common Edit Loops
@@ -118,7 +118,7 @@ Run Rust tests:
 ```bash
 cargo test --workspace
 cargo test -p cefari-core
-cargo test -p cefari-cli
+npm run --prefix packages/cefari-cli test
 cargo test -p cefari-desktop
 cargo test -p cefari-core services::tests -- --nocapture
 ```
@@ -169,7 +169,7 @@ desktop shell, daemon launch, native bridge behavior, ports, or the development
 origin policy:
 
 ```bash
-cargo run -p cefari-cli -- dev templates/vite-react-basic
+node packages/cefari-cli/dist/bin/cefari.js dev templates/vite-react-basic
 ```
 
 If you installed the local CLI, the equivalent command is:
@@ -182,21 +182,21 @@ Build and package the template when your change touches build output, daemon
 compilation, CEF resource handling, package metadata, or release assembly:
 
 ```bash
-cargo run -p cefari-cli -- build templates/vite-react-basic
-cargo run -p cefari-cli -- package templates/vite-react-basic
+node packages/cefari-cli/dist/bin/cefari.js build templates/vite-react-basic
+node packages/cefari-cli/dist/bin/cefari.js package templates/vite-react-basic
 ```
 
 Use release mode for packaging changes that depend on optimized binaries:
 
 ```bash
-cargo run -p cefari-cli -- build templates/vite-react-basic --release
-cargo run -p cefari-cli -- package templates/vite-react-basic --release
+node packages/cefari-cli/dist/bin/cefari.js build templates/vite-react-basic --release
+node packages/cefari-cli/dist/bin/cefari.js package templates/vite-react-basic --release
 ```
 
-Clean generated template artifacts after verification:
+Remove generated template artifacts after verification:
 
 ```bash
-cargo run -p cefari-cli -- clean templates/vite-react-basic
+rm -rf templates/vite-react-basic/build templates/vite-react-basic/dist
 ```
 
 When Rust IPC types change, keep the generated TypeScript declarations in sync:
@@ -214,26 +214,26 @@ Create a disposable Cefari app:
 
 ```bash
 rm -rf .tmp/cefari-sample
-cargo run -p cefari-cli -- init .tmp/cefari-sample --name "Cefari Sample"
+node packages/cefari-cli/dist/bin/cefari.js init .tmp/cefari-sample --name "Cefari Sample"
 ```
 
 Build it with the debug profile:
 
 ```bash
-cargo run -p cefari-cli -- build .tmp/cefari-sample
+node packages/cefari-cli/dist/bin/cefari.js build .tmp/cefari-sample
 ```
 
 Package it:
 
 ```bash
-cargo run -p cefari-cli -- package .tmp/cefari-sample
+node packages/cefari-cli/dist/bin/cefari.js package .tmp/cefari-sample
 ```
 
 Build and package with the release profile:
 
 ```bash
-cargo run -p cefari-cli -- build .tmp/cefari-sample --release
-cargo run -p cefari-cli -- package .tmp/cefari-sample --release
+node packages/cefari-cli/dist/bin/cefari.js build .tmp/cefari-sample --release
+node packages/cefari-cli/dist/bin/cefari.js package .tmp/cefari-sample --release
 ```
 
 Use a fixture CEF resources directory when you need deterministic package
@@ -243,8 +243,8 @@ assembly without downloading CEF resources:
 mkdir -p .tmp/cef-fixture
 printf '%s\n' '{"type":"minimal","name":"cef_binary_fixture.tar.bz2","sha1":"fixture-sha1"}' > .tmp/cef-fixture/archive.json
 printf '%s\n' fixture > .tmp/cef-fixture/libcef.fixture
-CEFARI_CEF_RESOURCES_DIR=.tmp/cef-fixture cargo run -p cefari-cli -- build .tmp/cefari-sample
-cargo run -p cefari-cli -- package .tmp/cefari-sample
+CEFARI_CEF_RESOURCES_DIR=.tmp/cef-fixture node packages/cefari-cli/dist/bin/cefari.js build .tmp/cefari-sample
+node packages/cefari-cli/dist/bin/cefari.js package .tmp/cefari-sample
 ```
 
 Inspect generated package payloads with the repository scripts:
@@ -257,7 +257,6 @@ ruby scripts/verify-native-package-payload.rb .tmp/package-inspect "$(uname -s)"
 Remove generated app artifacts:
 
 ```bash
-cargo run -p cefari-cli -- clean .tmp/cefari-sample
 rm -rf .tmp
 ```
 

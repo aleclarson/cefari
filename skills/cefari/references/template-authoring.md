@@ -12,8 +12,9 @@ Use this reference when changing files under `templates/`.
 ## Frontend
 
 - Frontend dev servers should be declared through `cefari.config.ts` using
-  `frontend.devCommand` and `frontend.devPort`.
-- Frontend build output should match `frontend.dist`.
+  the `vite` config section and `vite.devPort`.
+- Frontend build output should be produced by Vite into Cefari's
+  `build/frontend` package input.
 
 ## Release Workflows
 

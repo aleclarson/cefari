@@ -43,8 +43,9 @@ export default defineConfig({
     name: "My Cefari App",
     identifier: "dev.cefari.my-cefari-app",
   },
-  frontend: {
-    dist: "frontend/dist",
+  vite: {
+    root: "frontend",
+    configFile: "frontend/vite.config.ts",
     devPort: 5173,
   },
   daemon: {
@@ -57,8 +58,8 @@ export default defineConfig({
 });
 ```
 
-Add `frontend.buildCommand` and `frontend.devCommand` when a framework owns
-frontend builds or dev serving. See [Develop Locally](development.md) for Vite.
+Cefari owns the Vite dev and build lifecycle directly. See
+[Develop Locally](development.md) for Vite.
 
 For the complete app-developer config reference, see
 [`cefari.config.ts` Reference](../config/index.md).

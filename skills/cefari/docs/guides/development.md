@@ -12,38 +12,32 @@ If `PATH` is omitted, Cefari uses the current directory.
 
 `cefari dev` starts:
 
-- a frontend dev server
+- a Vite dev server
 - the Deno daemon entry with watch mode
 - the Rust desktop app
 
 When one child process exits or fails, Cefari stops the remaining processes.
 
-## Frontend Dev Server
+## Vite Dev Server
 
-Without a configured frontend dev command, Cefari serves `frontend/index.html`
-with a built-in local static server.
-
-Projects can configure a tool-managed frontend dev server:
+Cefari calls Vite's `createServer` API directly:
 
 ```ts
-frontend: {
-  dist: "frontend/dist",
-  devCommand: ["deno", "task", "dev:frontend", "--host", "127.0.0.1", "--port", "{port}"],
+vite: {
+  root: "frontend",
+  configFile: "frontend/vite.config.ts",
   devPort: 5173,
 }
 ```
 
-`{port}` is replaced with the selected frontend port. Override it from the CLI:
+Override the fixed Vite port from the CLI:
 
 ```bash
-cefari dev PATH --frontend-port 5273
+cefari dev PATH --vite-port 5273
 ```
 
-Use `--frontend-port 0` only with the built-in static server, where Cefari can
-bind an available local port itself.
-
 For command syntax, see [Project Commands](../cli/project.md). For all
-frontend config fields, see [`frontend`](../config/frontend.md).
+Vite config fields, see [`vite`](../config/frontend.md).
 
 ## Vite React Example
 
@@ -62,9 +56,7 @@ Run it with the installed Cefari CLI:
 cefari dev templates/vite-react-basic
 ```
 
-The example is a Deno workspace with `frontend/` and `daemon/` members. Its
-Cefari config uses `deno task` commands so it can run through the installed
-`cefari` CLI.
+The example is a Deno workspace with `frontend/` and `daemon/` members.
 
 ## Built-In CSS For Custom Titlebars
 

@@ -8,7 +8,7 @@ Nesting audit: 148 of the 195 checklist entries are nested child tasks under lar
 
 - [x] Create the Rust workspace skeleton.
   - [x] Create the root `Cargo.toml`.
-  - [x] Add workspace members for `crates/cefari-core`, `crates/cefari-desktop`, and `crates/cefari-cli`.
+  - [x] Add workspace members for `crates/cefari-core`, `crates/cefari-desktop`, and `packages/cefari-cli`.
   - [x] Set shared workspace metadata: edition, license, repository, authors, rust-version, and package defaults.
   - [x] Decide and document the minimum supported Rust version.
 - [x] Add baseline repository hygiene.
@@ -87,7 +87,7 @@ Nesting audit: 148 of the 195 checklist entries are nested child tasks under lar
 ## 4. Build `cefari-cli`
 
 - [x] Scaffold the developer-facing CLI crate.
-  - [x] Create `crates/cefari-cli`.
+  - [x] Create `packages/cefari-cli`.
   - [x] Set the binary name to `cefari`.
   - [x] Pin and add CLI dependencies: `clap`, `anyhow`, `xshell`, `duct`, `camino`, `serde`, and `toml`.
   - [x] Define the top-level CLI parser and command enum.
@@ -193,10 +193,10 @@ Nesting audit: 148 of the 195 checklist entries are nested child tasks under lar
   - [x] `cargo clippy --workspace --all-targets` passes.
   - [x] `cargo test --workspace` passes.
 - [x] Verify CLI workflows.
-  - [x] `cargo run -p cefari-cli -- --help` shows all planned commands.
-  - [x] `cargo run -p cefari-cli -- init` creates a valid sample app.
-  - [x] `cargo run -p cefari-cli -- build` creates frontend and daemon artifacts and builds `cefari-desktop`.
-  - [x] `cargo run -p cefari-cli -- doctor` reports required tool availability.
+  - [x] `npm exec --package /cli -- cefari --help` shows all planned commands.
+  - [x] `npm exec --package /cli -- cefari init` creates a valid sample app.
+  - [x] `npm exec --package /cli -- cefari build` creates frontend and daemon artifacts and builds `cefari-desktop`.
+  - [x] `npm exec --package /cli -- cefari doctor` reports required tool availability.
 - [x] Verify desktop runtime behavior.
   - [x] `cargo run -p cefari-desktop` starts a window and initializes runtime logging.
   - [x] `cargo run -p cefari-desktop` initializes runtime logging and the single-instance lock.

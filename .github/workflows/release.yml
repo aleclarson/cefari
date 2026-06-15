@@ -75,16 +75,16 @@ jobs:
           cargo install cargo-codesign --version 0.4.2 --locked
 
       - name: Build cefari CLI
-        run: cargo build -p cefari-cli --release
+        run: npm run --prefix packages/cefari-cli build
 
       - name: Create release sample project
-        run: cargo run -p cefari-cli -- init .release/cefari-sample --name "Cefari Release Sample"
+        run: node packages/cefari-cli/dist/bin/cefari.js init .release/cefari-sample --name "Cefari Release Sample"
 
       - name: Build release sample project
-        run: cargo run -p cefari-cli -- build .release/cefari-sample --release
+        run: node packages/cefari-cli/dist/bin/cefari.js build .release/cefari-sample --release
 
       - name: Package release sample project
-        run: cargo run -p cefari-cli -- package .release/cefari-sample --release
+        run: node packages/cefari-cli/dist/bin/cefari.js package .release/cefari-sample --release
 
       - name: Verify release package artifacts
         shell: bash
@@ -138,7 +138,7 @@ jobs:
           shopt -s nullglob
           artifacts=(.release/cefari-sample/dist/package/output/*)
           for artifact in "${artifacts[@]}"; do
-            cargo run -p cefari-cli -- codesign "$artifact" --platform "${{ matrix.target.sign_platform }}"
+            node packages/cefari-cli/dist/bin/cefari.js package sign "$artifact" --platform "${{ matrix.target.sign_platform }}"
           done
 
       - name: Notarize macOS package artifacts
@@ -148,7 +148,7 @@ jobs:
           shopt -s nullglob
           artifacts=(.release/cefari-sample/dist/package/output/*.app .release/cefari-sample/dist/package/output/*.dmg)
           for artifact in "${artifacts[@]}"; do
-            cargo run -p cefari-cli -- notarize "$artifact"
+            node packages/cefari-cli/dist/bin/cefari.js package notarize "$artifact"
           done
 
       - name: Collect release package artifacts
@@ -180,6 +180,9 @@ jobs:
 
       - name: Install cargo-codesign
         run: cargo install cargo-codesign --version 0.4.2 --locked
+
+      - name: Build cefari CLI
+        run: npm run --prefix packages/cefari-cli build
 
       - name: Download native package artifacts
         uses: actions/download-artifact@v4
@@ -213,7 +216,7 @@ jobs:
             package_name="$(basename "$package_dir" | sed 's/^native-package-//')"
             archive=".release/update/${package_name}.zip"
             (cd "$package_dir" && zip -r "$GITHUB_WORKSPACE/$archive" .)
-            cargo run -p cefari-cli -- make-update "$archive" \
+            node packages/cefari-cli/dist/bin/cefari.js package update "$archive" \
               --url "${CEFARI_UPDATE_BASE_URL}/$(basename "$archive")" \
               --version "$CEFARI_RELEASE_VERSION" \
               --target "$package_name" \
@@ -255,20 +258,12 @@ jobs:
         target:
           - name: darwin-arm64
             os: macos-latest
-            cli_binary: target/release/cefari
-            desktop_binary: target/release/cefari-desktop
           - name: darwin-x64
             os: macos-15-intel
-            cli_binary: target/release/cefari
-            desktop_binary: target/release/cefari-desktop
           - name: linux-x64
             os: ubuntu-latest
-            cli_binary: target/release/cefari
-            desktop_binary: target/release/cefari-desktop
           - name: win32-x64
             os: windows-latest
-            cli_binary: target/release/cefari.exe
-            desktop_binary: target/release/cefari-desktop.exe
 
     steps:
       - name: Checkout
@@ -312,36 +307,26 @@ jobs:
 
       - name: Build npm package binaries
         run: |
-          cargo build -p cefari-cli --release
+          npm run --prefix packages/cefari-cli build
           cargo build -p cefari-desktop --release
 
       - name: Assemble npm package
         shell: bash
         run: |
-          scripts/assemble-npm-cli-packages.rb \
-            --version "$CEFARI_NPM_VERSION" \
-            --target "${{ matrix.target.name }}" \
-            --cli-binary "${{ matrix.target.cli_binary }}" \
-            --desktop-binary "${{ matrix.target.desktop_binary }}" \
-            --output .release/npm
-
-          scripts/assemble-npm-cli-packages.rb \
-            --version "$CEFARI_NPM_VERSION" \
-            --root-only \
-            --output .release/npm
+          mkdir -p .release/npm
+          npm pack packages/cefari-cli --pack-destination .release/npm
 
       - name: Verify npm package
         shell: bash
         run: |
-          scripts/verify-npm-cli-package.sh \
-            .release/npm/packages/cefari-cli \
-            ".release/npm/packages/cefari-cli-${{ matrix.target.name }}"
+          npm run --prefix packages/cefari-cli check
+          npm run --prefix packages/cefari-cli test
 
       - name: Upload npm package
         uses: actions/upload-artifact@v4
         with:
           name: npm-package-${{ matrix.target.name }}
-          path: .release/npm/packages/cefari-cli-${{ matrix.target.name }}
+          path: packages/cefari-cli
           if-no-files-found: error
 
   publish-npm:
@@ -378,8 +363,8 @@ jobs:
 
           echo "CEFARI_NPM_VERSION=$version" >> "$GITHUB_ENV"
 
-      - name: Assemble npm root package
-        run: scripts/assemble-npm-cli-packages.rb --version "$CEFARI_NPM_VERSION" --root-only --output .release/npm
+      - name: Build npm root package
+        run: npm run --prefix packages/cefari-cli build
 
       - name: Publish npm packages
         shell: bash
@@ -388,8 +373,4 @@ jobs:
         run: |
           set -euo pipefail
 
-          for package_dir in .release/npm/packages/npm-package-*; do
-            npm publish "$package_dir" --access public --provenance
-          done
-
-          npm publish .release/npm/packages/cefari-cli --access public --provenance
+          npm publish packages/cefari-cli --access public --provenance

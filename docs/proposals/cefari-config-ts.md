@@ -87,7 +87,7 @@ runtime validation and defaults.
 
 - `defineConfig`
 - `CefariConfigInput`
-- section input types such as `AppConfigInput`, `FrontendConfigInput`,
+- section input types such as `AppConfigInput`, `ViteConfigInput`,
   `DaemonConfigInput`, and `PackageConfigInput`
 
 The package also remains the npm CLI distribution with the `cefari` binary.
@@ -353,8 +353,8 @@ Required updates:
 ## Acceptance Criteria
 
 - New projects contain `cefari.config.ts`, not `cefari.toml`.
-- `cefari dev`, `cefari build`, `cefari package`, `cefari package`, and
-  `cefari package` load `cefari.config.ts`.
+- `cefari dev`, `cefari build`, `cefari package`, and `cefari package release`
+  load `cefari.config.ts`.
 - `import { defineConfig } from "@cefari/cli"` works in generated configs.
 - Deno executes the config file and emits JSON for Rust validation.
 - Missing Deno fails with a clear message.

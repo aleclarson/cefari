@@ -2,7 +2,6 @@
 members = [
     "crates/cefari-core",
     "crates/cefari-desktop",
-    "crates/cefari-cli",
 ]
 resolver = "3"
 

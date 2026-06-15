@@ -120,7 +120,7 @@ jobs:
           CEFARI_PROJECT_PATH=templates/vite-react-basic \
           CEFARI_RELEASE_MODE=prerelease \
           CEFARI_TARGETS=linux-x86_64 \
-          CEFARI_COMMAND="$GITHUB_WORKSPACE/target/debug/cefari" \
+          CEFARI_COMMAND=cefari \
           CEFARI_INSTALL_CLI=false \
           CEFARI_RELEASE_VERSION=0.0.0-ci \
           CEFARI_RELEASE_TAG=release-action-ci-dry-run \
@@ -130,16 +130,24 @@ jobs:
             .github/actions/cefari-release/release.sh | tee .ci/release-action-dry-run.log
 
           grep -q 'artifact collection skipped in dry-run' .ci/release-action-dry-run.log
-          grep -q -- '--release-version 0.0.0-ci' .ci/release-action-dry-run.log
+          grep -q -- '--version 0.0.0-ci' .ci/release-action-dry-run.log
 
       - name: Install cargo-packager
         run: cargo install cargo-packager --version 0.11.8 --locked
 
       - name: Build cefari CLI
-        run: cargo build -p cefari-cli
+        shell: bash
+        run: |
+          npm run --prefix packages/cefari-cli build
+          mkdir -p .ci/bin
+          cat > .ci/bin/cefari <<'SH'
+          #!/usr/bin/env bash
+          exec node "$GITHUB_WORKSPACE/packages/cefari-cli/dist/bin/cefari.js" "$@"
+          SH
+          chmod +x .ci/bin/cefari
 
       - name: Create release action sample
-        run: target/debug/cefari init .ci/release-action-sample --name "Release Action CI"
+        run: node packages/cefari-cli/dist/bin/cefari.js init .ci/release-action-sample --name "Release Action CI"
 
       - name: Create CEF fixture
         shell: bash
@@ -164,7 +172,7 @@ jobs:
           release-version: 0.0.0-ci
           release-tag: release-action-ci
           targets: linux-x86_64
-          cefari-command: ${{ github.workspace }}/target/debug/cefari
+          cefari-command: ${{ github.workspace }}/.ci/bin/cefari
           install-cli: "false"
           create-github-release: "false"
           upload-artifacts: "true"
@@ -257,7 +265,7 @@ jobs:
         run: cargo install cargo-packager --version 0.11.8 --locked
 
       - name: Build cefari CLI
-        run: cargo build -p cefari-cli --release
+        run: npm run --prefix packages/cefari-cli build
 
       - name: Build cefari desktop runtime
         run: cargo build -p cefari-desktop --release
@@ -265,19 +273,13 @@ jobs:
       - name: Assemble CLI distribution
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            cli_binary="target/release/cefari.exe"
-          else
-            cli_binary="target/release/cefari"
-          fi
-
-          test -f "$cli_binary"
-          "$cli_binary" --version | grep -E '^cefari [0-9]+\.[0-9]+\.[0-9]+'
-          mkdir -p .ci/cefari-cli-dist
-          cp "$cli_binary" .ci/cefari-cli-dist/
+          test -f packages/cefari-cli/dist/bin/cefari.js
+          node packages/cefari-cli/dist/bin/cefari.js --version | grep -E '^[0-9]+\.[0-9]+\.[0-9]+'
+          mkdir -p .ci/cefari-cli
+          cp -R packages/cefari-cli/dist .ci/cefari-cli/
 
       - name: Create sample project
-        run: cargo run -p cefari-cli -- init .ci/cefari-sample --name "CI Package Sample"
+        run: node packages/cefari-cli/dist/bin/cefari.js init .ci/cefari-sample --name "CI Package Sample"
 
       - name: Create CEF fixture
         shell: bash
@@ -295,12 +297,12 @@ jobs:
           echo fixture > .ci/cef-fixture/locales/en-US.pak
 
       - name: Build sample project
-        run: cargo run -p cefari-cli -- build .ci/cefari-sample
+        run: node packages/cefari-cli/dist/bin/cefari.js build .ci/cefari-sample
         env:
           CEFARI_CEF_RESOURCES_DIR: .ci/cef-fixture
 
       - name: Package sample project metadata
-        run: cargo run -p cefari-cli -- package .ci/cefari-sample
+        run: node packages/cefari-cli/dist/bin/cefari.js package .ci/cefari-sample
 
       - name: Verify native package payload
         shell: bash
@@ -329,7 +331,7 @@ jobs:
       - name: Verify CLI is distributed separately
         shell: bash
         run: |
-          test -f .ci/cefari-cli-dist/cefari || test -f .ci/cefari-cli-dist/cefari.exe
+          test -f .ci/cefari-cli/dist/bin/cefari.js
           ruby -rjson -e '
             desktop_binary = JSON.parse(File.read(".ci/cefari-sample/dist/package/manifest.json")).fetch("desktop_binary")
             abort "unexpected desktop_binary: #{desktop_binary}" unless desktop_binary.match?(/\Aci-package-sample(\.exe)?\z/)
@@ -337,7 +339,7 @@ jobs:
           if grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json; then
             exit 1
           fi
-          if grep -q 'cefari-cli-dist' .ci/cefari-sample/dist/package/manifest.json; then
+          if grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json; then
             exit 1
           fi
 
@@ -353,18 +355,12 @@ jobs:
                 x86_64) npm_target="darwin-x64" ;;
                 *) echo "unsupported macOS architecture: $(uname -m)" >&2; exit 1 ;;
               esac
-              cli_binary="target/release/cefari"
-              desktop_binary="target/release/cefari-desktop"
               ;;
             Linux)
               npm_target="linux-x64"
-              cli_binary="target/release/cefari"
-              desktop_binary="target/release/cefari-desktop"
               ;;
             Windows)
               npm_target="win32-x64"
-              cli_binary="target/release/cefari.exe"
-              desktop_binary="target/release/cefari-desktop.exe"
               ;;
             *)
               echo "unsupported runner OS: $RUNNER_OS" >&2
@@ -372,17 +368,12 @@ jobs:
               ;;
           esac
 
-          scripts/assemble-npm-cli-packages.rb --root-only --output .ci/npm
-          scripts/assemble-npm-cli-packages.rb \
-            --target "$npm_target" \
-            --cli-binary "$cli_binary" \
-            --desktop-binary "$desktop_binary" \
-            --output .ci/npm
+          mkdir -p .ci/npm
+          npm pack packages/cefari-cli --pack-destination .ci/npm
           echo "CEFARI_NPM_TARGET=$npm_target" >> "$GITHUB_ENV"
 
       - name: Verify npm CLI package
         shell: bash
         run: |
-          scripts/verify-npm-cli-package.sh \
-            .ci/npm/packages/cefari-cli \
-            ".ci/npm/packages/cefari-cli-${CEFARI_NPM_TARGET}"
+          npm run --prefix packages/cefari-cli check
+          npm run --prefix packages/cefari-cli test

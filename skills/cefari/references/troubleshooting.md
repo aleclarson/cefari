@@ -5,7 +5,6 @@ runtime failures in an app project. For product behavior and command details,
 read:
 
 - [docs/cli/index.md](../docs/cli/index.md)
-- [docs/cli/diagnostics.md](../docs/cli/diagnostics.md)
 - [docs/guides/build-and-package.md](../docs/guides/build-and-package.md)
 
 ## App Notes
@@ -14,5 +13,6 @@ read:
   task is operating on the intended app project.
 - Confirm `cefari.config.ts` exists and validates before investigating build or package
   outputs.
-- Use `cefari doctor` and `cefari info` for local environment and project
+- Use `cefari --help`, `cefari dev --help`, `cefari build --help`, and
+  `cefari package --help` to confirm the active CLI surface before deeper
   diagnostics.
