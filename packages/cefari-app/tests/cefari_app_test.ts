@@ -88,7 +88,10 @@ Deno.test("wraps typed namespace commands", async () => {
     rootKind: "appData",
     displayPath: "/tmp/cefari",
   });
-  assertEquals(await cefari.files.readBytes("blob.bin"), new Uint8Array([1, 2]));
+  assertEquals(
+    await cefari.files.readBytes("blob.bin"),
+    new Uint8Array([1, 2]),
+  );
 
   assertEquals(commands, [
     { command: "windowFocus" },
@@ -158,6 +161,55 @@ Deno.test("wraps typed namespace commands", async () => {
       payload: {
         file: "readFile",
         payload: { path: "blob.bin", encoding: "base64" },
+      },
+    },
+  ]);
+});
+
+Deno.test("normalizes fs text, bytes, and base64 encodings", async () => {
+  const commands: CefariIpcCommand[] = [];
+  withBridge({
+    invoke(command) {
+      commands.push(command);
+      return Promise.resolve(responseFor(command));
+    },
+    on() {
+      return () => {};
+    },
+  });
+
+  assertEquals(await cefari.fs.readFile("blob.bin"), new Uint8Array([1, 2]));
+  await cefari.fs.writeFile("blob.bin", new Uint8Array([1, 2]));
+  await cefari.fs.writeFile("encoded.txt", "AQI=", { encoding: "base64" });
+
+  assertEquals(commands, [
+    {
+      command: "files",
+      payload: {
+        file: "readFile",
+        payload: { path: "blob.bin", encoding: "base64" },
+      },
+    },
+    {
+      command: "files",
+      payload: {
+        file: "writeFile",
+        payload: {
+          path: "blob.bin",
+          contents: { kind: "base64", value: "AQI=" },
+          options: { createParents: true, overwrite: true },
+        },
+      },
+    },
+    {
+      command: "files",
+      payload: {
+        file: "writeFile",
+        payload: {
+          path: "encoded.txt",
+          contents: { kind: "base64", value: "AQI=" },
+          options: { createParents: true, overwrite: true },
+        },
       },
     },
   ]);
