@@ -3,6 +3,8 @@
 /packages/*
 !/packages/cefari-app/
 !/packages/cefari-app/**
+!/packages/cefari-cli/
+!/packages/cefari-cli/**
 /cef/
 /cef-cache/
 /logs/
@@ -13,3 +15,5 @@
 *.log
 *.tmp
 *.dSYM/
+node_modules/
+/packages/cefari-cli/dist/
