@@ -1,4 +1,20 @@
 export {
+  runCefariPackage,
+  runPackageNotarize,
+  runPackageRelease,
+  runPackageSign,
+  runPackageUpdate,
+  type NotarizeOptions,
+  type PackageDependencies,
+  type PackageOptions,
+  type ReleaseMode,
+  type ReleaseOptions,
+  type SignOptions,
+  type SignPlatform,
+  type UpdateOptions,
+  type UpdatePackageFormat,
+} from "./package.js";
+export {
   createViteBuildConfig,
   runCefariBuild,
   type BuildDependencies,

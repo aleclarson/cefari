@@ -1,6 +1,16 @@
 import { binary, command, flag, number, option, optional, positional, run, string, subcommands } from "cmd-ts";
 import { runCefariBuild } from "./build.js";
 import { runCefariDev } from "./dev.js";
+import {
+  runCefariPackage,
+  runPackageNotarize,
+  runPackageRelease,
+  runPackageSign,
+  runPackageUpdate,
+  type ReleaseMode,
+  type SignPlatform,
+  type UpdatePackageFormat,
+} from "./package.js";
 
 export const VERSION = "0.1.0";
 
@@ -39,6 +49,12 @@ const releaseVersion = option({
   description: "Version to write into release metadata.",
 });
 
+const version = option({
+  type: optional(string),
+  long: "version",
+  description: "Version to write into release or update metadata.",
+});
+
 const artifact = positional({
   type: optional(string),
   displayName: "artifact",
@@ -49,6 +65,42 @@ const url = option({
   type: optional(string),
   long: "url",
   description: "Download URL for update metadata.",
+});
+
+const configPath = option({
+  type: optional(string),
+  long: "config",
+  description: "Path to signing configuration.",
+});
+
+const platform = option({
+  type: optional(string),
+  long: "platform",
+  description: "Signing platform: macos, windows, or linux.",
+});
+
+const updateTarget = option({
+  type: optional(string),
+  long: "target",
+  description: "Updater target key.",
+});
+
+const updateFormat = option({
+  type: optional(string),
+  long: "format",
+  description: "Updater package format.",
+});
+
+const keyEnv = option({
+  type: optional(string),
+  long: "key-env",
+  description: "Environment variable containing the update signing key.",
+});
+
+const outputDir = option({
+  type: optional(string),
+  long: "output-dir",
+  description: "Directory where update artifacts are written.",
 });
 
 const init = command({
@@ -101,7 +153,9 @@ const packageApp = command({
     release,
     releaseVersion,
   },
-  handler: () => placeholder("package"),
+  handler: async ({ path, release, releaseVersion }) => {
+    await runCefariPackage({ root: path, release, releaseVersion });
+  },
 });
 
 const packageSign = command({
@@ -109,8 +163,15 @@ const packageSign = command({
   description: "Sign packaged release artifacts.",
   args: {
     artifact,
+    config: configPath,
+    platform,
   },
-  handler: () => placeholder("package sign"),
+  handler: ({ artifact, config, platform }) => {
+    if (artifact === undefined) {
+      throw new Error("package sign requires an artifact");
+    }
+    runPackageSign({ artifact, config, platform: platform as SignPlatform | undefined });
+  },
 });
 
 const packageNotarize = command({
@@ -118,19 +179,42 @@ const packageNotarize = command({
   description: "Notarize packaged macOS artifacts.",
   args: {
     artifact,
+    config: configPath,
   },
-  handler: () => placeholder("package notarize"),
+  handler: ({ artifact, config }) => {
+    if (artifact === undefined) {
+      throw new Error("package notarize requires an artifact");
+    }
+    runPackageNotarize({ artifact, config });
+  },
 });
 
 const packageUpdate = command({
   name: "update",
   description: "Create updater metadata for a release artifact.",
   args: {
-    artifact,
+    archive: artifact,
     url,
-    releaseVersion,
+    version,
+    target: updateTarget,
+    format: updateFormat,
+    keyEnv,
+    outputDir,
   },
-  handler: () => placeholder("package update"),
+  handler: async ({ archive, url, version, target, format, keyEnv, outputDir }) => {
+    if (archive === undefined || url === undefined || version === undefined) {
+      throw new Error("package update requires archive, --url, and --version");
+    }
+    await runPackageUpdate({
+      archive,
+      url,
+      version,
+      target,
+      format: format as UpdatePackageFormat | undefined,
+      keyEnv,
+      outputDir,
+    });
+  },
 });
 
 const packageRelease = command({
@@ -138,9 +222,70 @@ const packageRelease = command({
   description: "Run the release packaging pipeline.",
   args: {
     path: projectPath,
-    releaseVersion,
+    version,
+    mode: option({
+      type: optional(string),
+      long: "mode",
+      description: "Release mode: release or prerelease.",
+    }),
+    signingConfig: option({
+      type: optional(string),
+      long: "signing-config",
+      description: "Path to signing configuration.",
+    }),
+    signingPlatform: platform,
+    notarize: flag({
+      long: "notarize",
+      description: "Notarize macOS artifacts.",
+      defaultValue: () => false,
+    }),
+    updateUrlBase: option({
+      type: optional(string),
+      long: "update-url-base",
+      description: "Base URL for update artifact downloads.",
+    }),
+    updateTarget,
+    updateFormat,
+    updateKeyEnv: keyEnv,
+    githubRelease: flag({
+      long: "github-release",
+      description: "Create or update a GitHub release.",
+      defaultValue: () => false,
+    }),
+    releaseTag: option({
+      type: optional(string),
+      long: "release-tag",
+      description: "Git tag for the release.",
+    }),
+    releaseName: option({
+      type: optional(string),
+      long: "release-name",
+      description: "Human-readable release name.",
+    }),
+    dryRun: flag({
+      long: "dry-run",
+      description: "Print the release plan without running release steps.",
+      defaultValue: () => false,
+    }),
   },
-  handler: () => placeholder("package release"),
+  handler: async (args) => {
+    await runPackageRelease({
+      root: args.path,
+      version: args.version,
+      mode: args.mode as ReleaseMode | undefined,
+      signingConfig: args.signingConfig,
+      signingPlatform: args.signingPlatform as SignPlatform | undefined,
+      notarize: args.notarize,
+      updateUrlBase: args.updateUrlBase,
+      updateTarget: args.updateTarget,
+      updateFormat: args.updateFormat as UpdatePackageFormat | undefined,
+      updateKeyEnv: args.updateKeyEnv,
+      githubRelease: args.githubRelease,
+      releaseTag: args.releaseTag,
+      releaseName: args.releaseName,
+      dryRun: args.dryRun,
+    });
+  },
 });
 
 const packageCommands = subcommands({

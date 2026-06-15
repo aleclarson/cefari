@@ -52,14 +52,15 @@ test("documents Vite dev port flag", async () => {
   assert.doesNotMatch(stdout, /--frontend-port/);
 });
 
-test("routes nested package subcommands", async () => {
-  const { stdout } = await cefari(["package", "release"]);
+test("documents nested package release subcommand", async () => {
+  const { stdout } = await cefari(["package", "release", "--help"]);
 
-  assert.equal(stdout.trim(), "package release is not implemented yet.");
+  assert.match(stdout, /--version/);
+  assert.match(stdout, /--dry-run/);
 });
 
-test("routes bare package command to package assembly", async () => {
-  const { stdout } = await cefari(["package"]);
+test("documents bare package command options", async () => {
+  const { stdout } = await cefari(["package", "package", "--help"]);
 
-  assert.equal(stdout.trim(), "package is not implemented yet.");
+  assert.match(stdout, /--release-version/);
 });
