@@ -2,6 +2,10 @@
 
 Full source sweep report for sprint `full-source-sweep`.
 
+This report is historical. Some file paths and commands describe repository
+layouts that existed during that sprint and may no longer exist in the current
+tree.
+
 ## Baseline
 
 - Base: detached HEAD `63d288aa3d43a1e1319d121573392cd2daf2f0b0` (`63d288a`)
@@ -35,9 +39,9 @@ Each finding uses:
 | `cargo test --workspace` | Rust test suite | Failed |
 | `cargo test -p cefari-core` | Core crate tests | Passed |
 | `cargo test -p cefari-desktop` | Desktop crate tests | Passed |
-| `npm run --prefix packages/cefari-cli test` | CLI crate tests | Failed |
-| `deno task --cwd packages/cefari-app check` | TypeScript package type check | Passed |
-| `deno task --cwd packages/cefari-app test` | TypeScript package tests | Passed |
+| `cargo test -p cefari-cli` | Historical Rust CLI crate tests | Failed |
+| `deno task --cwd packages/cefari-app check` | Historical TypeScript package type check | Passed |
+| `deno task --cwd packages/cefari-app test` | Historical TypeScript package tests | Passed |
 | `deno task --cwd templates/vite-react-basic/frontend check` | Template frontend type check | Passed |
 | `deno task --cwd templates/vite-react-basic/frontend build` | Template frontend build | Passed |
 | `actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/*.yml docs/examples/cefari-release-workflow.yml` | Workflow syntax | Passed |
@@ -54,7 +58,7 @@ Each finding uses:
 - `Status`: Confirmed
 - `Confidence`: High
 - `Area`: Desktop runtime, CLI build/package path
-- `Files`: `crates/cefari-desktop/Cargo.toml`, `crates/cefari-desktop/src/desktop_cef.rs`, `crates/cefari-desktop/src/main.rs`, `packages/cefari-cli/src/build.rs`
+- `Files`: `crates/cefari-desktop/Cargo.toml`, `crates/cefari-desktop/src/desktop_cef.rs`, `crates/cefari-desktop/src/main.rs`, historical Rust CLI build command
 - `Evidence`: `crates/cefari-desktop/Cargo.toml` sets `default = []` and makes `cef` optional. In the non-CEF implementation, `CefRuntime::create_browser` always returns `CEF feature disabled; rebuild cefari-desktop with --features cef`. Startup unconditionally calls `guards.cef_runtime.create_browser(&window, &shell_ui.url())` in `crates/cefari-desktop/src/main.rs`. The CLI `build_desktop` command runs `cargo build --manifest-path <workspace> -p cefari-desktop` without `--features cef`.
 - `Impact`: `cefari build` can produce a desktop executable that fails before showing the app UI, even though the CEF-enabled source path compiles.
 - `Suggested next step`: Decide whether the desktop crate should enable `cef` by default, whether CLI builds should pass `--features cef`, or whether no-CEF builds should be explicitly dev/test-only and never packaged.
@@ -66,7 +70,7 @@ Each finding uses:
 - `Status`: Confirmed
 - `Confidence`: High
 - `Area`: Desktop runtime, TypeScript bridge
-- `Files`: `crates/cefari-desktop/src/desktop_bridge.rs`, `crates/cefari-desktop/src/desktop_cef.rs`, `crates/cefari-desktop/src/main.rs`, `packages/cefari-app/src/transport.ts`
+- `Files`: `crates/cefari-desktop/src/desktop_bridge.rs`, `crates/cefari-desktop/src/desktop_cef.rs`, `crates/cefari-desktop/src/main.rs`, `npm/src/app/transport.ts`
 - `Evidence`: `desktop_bridge.rs` defines `CEFARI_BRIDGE_SCRIPT`, `BridgeOriginPolicy`, and `CefariBridge::handle_json_request`, but repository search found all references to `CefariBridge`, `BridgeOriginPolicy`, `CEFARI_BRIDGE_SCRIPT`, `__CEFARI_IPC_POST__`, and `__CEFARI_IPC_EVENT__` only in `desktop_bridge.rs` tests and TypeScript consumers. `desktop_cef.rs` calls `cef::browser_host_create_browser(..., None, ...)` with no CEF client or handler that injects the bridge script or forwards JavaScript messages to `DesktopIpcDispatcher`.
 - `Impact`: App code using `cefari/app` cannot receive a real `window.cefari` transport in the shipped desktop shell, so documented window, shell, service, tray, update, files, and notification APIs are unavailable at runtime.
 - `Suggested next step`: Add CEF integration for script injection and request/event transport, then cover it with an integration or lower-level unit test that proves the bridge is connected outside `desktop_bridge.rs` tests.
@@ -78,11 +82,11 @@ Each finding uses:
 - `Status`: Confirmed
 - `Confidence`: High
 - `Area`: CLI, project scaffolding, test/build health
-- `Files`: `packages/cefari-cli/src/lib.rs`, `skills/cefari/references/`, `templates/vite-react-basic/.agents/skills/cefari/references/template-authoring.md`
-- `Evidence`: `packages/cefari-cli/src/lib.rs` includes `../../../skills/cefari/references/template-authoring.md` in `CEFARI_SKILL_FILES`, but `skills/cefari/references/` does not contain that file. The file exists only under `templates/vite-react-basic/.agents/skills/cefari/references/template-authoring.md`.
-- `Impact`: `npm run --prefix packages/cefari-cli test`, `cargo run -p cefari-cli`, and any workspace validation that compiles `cefari-cli` fail before tests or commands can run. The `cefari init` scaffolder also cannot embed the intended complete skill bundle from the root skill source.
+- `Files`: historical Rust CLI source, `skills/cefari/references/`, `templates/vite-react-basic/.agents/skills/cefari/references/template-authoring.md`
+- `Evidence`: The historical Rust CLI included `../../../skills/cefari/references/template-authoring.md` in `CEFARI_SKILL_FILES`, but `skills/cefari/references/` did not contain that file. The file existed only under `templates/vite-react-basic/.agents/skills/cefari/references/template-authoring.md`.
+- `Impact`: Historical `cargo run -p cefari-cli` and any workspace validation that compiled `cefari-cli` failed before tests or commands could run. The `cefari init` scaffolder also could not embed the intended complete skill bundle from the root skill source.
 - `Suggested next step`: Restore `skills/cefari/references/template-authoring.md` or remove the include and adjust scaffold expectations, then rerun the CLI and workspace test suites.
-- `Verification notes`: `npm run --prefix packages/cefari-cli test` failed with `couldn't read packages/cefari-cli/src/../../../skills/cefari/references/template-authoring.md`.
+- `Verification notes`: Historical CLI tests failed with `couldn't read .../skills/cefari/references/template-authoring.md`.
 
 ### SS-004: CLI-generated TOML and JSON can be invalid for names or manifest fields containing special characters
 
@@ -90,7 +94,7 @@ Each finding uses:
 - `Status`: Risk
 - `Confidence`: High
 - `Area`: CLI scaffolding and package metadata
-- `Files`: `packages/cefari-cli/src/lib.rs`, `packages/cefari-cli/src/package.rs`, `packages/cefari-cli/src/cef.rs`
+- `Files`: historical Rust CLI source files
 - `Evidence`: `init_project` writes `cefari.toml` with `format!` interpolation for `name = "{display_name}"` and `product_name = "{display_name}"` without TOML escaping. `PackageManifest::to_json` and `CefPreparationManifest::to_json` build JSON strings manually; `PackageManifest::to_json` interpolates `product_name`, `identifier`, and paths without JSON escaping. Tests only cover simple names and then parse generated JSON in the simple case.
 - `Impact`: A valid user-provided display/product name or path containing quotes, backslashes, newlines, or other JSON/TOML-significant characters can generate invalid project manifests or package manifests, breaking `cefari init`, `cefari package`, release automation, or downstream tooling that parses `dist/package/manifest.json`.
 - `Suggested next step`: Use `toml::to_string_pretty` or a typed serializable struct for `cefari.toml`, and use `serde_json` for all JSON manifest generation.
@@ -146,14 +150,10 @@ Each finding uses:
 - `crates/cefari-desktop/src/desktop_menu.rs` and `crates/cefari-desktop/src/desktop_tray.rs`: menu/tray command mapping reviewed with no findings.
 - `crates/cefari-desktop/src/desktop_notifications.rs`: native notification setup/request modeling reviewed with no findings; notification IPC remains intentionally unsupported in current docs.
 - `crates/cefari-desktop/src/desktop_ui.rs` and `crates/cefari-desktop/src/external.rs`: resource loading fallback, diagnostic view escaping, and external URL scheme filtering reviewed with no additional findings.
-- `packages/cefari-cli/src/project.rs`: project manifest parsing, required sections, default frontend port, and `project_name` validation reviewed with no additional findings.
-- `packages/cefari-cli/src/dev.rs`: dev process orchestration, static frontend server, daemon logging setup, and shutdown behavior reviewed with no findings beyond the previously recorded desktop CEF/bridge issues.
-- `packages/cefari-cli/src/build.rs`: frontend/daemon/desktop artifact assembly reviewed with no additional findings beyond SS-001.
-- `packages/cefari-cli/src/package.rs`, `packages/cefari-cli/src/cef.rs`, and `packages/cefari-cli/src/release.rs`: packaging, CEF preparation, signing, notarization, and update metadata flows reviewed with no additional findings beyond SS-004.
-- `packages/cefari-cli/src/logs.rs` and `packages/cefari-cli/src/clean.rs`: log reading/following and generated artifact cleanup reviewed with no findings.
-- `packages/cefari-app/src/transport.ts`, `results.ts`, and namespace wrappers: bridge availability handling, typed result extraction, event filtering, errors, shell/window/update/service/tray/notification wrappers, and exported API shape reviewed with no additional findings beyond the runtime bridge issue in SS-002.
-- `packages/cefari-app/src/fs.ts` and `files.ts`: file API encoding, JSON helpers, object URL creation, app-data access, and result mapping reviewed with no findings.
-- `packages/cefari-app/tests/cefari_app_test.ts`: package tests cover unavailable bridge behavior, namespace command wrapping, typed event filters, and typed IPC failures; reviewed with no findings.
+- Historical Rust CLI project manifest parsing, dev process orchestration, static frontend server, daemon logging setup, shutdown behavior, build/package/release flows, logs, and cleanup were reviewed with no additional findings beyond the issues recorded above.
+- `npm/src/app/transport.ts`, `results.ts`, and namespace wrappers: bridge availability handling, typed result extraction, event filtering, errors, shell/window/update/service/tray/notification wrappers, and exported API shape reviewed with no additional findings beyond the runtime bridge issue in SS-002.
+- `npm/src/app/fs.ts` and `files.ts`: file API encoding, JSON helpers, object URL creation, app-data access, and result mapping reviewed with no findings.
+- `npm/tests/app/cefari_app_test.ts`: package tests cover unavailable bridge behavior, namespace command wrapping, typed event filters, and typed IPC failures; reviewed with no findings.
 - `templates/vite-react-basic/`: Deno workspace config, Vite frontend, React app, daemon entrypoint, `cefari.toml`, and template workflows were reviewed with no additional findings beyond source/runtime issues already recorded.
 - `.github/actions/cefari-release/action.yml` and `.github/actions/cefari-release/release.sh`: release action inputs, script validation, and command flow reviewed with no standalone findings beyond SS-001 and SS-003, which currently affect its `cefari build` and `cefari package` steps.
 - `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/platform-verification.yml`, `templates/vite-react-basic/.github/workflows/*.yml`, and `docs/examples/cefari-release-workflow.yml`: workflow syntax and validation coverage reviewed with no additional findings beyond failures already captured by SS-003 and SS-005.
@@ -163,13 +163,13 @@ Each finding uses:
 ## Validation Summary
 
 - `cargo fmt --all --check`: passed.
-- `cargo check --workspace`: failed because `skills/cefari/references/template-authoring.md` is missing while `packages/cefari-cli/src/lib.rs` includes it.
+- `cargo check --workspace`: failed because `skills/cefari/references/template-authoring.md` was missing while the historical Rust CLI source included it.
 - `cargo clippy --workspace --all-targets -- -D warnings`: failed because of SS-003 and because `crates/cefari-desktop/src/desktop_cef.rs` triggers `clippy::unused_self` in the default no-CEF implementation.
 - `cargo test --workspace`: failed before running the full workspace suite because of SS-003.
 - `cargo test -p cefari-core`: passed. This ran 31 unit tests and doc tests successfully; the `native_service_lifecycle_smoke` integration test remains ignored by design because it installs and starts a native OS service.
 - `cargo test -p cefari-desktop`: passed. This ran 30 unit tests successfully.
 - `cargo check -p cefari-desktop --features cef`: passed.
-- `npm run --prefix packages/cefari-cli test`: failed before running tests because `skills/cefari/references/template-authoring.md` is missing while `packages/cefari-cli/src/lib.rs` includes it.
+- Historical Rust CLI tests failed before running tests because `skills/cefari/references/template-authoring.md` was missing while the historical Rust CLI source included it.
 - `deno task --cwd packages/cefari-app check`: passed.
 - `deno task --cwd packages/cefari-app test`: passed, 4 tests.
 - `deno task --cwd templates/vite-react-basic/frontend check`: passed.

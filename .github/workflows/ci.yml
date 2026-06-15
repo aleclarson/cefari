@@ -138,16 +138,16 @@ jobs:
       - name: Build cefari CLI
         shell: bash
         run: |
-          npm run --prefix packages/cefari-cli build
+          npm run --prefix npm build
           mkdir -p .ci/bin
           cat > .ci/bin/cefari <<'SH'
           #!/usr/bin/env bash
-          exec node "$GITHUB_WORKSPACE/packages/cefari-cli/dist/bin/cefari.js" "$@"
+          exec node "$GITHUB_WORKSPACE/npm/dist/bin/cefari.js" "$@"
           SH
           chmod +x .ci/bin/cefari
 
       - name: Create release action sample
-        run: node packages/cefari-cli/dist/bin/cefari.js init .ci/release-action-sample --name "Release Action CI"
+        run: node npm/dist/bin/cefari.js init .ci/release-action-sample --name "Release Action CI"
 
       - name: Create CEF fixture
         shell: bash
@@ -265,7 +265,7 @@ jobs:
         run: cargo install cargo-packager --version 0.11.8 --locked
 
       - name: Build cefari CLI
-        run: npm run --prefix packages/cefari-cli build
+        run: npm run --prefix npm build
 
       - name: Build cefari desktop runtime
         run: cargo build -p cefari-desktop --release
@@ -273,13 +273,13 @@ jobs:
       - name: Assemble CLI distribution
         shell: bash
         run: |
-          test -f packages/cefari-cli/dist/bin/cefari.js
-          node packages/cefari-cli/dist/bin/cefari.js --version | grep -E '^[0-9]+\.[0-9]+\.[0-9]+'
+          test -f npm/dist/bin/cefari.js
+          node npm/dist/bin/cefari.js --version | grep -E '^[0-9]+\.[0-9]+\.[0-9]+'
           mkdir -p .ci/cefari-cli
-          cp -R packages/cefari-cli/dist .ci/cefari-cli/
+          cp -R npm/dist .ci/cefari-cli/
 
       - name: Create sample project
-        run: node packages/cefari-cli/dist/bin/cefari.js init .ci/cefari-sample --name "CI Package Sample"
+        run: node npm/dist/bin/cefari.js init .ci/cefari-sample --name "CI Package Sample"
 
       - name: Create CEF fixture
         shell: bash
@@ -297,12 +297,12 @@ jobs:
           echo fixture > .ci/cef-fixture/locales/en-US.pak
 
       - name: Build sample project
-        run: node packages/cefari-cli/dist/bin/cefari.js build .ci/cefari-sample
+        run: node npm/dist/bin/cefari.js build .ci/cefari-sample
         env:
           CEFARI_CEF_RESOURCES_DIR: .ci/cef-fixture
 
       - name: Package sample project metadata
-        run: node packages/cefari-cli/dist/bin/cefari.js package .ci/cefari-sample
+        run: node npm/dist/bin/cefari.js package .ci/cefari-sample
 
       - name: Verify native package payload
         shell: bash
@@ -369,11 +369,11 @@ jobs:
           esac
 
           mkdir -p .ci/npm
-          npm pack packages/cefari-cli --pack-destination .ci/npm
+          npm pack ./npm --pack-destination .ci/npm
           echo "CEFARI_NPM_TARGET=$npm_target" >> "$GITHUB_ENV"
 
       - name: Verify npm CLI package
         shell: bash
         run: |
-          npm run --prefix packages/cefari-cli check
-          npm run --prefix packages/cefari-cli test
+          npm run --prefix npm check
+          npm run --prefix npm test

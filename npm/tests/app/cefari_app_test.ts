@@ -5,7 +5,7 @@ import {
   type CefariIpcCommand,
   type CefariIpcEvent,
   type CefariIpcResponse,
-} from "../src/mod.ts";
+} from "../../src/app/mod.ts";
 
 Deno.test("reports unavailable outside the Cefari shell", async () => {
   withBridge(undefined);

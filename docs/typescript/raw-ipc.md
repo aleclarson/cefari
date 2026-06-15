@@ -87,11 +87,11 @@ filesystem access.
 
 ## Keep Types In Sync
 
-`packages/cefari-app/src/ipc.ts` is copied from
+`npm/src/app/ipc.ts` is copied from
 `crates/cefari-core/bindings/ipc.ts`. When Rust IPC types change:
 
 1. Regenerate `crates/cefari-core/bindings/ipc.ts`.
-2. Copy it to `packages/cefari-app/src/ipc.ts`.
+2. Copy it to `npm/src/app/ipc.ts`.
 3. Update wrapper functions for new commands or result variants.
 4. Update these docs when behavior or supported command status changes.
 5. Run package and template checks.

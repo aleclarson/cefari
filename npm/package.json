@@ -29,8 +29,8 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test dist/tests/*.test.js"
+    "check": "tsc -p tsconfig.json --noEmit && deno check src/app/mod.ts tests/app/cefari_app_test.ts",
+    "test": "npm run build && node --test dist/tests/*.test.js && deno test tests/app"
   },
   "dependencies": {
     "cmd-ts": "^0.15.0",

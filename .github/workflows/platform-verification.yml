@@ -71,16 +71,16 @@ jobs:
         run: cargo install cargo-packager --version 0.11.8 --locked
 
       - name: Build cefari CLI
-        run: npm run --prefix packages/cefari-cli build
+        run: npm run --prefix npm build
 
       - name: Create verification project
-        run: node packages/cefari-cli/dist/bin/cefari.js init .verify/cefari-sample --name "Cefari Platform Verification"
+        run: node npm/dist/bin/cefari.js init .verify/cefari-sample --name "Cefari Platform Verification"
 
       - name: Build verification project
-        run: node packages/cefari-cli/dist/bin/cefari.js build .verify/cefari-sample --release
+        run: node npm/dist/bin/cefari.js build .verify/cefari-sample --release
 
       - name: Package verification project
-        run: node packages/cefari-cli/dist/bin/cefari.js package .verify/cefari-sample --release
+        run: node npm/dist/bin/cefari.js package .verify/cefari-sample --release
 
       - name: Verify native package payload
         shell: bash

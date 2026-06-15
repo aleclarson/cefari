@@ -8,8 +8,8 @@ The repository is split into:
 
 - `cefari-core`: reusable runtime helpers and shared contracts.
 - `cefari-desktop`: the shipped desktop runtime.
-- `packages/cefari-cli`: the TypeScript developer tool, exposed as `cefari`.
-- `packages/cefari-app`: ergonomic TypeScript wrappers for `window.cefari`.
+- `npm`: the public `cefari` npm package, including the CLI and ergonomic
+  TypeScript wrappers for `window.cefari`.
 - `templates/vite-react-basic`: a Deno workspace template using Vite and React.
 
 ## Start Here

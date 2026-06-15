@@ -2,7 +2,7 @@
   "imports": {
     "@deno/vite-plugin": "npm:@deno/vite-plugin@2.0.2",
     "@vitejs/plugin-react": "npm:@vitejs/plugin-react@6.0.2",
-    "cefari/app": "../../../packages/cefari-app/src/mod.ts",
+    "cefari/app": "../../../npm/src/app/mod.ts",
     "vite": "npm:vite@8.0.16",
     "react": "npm:react@19.2.7",
     "react-dom/": "npm:react-dom@19.2.7/"
@@ -10,7 +10,7 @@
   "tasks": {
     "dev": "vite",
     "build": "vite build",
-    "check": "deno check ../../../packages/cefari-app/src/mod.ts src/App.jsx",
+    "check": "deno check ../../../npm/src/app/mod.ts src/App.jsx",
     "preview": "vite preview"
   }
 }

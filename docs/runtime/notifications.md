@@ -7,7 +7,7 @@ This page is for runtime contributors. App developers should use
 ## Ownership
 
 Cefari desktop notifications are routed through `cefari-desktop`, not through
-`packages/cefari-cli` or `cefari-core`.
+`npm` or `cefari-core`.
 
 The desktop runtime owns a small Cefari wrapper around `user-notify`. App code
 calls the Cefari notification abstraction so permission checks, fallback
@@ -34,7 +34,7 @@ denied outcome instead of treating that state as a crash.
 ## Dependency Boundary
 
 `user-notify` is a `cefari-desktop` dependency only. Do not add it to
-`cefari-core` or `packages/cefari-cli`.
+`cefari-core` or `npm`.
 
 Notification actions, replies, and categories are not treated as a stable
 cross-platform Cefari contract yet.

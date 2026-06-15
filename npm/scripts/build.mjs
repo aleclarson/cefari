@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const repoRoot = resolve(packageRoot, "../..");
 const appBuildSource = resolve(packageRoot, "dist/.app-src");
 
 const tsc = spawnSync("tsc", ["-p", "tsconfig.json"], {
@@ -23,7 +22,7 @@ if (tsc.status !== 0) {
 
 await rm(resolve(packageRoot, "dist/app"), { force: true, recursive: true });
 await rm(appBuildSource, { force: true, recursive: true });
-await cp(resolve(repoRoot, "packages/cefari-app/src"), appBuildSource, { recursive: true });
+await cp(resolve(packageRoot, "src/app"), appBuildSource, { recursive: true });
 await rewriteTypeScriptSpecifiers(appBuildSource);
 await writeFile(
   resolve(packageRoot, "dist/app-tsconfig.json"),

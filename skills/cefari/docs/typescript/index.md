@@ -49,7 +49,7 @@ package source:
 ```json
 {
   "imports": {
-    "cefari/app": "../../../packages/cefari-app/src/mod.ts"
+    "cefari/app": "../../../npm/src/app/mod.ts"
   }
 }
 ```
