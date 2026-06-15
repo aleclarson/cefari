@@ -3,12 +3,12 @@
 Use release commands for signing, notarization, and update metadata. They are
 thin wrappers around the signing tools used by Cefari release automation.
 
-## `cefari codesign`
+## `cefari package sign`
 
 Code sign a packaged app artifact:
 
 ```bash
-cefari codesign ARTIFACT [--platform PLATFORM] [--config PATH]
+cefari package sign ARTIFACT [--platform PLATFORM] [--config PATH]
 ```
 
 Arguments and options:
@@ -21,12 +21,12 @@ Arguments and options:
 macOS signing accepts `.app` bundles and `.dmg` artifacts. Linux signing passes
 the artifact as an archive to the signing tool.
 
-## `cefari notarize`
+## `cefari package notarize`
 
 Notarize a signed macOS artifact:
 
 ```bash
-cefari notarize ARTIFACT [--config PATH]
+cefari package notarize ARTIFACT [--config PATH]
 ```
 
 Arguments and options:
@@ -37,12 +37,12 @@ Arguments and options:
 This command is macOS-oriented. Use it after signing when Apple notarization is
 required for distribution.
 
-## `cefari make-update`
+## `cefari package update`
 
 Generate update signature and manifest artifacts:
 
 ```bash
-cefari make-update ARCHIVE --url URL --version VERSION [OPTIONS]
+cefari package update ARCHIVE --url URL --version VERSION [OPTIONS]
 ```
 
 Arguments and required options:

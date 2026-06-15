@@ -1,4 +1,8 @@
 export {
+  runCefariInit,
+  type InitOptions,
+} from "./init.js";
+export {
   runCefariPackage,
   runPackageNotarize,
   runPackageRelease,

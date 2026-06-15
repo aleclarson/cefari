@@ -1,23 +1,14 @@
 import { defineConfig } from "@cefari/cli";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   app: {
     projectName: "vite-react-basic",
     name: "Vite React Basic",
     identifier: "dev.cefari.vite-react-basic",
   },
-  frontend: {
-    dist: "frontend/dist",
-    buildCommand: ["deno", "task", "build:frontend"],
-    devCommand: [
-      "deno",
-      "task",
-      "dev:frontend",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      "{port}",
-    ],
+  vite: {
+    root: "frontend",
+    configFile: "frontend/vite.config.js",
     devPort: 5111,
   },
   daemon: {
@@ -25,6 +16,6 @@ export default defineConfig({
   },
   package: {
     productName: "Vite React Basic",
-    version: "0.1.0",
+    version: mode === "production" ? "0.1.0" : "0.1.0-dev",
   },
-});
+}));

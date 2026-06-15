@@ -18,11 +18,10 @@ export default defineConfig({
     icon: "assets/icon.png",
     trayIcon: "assets/tray-icon.png",
   },
-  frontend: {
-    dist: "frontend/dist",
+  vite: {
+    root: "frontend",
+    configFile: "frontend/vite.config.ts",
     devPort: 5173,
-    buildCommand: ["deno", "task", "build"],
-    devCommand: ["deno", "task", "dev", "--", "--port", "{port}"],
   },
   daemon: {
     entry: "daemon/main.ts",
@@ -41,11 +40,11 @@ area before the project has earned it.
 ## Goals
 
 - Make Cefari project configuration feel native to TypeScript app authors.
-- Provide typed editor feedback for app identity, frontend, daemon, packaging,
+- Provide typed editor feedback for app identity, Vite, daemon, packaging,
   icon, and future release settings.
 - Keep the CLI as the canonical runtime validator and executor for config-driven
   behavior.
-- Run the TypeScript config with Deno.
+- Run the TypeScript config through the CLI's TypeScript execution path.
 - Export `defineConfig` and config types from the `@cefari/cli` package.
 - Keep the runtime boundary intact: app project config remains CLI input, not
   desktop runtime state.
@@ -56,7 +55,7 @@ area before the project has earned it.
 
 - Do not keep `cefari.toml` as a supported project manifest.
 - Do not add migration shims, TOML fallback loading, or dual-format precedence.
-- Do not make the Rust CLI depend on Node-only TypeScript execution.
+- Do not make the TypeScript CLI depend on Node-only TypeScript execution.
 - Do not move desktop runtime configuration into the project config file.
 - Do not support arbitrary runtime objects such as functions, classes, symbols,
   streams, or file handles in the exported config value.
@@ -124,7 +123,7 @@ that file as `.cjs` or update it to ESM as part of the npm package change.
 
 ## Deno Loader Design
 
-The Rust CLI should not parse TypeScript. It should delegate config execution to
+The TypeScript CLI should not parse TypeScript. It should delegate config execution to
 Deno and consume normalized JSON.
 
 Recommended flow:
@@ -188,7 +187,7 @@ Example warning:
 warning: Cefari expects Deno 2.8+ to load cefari.config.ts; found Deno 2.7.5
 ```
 
-`cefari doctor` and release-action diagnostics should report the detected Deno
+`cefari --help` and release-action diagnostics should report the detected Deno
 version and whether it is missing, expected, or older than expected.
 
 ## Deno Permissions
@@ -218,10 +217,10 @@ Recommended TypeScript names:
 - `app.identifier`
 - `app.icon`
 - `app.trayIcon`
-- `frontend.dist`
-- `frontend.buildCommand`
-- `frontend.devCommand`
-- `frontend.devPort`
+- `vite.root`
+- `vite config`
+- `Vite dev server`
+- `vite.devPort`
 - `daemon.entry`
 - `package.productName`
 - `package.version`
@@ -234,14 +233,14 @@ Required fields should stay required:
 - `app.projectName`
 - `app.name`
 - `app.identifier`
-- `frontend.dist`
+- `vite.root`
 - `daemon.entry`
 - `package.productName`
 - `package.version`
 
 Defaults should remain intentionally narrow:
 
-- `frontend.devPort` defaults to `5173`.
+- `vite.devPort` defaults to `5173`.
 - Optional commands remain optional.
 - Icons remain optional until Cefari decides app icons are mandatory for
   packaged apps.
@@ -300,8 +299,8 @@ Required updates:
 
 - Replace the `cefari.toml` reference with a `cefari.config.ts` reference.
 - Update scaffolding docs to list `cefari.config.ts`.
-- Update development docs to show `frontend.devCommand`.
-- Update build and package docs to show `frontend.buildCommand`, icons, and
+- Update development docs to show `Vite dev server`.
+- Update build and package docs to show `vite config`, icons, and
   package version in TypeScript.
 - Update CLI diagnostics docs to report `cefari.config.ts`.
 - Update templates and skill docs after the primary docs are changed.
@@ -314,7 +313,7 @@ Required updates:
    - Add package `exports`.
    - Keep the existing CLI binary working.
 
-2. Add a Deno config loader to the Rust CLI.
+2. Add Vite-native config loading to the TypeScript CLI.
    - Add a small loader script that imports the config file and prints JSON.
    - Spawn Deno from `ProjectConfig::load_from_dir`.
    - Detect missing Deno and return a clear config-load error.
@@ -354,8 +353,8 @@ Required updates:
 ## Acceptance Criteria
 
 - New projects contain `cefari.config.ts`, not `cefari.toml`.
-- `cefari dev`, `cefari build`, `cefari package`, `cefari clean`, and
-  `cefari info` load `cefari.config.ts`.
+- `cefari dev`, `cefari build`, `cefari package`, `cefari package`, and
+  `cefari package` load `cefari.config.ts`.
 - `import { defineConfig } from "@cefari/cli"` works in generated configs.
 - Deno executes the config file and emits JSON for Rust validation.
 - Missing Deno fails with a clear message.

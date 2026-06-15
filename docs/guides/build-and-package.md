@@ -34,12 +34,10 @@ For release-profile desktop builds:
 cefari build PATH --release
 ```
 
-## Frontend Builds
+## Vite Builds
 
-When `frontend.buildCommand` is configured, Cefari runs it before copying
-`frontend.dist` into `build/frontend/`.
-
-Without a build command, Cefari copies the scaffolded `frontend/index.html`.
+`cefari build` calls Vite's `build` API directly and forces the output directory
+to `build/frontend/`.
 
 ## Daemon Builds
 
@@ -71,8 +69,9 @@ that `archive.json` exists, that the CEF resource directory contains runtime
 payload files, and that `cef/locales/` contains at least one locale file.
 
 On macOS, packages that include `Chromium Embedded Framework.framework` must be
-signed and notarized with that framework payload intact. Run `cefari codesign`
-and `cefari notarize` for release artifacts that target macOS.
+signed and notarized with that framework payload intact. Run
+`cefari package sign` and `cefari package notarize` for release artifacts that
+target macOS.
 
 For deterministic tests or CI fixtures, `CEFARI_CEF_RESOURCES_DIR` may point at
 a pre-populated resources directory that contains `archive.json`.
@@ -97,14 +96,6 @@ cefari package PATH --release --release-version 1.2.3
 
 Without `--release-version`, package metadata uses `package.version` from
 `cefari.config.ts`.
-
-## Clean Generated Artifacts
-
-Remove generated build and package outputs:
-
-```bash
-cefari clean PATH
-```
 
 For command syntax, see [Project Commands](../cli/project.md). For package
 config fields, see [`cefari.config.ts` Reference](../config/index.md).

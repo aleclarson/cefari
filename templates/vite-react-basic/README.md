@@ -1,7 +1,8 @@
 # Vite React Basic
 
-This is a minimal Cefari project template that uses a Deno workspace with Vite
-and React for the frontend.
+This is a minimal Cefari project template for a Vite app with a native Cefari
+desktop shell, a Deno daemon, packaging, updater support, and desktop
+capabilities.
 
 The frontend imports `@cefari/app` for ergonomic wrappers over `window.cefari`.
 In ordinary browser preview calls reject with a typed unsupported Cefari error;
@@ -18,11 +19,23 @@ deno install --config templates/vite-react-basic/deno.json
 cefari dev templates/vite-react-basic
 ```
 
+To override the fixed Vite development port:
+
+```bash
+cefari dev templates/vite-react-basic --vite-port 5173
+```
+
 Build it with:
 
 ```bash
 deno install --config templates/vite-react-basic/deno.json
 cefari build templates/vite-react-basic
+```
+
+Package it with:
+
+```bash
+cefari package templates/vite-react-basic
 ```
 
 ## Release Workflows

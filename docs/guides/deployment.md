@@ -97,13 +97,13 @@ and GitHub release commands without executing the release steps.
 Sign a packaged artifact:
 
 ```bash
-cefari codesign ARTIFACT
+cefari package sign ARTIFACT
 ```
 
 Notarize a signed macOS `.app` bundle or `.dmg`:
 
 ```bash
-cefari notarize ARTIFACT
+cefari package notarize ARTIFACT
 ```
 
 Use `--config PATH` to point at a `sign.toml` when the signing tool needs
@@ -114,7 +114,7 @@ explicit configuration.
 Generate update metadata:
 
 ```bash
-cefari make-update ARCHIVE --url URL --version VERSION
+cefari package update ARCHIVE --url URL --version VERSION
 ```
 
 Useful options:

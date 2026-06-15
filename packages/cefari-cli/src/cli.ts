@@ -1,6 +1,7 @@
 import { binary, command, flag, number, option, optional, positional, run, string, subcommands } from "cmd-ts";
 import { runCefariBuild } from "./build.js";
 import { runCefariDev } from "./dev.js";
+import { runCefariInit } from "./init.js";
 import {
   runCefariPackage,
   runPackageNotarize,
@@ -108,8 +109,15 @@ const init = command({
   description: "Create a new Cefari project.",
   args: {
     path: projectPath,
+    name: option({
+      type: optional(string),
+      long: "name",
+      description: "Application display name.",
+    }),
   },
-  handler: () => placeholder("init"),
+  handler: async ({ path, name }) => {
+    await runCefariInit({ path, name });
+  },
 });
 
 const dev = command({

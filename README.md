@@ -1,13 +1,14 @@
 # Cefari
 
-Cefari is a Rust desktop app runtime and developer CLI for apps that combine a
-web frontend, a Deno daemon, and native OS capabilities.
+Cefari builds Vite apps with a native desktop shell, a Deno daemon, packaging,
+updater support, and native OS capabilities. The developer-facing CLI is the
+TypeScript/Node `@cefari/cli` package; Rust remains the native runtime layer.
 
 The repository is split into:
 
 - `cefari-core`: reusable runtime helpers and shared contracts.
 - `cefari-desktop`: the shipped desktop runtime.
-- `cefari-cli`: the developer tool, exposed as `cefari`.
+- `packages/cefari-cli`: the TypeScript developer tool, exposed as `cefari`.
 - `packages/cefari-app`: ergonomic TypeScript wrappers for `window.cefari`.
 - `templates/vite-react-basic`: a Deno workspace template using Vite and React.
 
@@ -23,6 +24,18 @@ npm install -g cefari
 cefari --help
 ```
 
+The public top-level CLI surface is intentionally small:
+
+```bash
+cefari init
+cefari dev
+cefari build
+cefari package
+```
+
+Signing, notarization, update metadata, and release orchestration live under
+`cefari package` subcommands.
+
 ## App Developers
 
 - [Scaffold An App](docs/guides/scaffolding.md): create a project and understand
@@ -31,8 +44,8 @@ cefari --help
   desktop app together.
 - [Build And Package](docs/guides/build-and-package.md): produce local build
   artifacts and package assembly.
-- [CLI Reference](docs/cli/index.md): command syntax for development, release,
-  and diagnostics.
+- [CLI Reference](docs/cli/index.md): command syntax for development, package,
+  and release workflows.
 - [`cefari.config.ts` Reference](docs/config/index.md): project config fields and
   validation rules.
 - [Native Capabilities](docs/guides/native-capabilities.md): use Rust-owned

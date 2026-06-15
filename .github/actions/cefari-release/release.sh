@@ -91,10 +91,21 @@ fi
 
 validate_command_available "$cefari_command"
 
+release_args=("$cefari_command" package release "$project_path" --mode "$mode")
+[[ -n "$release_version" ]] && release_args+=(--version "$release_version")
+[[ -n "$signing_platform" ]] && release_args+=(--signing-platform "$signing_platform")
+[[ -n "$signing_config" ]] && release_args+=(--signing-config "$signing_config")
+[[ "$notarize" == "true" ]] && release_args+=(--notarize)
+[[ -n "$update_url_base" ]] && release_args+=(--update-url-base "$update_url_base")
+[[ -n "$update_target" ]] && release_args+=(--update-target "$update_target")
+[[ -n "$update_format" ]] && release_args+=(--update-format "$update_format")
+[[ -n "$update_key_env" ]] && release_args+=(--update-key-env "$update_key_env")
+[[ "$create_github_release" == "true" ]] && release_args+=(--github-release)
+[[ -n "$release_tag" ]] && release_args+=(--release-tag "$release_tag")
+[[ -n "$release_name" ]] && release_args+=(--release-name "$release_name")
+[[ "$dry_run" == "true" ]] && release_args+=(--dry-run)
 run_cmd "$cefari_command" build "$project_path" --release
-package_args=("$cefari_command" package "$project_path" --release)
-[[ -n "$release_version" ]] && package_args+=(--release-version "$release_version")
-run_cmd "${package_args[@]}"
+run_cmd "${release_args[@]}"
 
 if [[ "$dry_run" != "true" ]]; then
   effective_version="$(read_package_metadata_version)"
@@ -115,7 +126,7 @@ if [[ -n "$signing_config" || -n "$signing_platform" ]]; then
     esac
     for asset in "${release_assets[@]}"; do
       if is_signable_artifact "$asset" "$effective_signing_platform"; then
-        sign_args=("$cefari_command" codesign "$asset")
+        sign_args=("$cefari_command" package sign "$asset")
         [[ -n "$signing_platform" ]] && sign_args+=(--platform "$signing_platform")
         [[ -n "$signing_config" ]] && sign_args+=(--config "$signing_config")
         run_cmd "${sign_args[@]}"
@@ -134,7 +145,7 @@ if [[ "$notarize" == "true" ]]; then
   else
     for asset in "${release_assets[@]}"; do
       if is_notarizable_artifact "$asset"; then
-        notarize_args=("$cefari_command" notarize "$asset")
+        notarize_args=("$cefari_command" package notarize "$asset")
         [[ -n "$signing_config" ]] && notarize_args+=(--config "$signing_config")
         run_cmd "${notarize_args[@]}"
       else
@@ -160,7 +171,7 @@ if [[ -n "$update_url_base" ]]; then
     fi
     archive_name="${archive##*/}"
     update_url="${update_url_base%/}/$archive_name"
-    update_args=("$cefari_command" make-update "$archive" --url "$update_url" --version "$effective_version" --key-env "$update_key_env" --output-dir "$update_dir" --target "$effective_update_target")
+    update_args=("$cefari_command" package update "$archive" --url "$update_url" --version "$effective_version" --key-env "$update_key_env" --output-dir "$update_dir" --target "$effective_update_target")
     [[ -n "$update_format" ]] && update_args+=(--format "$update_format")
     run_cmd "${update_args[@]}"
   fi

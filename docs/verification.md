@@ -9,11 +9,11 @@ Last checked: 2026-06-13.
 
 Docs were checked against:
 
-- `crates/cefari-cli/src/lib.rs` for command names, arguments, and scaffold
+- `packages/cefari-cli/src/cli.ts` for command names, arguments, and scaffold
   outputs
-- `crates/cefari-cli/src/project.rs` for `cefari.config.ts` loading,
+- `packages/cefari-cli/src/config.ts` for `cefari.config.ts` loading,
   Deno execution, and runtime validation
-- `crates/cefari-cli/src/build.rs`, `package.rs`, `dev.rs`, `clean.rs`, and
+- `packages/cefari-cli/src/build.ts`, `package.ts`, `dev.ts`, and
   `release.rs` for guide behavior
 - `templates/vite-react-basic/cefari.config.ts`, `deno.json`, frontend and daemon
   workspace manifests, and template workflows
@@ -30,20 +30,20 @@ Docs were checked against:
 These checks were run during the documentation cleanup:
 
 ```bash
-cargo install --path crates/cefari-cli --locked --root /tmp/cefari-cli-docs-install
-PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari --help
-PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari init /tmp/cefari-docs-smoke --name "Docs Smoke"
-PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari info
-PATH="/tmp/cefari-cli-docs-install/bin:$PATH" cefari doctor
-cargo run -q -p cefari-cli -- --help
-cargo test -p cefari-cli
+npm install -g /cli
+cefari --help
+cefari init /tmp/cefari-docs-smoke --name "Docs Smoke"
+cefari package
+cefari --help
+npm exec --package /cli -- cefari --help
+npm run --prefix packages/cefari-cli test
 cargo test -p cefari-desktop desktop_notifications
 deno task --cwd templates/vite-react-basic/frontend check
 actionlint docs/examples/cefari-release-workflow.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml
 actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml docs/examples/cefari-release-workflow.yml
 shellcheck .github/actions/cefari-release/release.sh
 bash -n .github/actions/cefari-release/release.sh
-cargo run -p cefari-cli -- init .ci/release-action-sample --name "Release Action CI"
+npm exec --package /cli -- cefari init .ci/release-action-sample --name "Release Action CI"
 GITHUB_OUTPUT=/tmp/cefari-release-output.txt GITHUB_ACTION_PATH="$PWD/.github/actions/cefari-release" CEFARI_PROJECT_PATH=templates/vite-react-basic CEFARI_RELEASE_MODE=prerelease CEFARI_TARGETS=linux-x86_64 CEFARI_COMMAND="$PWD/target/debug/cefari" CEFARI_INSTALL_CLI=false CEFARI_RELEASE_VERSION=0.0.0-ci CEFARI_RELEASE_TAG=release-action-ci-dry-run CEFARI_CREATE_GITHUB_RELEASE=false CEFARI_UPLOAD_ARTIFACTS=false CEFARI_DRY_RUN=true .github/actions/cefari-release/release.sh
 cargo test -p cefari-core ipc::tests::generated_typescript_bindings_are_current
 cargo test -p cefari-desktop

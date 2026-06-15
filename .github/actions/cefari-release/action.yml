@@ -55,7 +55,7 @@ inputs:
     required: false
     default: "cefari-release"
   signing-platform:
-    description: Signing platform passed to cefari codesign when signing is enabled.
+    description: Signing platform passed to cefari package sign when signing is enabled.
     required: false
     default: ""
   signing-config:
