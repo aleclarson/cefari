@@ -13,3 +13,10 @@ Prefer continuous refinement: simplify APIs, rename concepts, remove obsolete
 paths, and reshape implementation details when doing so improves the product or
 the codebase. Keep changes scoped to the task, but do not let compatibility
 concerns block a cleaner design during pre-alpha development.
+
+## Skills
+
+When implementing or changing the TypeScript Cefari CLI, use the repo-local
+`cmd-ts` skill at `.agents/skills/cmd-ts/` before editing command parsing,
+subcommands, options, flags, custom argument types, help output, or parser
+tests.
