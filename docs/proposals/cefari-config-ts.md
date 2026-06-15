@@ -8,7 +8,7 @@ Replace `cefari.toml` with a TypeScript project configuration file named
 The new configuration API should use the familiar app-tooling shape:
 
 ```ts
-import { defineConfig } from "@cefari/cli";
+import { defineConfig } from "cefari";
 
 export default defineConfig({
   app: {
@@ -45,7 +45,7 @@ area before the project has earned it.
 - Keep the CLI as the canonical runtime validator and executor for config-driven
   behavior.
 - Run the TypeScript config through the CLI's TypeScript execution path.
-- Export `defineConfig` and config types from the `@cefari/cli` package.
+- Export `defineConfig` and config types from the `cefari` package.
 - Keep the runtime boundary intact: app project config remains CLI input, not
   desktop runtime state.
 - Fail loudly on unknown fields, invalid shapes, missing required values, and
@@ -63,7 +63,8 @@ area before the project has earned it.
 ## User-Facing Contract
 
 `cefari.config.ts` lives in the project root. The CLI loads it for commands that
-currently load `cefari.toml`: `dev`, `build`, `package`, `clean`, and `info`.
+operate on an app project: `dev`, `build`, `package`, and package release
+subcommands.
 
 The config file is ordinary TypeScript executed by Deno. It may import local
 files, read environment variables, branch on platform, and compute values.
@@ -83,7 +84,7 @@ runtime validation and defaults.
 
 ## Import Surface
 
-`@cefari/cli` should export:
+`cefari` should export:
 
 - `defineConfig`
 - `CefariConfigInput`
@@ -91,22 +92,31 @@ runtime validation and defaults.
   `DaemonConfigInput`, and `PackageConfigInput`
 
 The package also remains the npm CLI distribution with the `cefari` binary.
-The npm package should add an `exports` map for the config API while preserving
-the existing `bin` entry.
+The npm package should expose config helpers at the root and app runtime
+helpers through subpath exports such as `cefari/app` and `cefari/ipc`, while
+preserving the existing `bin` entry.
 
 Recommended package shape:
 
 ```json
 {
-  "name": "@cefari/cli",
+  "name": "cefari",
   "type": "module",
   "bin": {
     "cefari": "bin/cefari.js"
   },
   "exports": {
     ".": {
-      "types": "./config/index.d.ts",
-      "default": "./config/index.js"
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./app": {
+      "types": "./dist/app/mod.d.ts",
+      "import": "./dist/app/mod.js"
+    },
+    "./ipc": {
+      "types": "./dist/app/ipc.d.ts",
+      "import": "./dist/app/ipc.js"
     }
   },
   "files": [
@@ -282,7 +292,7 @@ failure versus invalid Cefari config data.
 Generated projects should also have enough TypeScript resolution support for the
 import to work in editors and in Deno. The preferred path is:
 
-- install or reference `@cefari/cli` as the project-local CLI package;
+- install or reference `cefari` as the project-local CLI package;
 - include a `deno.json` import mapping if Deno needs it for bare package
   resolution;
 - keep the config file small and explicit.
@@ -307,7 +317,7 @@ Required updates:
 
 ## Implementation Plan
 
-1. Add the TypeScript config API to `@cefari/cli`.
+1. Add the TypeScript config API to `cefari`.
    - Add `defineConfig`.
    - Add published `.d.ts` files.
    - Add package `exports`.
@@ -335,7 +345,7 @@ Required updates:
    - Replace generated `cefari.toml`.
    - Update the Vite template.
    - Update smoke projects.
-   - Ensure generated projects can resolve `@cefari/cli` in Deno and editors.
+   - Ensure generated projects can resolve `cefari` in Deno and editors.
 
 5. Update docs and skill docs.
    - Replace TOML examples.
@@ -355,7 +365,7 @@ Required updates:
 - New projects contain `cefari.config.ts`, not `cefari.toml`.
 - `cefari dev`, `cefari build`, `cefari package`, and `cefari package release`
   load `cefari.config.ts`.
-- `import { defineConfig } from "@cefari/cli"` works in generated configs.
+- `import { defineConfig } from "cefari"` works in generated configs.
 - Deno executes the config file and emits JSON for Rust validation.
 - Missing Deno fails with a clear message.
 - Deno older than `2.8` warns and continues.
@@ -368,7 +378,7 @@ Required updates:
   the CLI.
 - Config execution does not have network, write, or subprocess permission by
   default.
-- The npm `@cefari/cli` package still exposes the `cefari` binary.
+- The npm `cefari` package still exposes the `cefari` binary.
 - Documentation no longer presents `cefari.toml` as the current config format.
 
 ## Open Follow-Up

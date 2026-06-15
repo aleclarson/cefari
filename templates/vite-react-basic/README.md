@@ -4,7 +4,7 @@ This is a minimal Cefari project template for a Vite app with a native Cefari
 desktop shell, a Deno daemon, packaging, updater support, and desktop
 capabilities.
 
-The frontend imports `@cefari/app` for ergonomic wrappers over `window.cefari`.
+The frontend imports `cefari/app` for ergonomic wrappers over `window.cefari`.
 In ordinary browser preview calls reject with a typed unsupported Cefari error;
 inside trusted Cefari pages they use the native bridge.
 
@@ -63,7 +63,7 @@ Expected secrets and variables:
   generated.
 - `CEFARI_UPDATE_URL_BASE`: optional repository variable containing the public
   download URL prefix for update metadata.
-- `CEFARI_CLI_VERSION`: required repository variable pinning the `@cefari/cli`
+- `CEFARI_CLI_VERSION`: required repository variable pinning the `cefari`
   version installed by the release action.
 
 Expected artifacts:

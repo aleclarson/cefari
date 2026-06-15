@@ -1,6 +1,6 @@
 # Events And Errors
 
-`@cefari/app` exposes typed event helpers and typed errors over the generated
+`cefari/app` exposes typed event helpers and typed errors over the generated
 IPC protocol.
 
 ## Typed Events
@@ -8,7 +8,7 @@ IPC protocol.
 Use typed event names for normal app code:
 
 ```ts
-import { cefari } from "@cefari/app";
+import { cefari } from "cefari/app";
 
 const unsubscribe = cefari.on("windowFocused", (state) => {
   console.log(state.focused);
@@ -59,7 +59,7 @@ Wrapper methods throw `CefariError` when Rust returns a typed IPC error or when
 the native bridge is unavailable:
 
 ```ts
-import { cefari, isCefariError } from "@cefari/app";
+import { cefari, isCefariError } from "cefari/app";
 
 try {
   await cefari.shell.openLogs();

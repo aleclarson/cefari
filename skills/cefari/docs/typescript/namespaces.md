@@ -1,10 +1,10 @@
 # Namespace APIs
 
-`@cefari/app` exposes task-oriented namespaces through the `cefari` object and
+`cefari/app` exposes task-oriented namespaces through the `cefari` object and
 as named exports.
 
 ```ts
-import { cefari } from "@cefari/app";
+import { cefari } from "cefari/app";
 
 await cefari.window.focus();
 ```
@@ -204,7 +204,7 @@ relative to that directory. Absolute paths and `..` traversal are rejected by
 Rust before filesystem access.
 
 ```ts
-import { cefari } from "@cefari/app";
+import { cefari } from "cefari/app";
 
 await cefari.fs.writeFile("settings/preferences.json", "{\"theme\":\"dark\"}");
 
@@ -304,7 +304,7 @@ Current methods:
 
 ## Notifications
 
-Notification commands are typed in the protocol and wrapped by `@cefari/app`,
+Notification commands are typed in the protocol and wrapped by `cefari/app`,
 but the current desktop dispatcher returns `unsupported` until notification IPC
 is wired end to end.
 

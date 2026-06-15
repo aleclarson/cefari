@@ -17,7 +17,7 @@ JS
   cat > "$loader_dir/import_map.json" <<'JSON'
 {
   "imports": {
-    "@cefari/cli": "./cefari-cli-config-api.js"
+    "cefari": "./cefari-cli-config-api.js"
   }
 }
 JSON

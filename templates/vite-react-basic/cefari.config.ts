@@ -1,4 +1,4 @@
-import { defineConfig } from "@cefari/cli";
+import { defineConfig } from "cefari";
 
 export default defineConfig(({ mode }) => ({
   app: {

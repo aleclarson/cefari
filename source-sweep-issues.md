@@ -68,7 +68,7 @@ Each finding uses:
 - `Area`: Desktop runtime, TypeScript bridge
 - `Files`: `crates/cefari-desktop/src/desktop_bridge.rs`, `crates/cefari-desktop/src/desktop_cef.rs`, `crates/cefari-desktop/src/main.rs`, `packages/cefari-app/src/transport.ts`
 - `Evidence`: `desktop_bridge.rs` defines `CEFARI_BRIDGE_SCRIPT`, `BridgeOriginPolicy`, and `CefariBridge::handle_json_request`, but repository search found all references to `CefariBridge`, `BridgeOriginPolicy`, `CEFARI_BRIDGE_SCRIPT`, `__CEFARI_IPC_POST__`, and `__CEFARI_IPC_EVENT__` only in `desktop_bridge.rs` tests and TypeScript consumers. `desktop_cef.rs` calls `cef::browser_host_create_browser(..., None, ...)` with no CEF client or handler that injects the bridge script or forwards JavaScript messages to `DesktopIpcDispatcher`.
-- `Impact`: App code using `@cefari/app` cannot receive a real `window.cefari` transport in the shipped desktop shell, so documented window, shell, service, tray, update, files, and notification APIs are unavailable at runtime.
+- `Impact`: App code using `cefari/app` cannot receive a real `window.cefari` transport in the shipped desktop shell, so documented window, shell, service, tray, update, files, and notification APIs are unavailable at runtime.
 - `Suggested next step`: Add CEF integration for script injection and request/event transport, then cover it with an integration or lower-level unit test that proves the bridge is connected outside `desktop_bridge.rs` tests.
 - `Verification notes`: `rg` found no production references wiring the bridge into the CEF runtime. `cargo test -p cefari-desktop` passed because tests cover the isolated bridge dispatcher, not browser integration.
 
@@ -116,7 +116,7 @@ Each finding uses:
 - `Area`: Documentation, template guidance, desktop runtime
 - `Files`: `docs/ipc.md`, `docs/typescript/raw-ipc.md`, `docs/css-contract.md`, `templates/vite-react-basic/README.md`, `crates/cefari-desktop/src/desktop_bridge.rs`, `crates/cefari-desktop/src/desktop_cef.rs`
 - `Evidence`: `docs/ipc.md` says the desktop bridge installs `window.cefari` for trusted origins and installs the default CSS contract. `docs/typescript/raw-ipc.md` says the desktop runtime installs `window.cefari` for trusted packaged and localhost origins. Template guidance also describes native bridge usage inside trusted Cefari pages. This conflicts with SS-002: source search found the bridge script and dispatcher integration only in isolated bridge tests and TypeScript consumers, while `desktop_cef.rs` creates the browser with no CEF client or handler to inject the bridge or forward JavaScript messages.
-- `Impact`: Application developers can follow the docs and template guidance, write against `@cefari/app`, and still receive an unavailable bridge in the actual desktop shell.
+- `Impact`: Application developers can follow the docs and template guidance, write against `cefari/app`, and still receive an unavailable bridge in the actual desktop shell.
 - `Suggested next step`: Either wire the bridge into the CEF runtime and keep the docs as intended behavior, or revise the docs/template guidance to describe the feature as not yet implemented.
 - `Verification notes`: Source review and `rg` reference checks support the same root runtime gap recorded in SS-002; this finding records the separate documentation and template drift.
 

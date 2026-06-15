@@ -42,7 +42,7 @@ Vite config fields, see [`vite`](../config/frontend.md).
 ## Vite React Example
 
 The Vite React example project lives at `templates/vite-react-basic/`. It uses
-`@cefari/app` for typed frontend access to native Cefari actions.
+`cefari/app` for typed frontend access to native Cefari actions.
 
 Install workspace dependencies:
 

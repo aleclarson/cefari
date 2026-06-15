@@ -2,7 +2,7 @@
 
 This page is for runtime contributors. App developers should use
 [Notification Behavior](../notifications.md) and the
-[`@cefari/app` notification APIs](../typescript/namespaces.md).
+[`cefari/app` notification APIs](../typescript/namespaces.md).
 
 ## Ownership
 

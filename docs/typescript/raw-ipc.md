@@ -10,7 +10,7 @@ Raw `invoke` accepts a generated `CefariIpcCommand`, unwraps the response, and
 throws `CefariError` on failure:
 
 ```ts
-import { cefari } from "@cefari/app";
+import { cefari } from "cefari/app";
 
 const result = await cefari.invoke({
   command: "openExternalUrl",

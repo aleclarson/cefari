@@ -2,7 +2,7 @@
 
 Cefari builds Vite apps with a native desktop shell, a Deno daemon, packaging,
 updater support, and native OS capabilities. The developer-facing CLI is the
-TypeScript/Node `@cefari/cli` package; Rust remains the native runtime layer.
+TypeScript/Node `cefari` package; Rust remains the native runtime layer.
 
 The repository is split into:
 
@@ -20,7 +20,7 @@ The repository is split into:
 ## Install The CLI
 
 ```bash
-npm install -g @cefari/cli
+npm install -g cefari
 cefari --help
 ```
 
@@ -50,7 +50,7 @@ Signing, notarization, update metadata, and release orchestration live under
   validation rules.
 - [Native Capabilities](docs/guides/native-capabilities.md): use Rust-owned
   window, menu, tray, notification, and IPC surfaces.
-- [TypeScript App Guide](docs/typescript/index.md): use `@cefari/app` from
+- [TypeScript App Guide](docs/typescript/index.md): use `cefari/app` from
   frontend code.
 - [Cefari CSS Contract](docs/css-contract.md): opt in to custom titlebar drag
   regions.

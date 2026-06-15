@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { runnerImport } from "vite";
 import type { CliPackageCommand, CliTopLevelCommand } from "./cli.js";
 
@@ -125,6 +125,9 @@ export async function loadCefariConfig(options: LoadCefariConfigOptions = {}): P
   const { module } = await runnerImport<CefariConfigModule>(pathToFileURL(configPath).href, {
     root,
     logLevel: "silent",
+    resolve: {
+      alias: [{ find: /^cefari$/, replacement: resolve(dirname(fileURLToPath(import.meta.url)), "index.js") }],
+    },
   });
 
   if (!Object.hasOwn(module, "default")) {

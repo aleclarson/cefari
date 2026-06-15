@@ -35,7 +35,7 @@ Cefari uses that value for build outputs:
 A minimal project config looks like this:
 
 ```ts
-import { defineConfig } from "@cefari/cli";
+import { defineConfig } from "cefari";
 
 export default defineConfig({
   app: {

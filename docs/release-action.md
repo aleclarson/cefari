@@ -18,7 +18,7 @@ Common optional inputs:
 - `targets`: informational current-runner target label. Use a workflow matrix
   for platform fan-out.
 - `cefari-command`: Cefari CLI command or path. Defaults to `cefari`.
-- `install-cli`: whether to install `@cefari/cli` from npm before release
+- `install-cli`: whether to install `cefari` from npm before release
   commands. Defaults to `false`.
 - `cefari-version`: npm CLI version to install when `install-cli` is `true`.
 - `release-version`: version advertised in package and update metadata.
@@ -68,7 +68,7 @@ with:
   cefari-version: "0.1.0"
 ```
 
-When `install-cli` is `true`, the action installs `@cefari/cli` from npm and
+When `install-cli` is `true`, the action installs `cefari` from npm and
 then runs release commands through the configured `cefari-command`.
 Dry runs print the planned install and release commands without requiring the
 CLI to exist. Non-dry runs fail early when `npm` or the configured Cefari

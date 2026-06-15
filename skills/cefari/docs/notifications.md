@@ -1,7 +1,7 @@
 # Notification Behavior
 
 Cefari owns desktop notification permission checks and delivery through the
-native runtime. App UI code should use `@cefari/app` notification helpers rather
+native runtime. App UI code should use `cefari/app` notification helpers rather
 than calling platform notification APIs directly.
 
 For TypeScript usage, see [Namespace APIs](typescript/namespaces.md).

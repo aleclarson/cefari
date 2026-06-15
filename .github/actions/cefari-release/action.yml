@@ -23,7 +23,7 @@ inputs:
     required: false
     default: "false"
   cefari-version:
-    description: Version of @cefari/cli to install when install-cli is true.
+    description: Version of the cefari npm package to install when install-cli is true.
     required: false
     default: ""
   release-version:

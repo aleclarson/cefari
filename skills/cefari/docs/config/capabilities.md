@@ -4,7 +4,7 @@ The `capabilities` array opts an app into native desktop integrations.
 Capabilities default to disabled when the array is omitted.
 
 ```ts
-import { tray } from "@cefari/cli";
+import { tray } from "cefari";
 
 capabilities: [
   tray({

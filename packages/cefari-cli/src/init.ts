@@ -50,7 +50,7 @@ function titleFromProjectName(projectName: string): string {
 }
 
 function configTemplate(projectName: string, displayName: string): string {
-  return `import { defineConfig } from "@cefari/cli";
+  return `import { defineConfig } from "cefari";
 
 export default defineConfig({
   app: {

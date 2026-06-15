@@ -86,7 +86,7 @@ echo "  dry-run: $dry_run"
 
 if [[ "$install_cli" == "true" ]]; then
   validate_command_available npm
-  run_cmd npm install -g "@cefari/cli@$cefari_version"
+  run_cmd npm install -g "cefari@$cefari_version"
 fi
 
 validate_command_available "$cefari_command"

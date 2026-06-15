@@ -356,9 +356,6 @@
           "npm:vite@8.0.16"
         ]
       }
-    },
-    "links": {
-      "jsr:@cefari/app@0.1.0": {}
     }
   }
 }

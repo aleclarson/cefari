@@ -19,7 +19,7 @@ Install the tools Cefari uses for local development and release work:
 Install the developer-facing CLI through npm:
 
 ```bash
-npm install -g @cefari/cli
+npm install -g cefari
 ```
 
 The npm package installs the TypeScript/Node `cefari` command.
@@ -93,7 +93,7 @@ see [Automated Deployment](guides/deployment.md).
 - [`cefari.config.ts` Reference](config/index.md): project config fields and
   validation rules.
 - [Cefari CSS Contract](css-contract.md): opt-in drag-region utility classes.
-- [TypeScript App Guide](typescript/index.md): task-oriented `@cefari/app`
+- [TypeScript App Guide](typescript/index.md): task-oriented `cefari/app`
   usage from frontend code.
 - [Notification Behavior](notifications.md): runtime-owned OS notification
   boundary.

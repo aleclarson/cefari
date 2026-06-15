@@ -1,4 +1,4 @@
-import { cefari } from "@cefari/app";
+import { cefari } from "cefari/app";
 
 export default function App() {
   const bridgeState = cefari.isAvailable() ? "connected" : "unavailable";

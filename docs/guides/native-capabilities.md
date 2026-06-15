@@ -18,7 +18,7 @@ The desktop runtime owns:
 
 ## TypeScript APIs
 
-Frontend code should use `@cefari/app` for native desktop capabilities instead
+Frontend code should use `cefari/app` for native desktop capabilities instead
 of inventing stringly typed native commands. See the
 [TypeScript App Guide](../typescript/index.md).
 
