@@ -1,24 +1,30 @@
 # `capabilities`
 
-The `capabilities` section opts an app into native desktop integrations.
-Capabilities default to disabled when the section is omitted.
+The `capabilities` array opts an app into native desktop integrations.
+Capabilities default to disabled when the array is omitted.
 
 ```ts
-capabilities: {
-  tray: true,
-}
+import { tray } from "@cefari/cli";
+
+capabilities: [
+  tray({
+    icon: "assets/tray-icon.png",
+  }),
+]
 ```
 
-## Fields
+## Entries
 
-| Field | Required | Description |
+| Entry | Required | Description |
 | --- | --- | --- |
-| `tray` | No | Enables OS tray/menu-bar integration. Defaults to `false`. |
+| `tray({ icon })` | No | Enables OS tray/menu-bar integration. |
 
-## `tray`
+## `tray({ icon })`
 
-Set `tray` to `true` when the app should appear in the OS tray or menu bar.
+Add `tray({ icon })` when the app should appear in the OS tray or menu bar.
 
-When tray is enabled, `app.trayIcon` is required and must point to a PNG file
-relative to the project root. `cefari dev` validates that icon before launching
-the desktop runtime, and `cefari package` includes it as `tray-icon.png`.
+`icon` is required and must point to a PNG file relative to the project root.
+`cefari dev` validates the icon before launching the desktop runtime, and
+`cefari package` includes it as `tray-icon.png`.
+
+Only one tray capability may be configured.

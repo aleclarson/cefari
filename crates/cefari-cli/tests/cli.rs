@@ -1208,12 +1208,12 @@ fn enable_tray(root: &Path, icon: &str) {
     let config_path = root.join("cefari.config.ts");
     let config = fs::read_to_string(&config_path).expect("config should exist");
     let config = config.replace(
-        r#"identifier: "dev.cefari."#,
-        &format!("trayIcon: \"{icon}\",\n    identifier: \"dev.cefari."),
+        r#"import { defineConfig } from "@cefari/cli";"#,
+        r#"import { defineConfig, tray } from "@cefari/cli";"#,
     );
     let config = config.replace(
         "  frontend: {",
-        "  capabilities: {\n    tray: true,\n  },\n  frontend: {",
+        &format!("  capabilities: [\n    tray({{ icon: \"{icon}\" }}),\n  ],\n  frontend: {{"),
     );
     fs::write(config_path, config).expect("config should be updated");
 }

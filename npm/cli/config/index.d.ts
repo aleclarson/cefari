@@ -1,5 +1,6 @@
 export interface CefariConfigInput {
   app: AppConfigInput;
+  capabilities?: CapabilityInput[];
   frontend: FrontendConfigInput;
   daemon: DaemonConfigInput;
   package: PackageConfigInput;
@@ -10,7 +11,16 @@ export interface AppConfigInput {
   name: string;
   identifier: string;
   icon?: string;
-  trayIcon?: string;
+}
+
+export type CapabilityInput = TrayCapabilityInput;
+
+export interface TrayCapabilityOptions {
+  icon: string;
+}
+
+export interface TrayCapabilityInput extends TrayCapabilityOptions {
+  type: "tray";
 }
 
 export interface FrontendConfigInput {
@@ -30,3 +40,4 @@ export interface PackageConfigInput {
 }
 
 export declare function defineConfig(config: CefariConfigInput): CefariConfigInput;
+export declare function tray(config: TrayCapabilityOptions): TrayCapabilityInput;

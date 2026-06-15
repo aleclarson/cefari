@@ -148,6 +148,10 @@ read_project_package_version() {
 export function defineConfig(config) {
   return config;
 }
+
+export function tray(config) {
+  return { type: "tray", ...config };
+}
 JS
   cat > "$loader_dir/import_map.json" <<'JSON'
 {

@@ -61,6 +61,10 @@ const CONFIG_API: &str = r"
 export function defineConfig(config) {
   return config;
 }
+
+export function tray(config) {
+  return { type: 'tray', ...config };
+}
 ";
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
@@ -68,7 +72,7 @@ export function defineConfig(config) {
 pub struct ProjectConfig {
     pub app: ProjectApp,
     #[serde(default)]
-    pub capabilities: ProjectCapabilities,
+    pub capabilities: Vec<ProjectCapability>,
     pub frontend: FrontendConfig,
     pub daemon: DaemonConfig,
     pub package: PackageConfig,
@@ -112,16 +116,47 @@ impl ProjectConfig {
         path.as_ref().join("dist")
     }
 
+    #[must_use]
+    pub fn tray_capability(&self) -> Option<&ProjectCapability> {
+        self.capabilities
+            .first()
+            .map(|capability| match capability {
+                ProjectCapability::Tray { .. } => capability,
+            })
+    }
+
+    #[must_use]
+    pub fn tray_icon(&self) -> Option<&str> {
+        self.tray_capability()
+            .and_then(|capability| match capability {
+                ProjectCapability::Tray { icon } => icon.as_deref(),
+            })
+    }
+
     fn validate(&self) -> Result<(), ProjectConfigValidationError> {
         validate_project_name(&self.app.project_name)?;
         validate_required_string("app.name", &self.app.name)?;
         validate_required_string("app.identifier", &self.app.identifier)?;
         validate_optional_relative_path("app.icon", self.app.icon.as_deref())?;
-        validate_optional_relative_path("app.trayIcon", self.app.tray_icon.as_deref())?;
-        if self.capabilities.tray && self.app.tray_icon.is_none() {
+        let mut tray_count = 0;
+        for capability in &self.capabilities {
+            match capability {
+                ProjectCapability::Tray { icon } => {
+                    tray_count += 1;
+                    let Some(icon) = icon.as_deref() else {
+                        return Err(ProjectConfigValidationError::new(
+                            "capabilities[].icon",
+                            "is required for tray capabilities",
+                        ));
+                    };
+                    validate_relative_path("capabilities[].icon", icon)?;
+                }
+            }
+        }
+        if tray_count > 1 {
             return Err(ProjectConfigValidationError::new(
-                "app.trayIcon",
-                "is required when capabilities.tray is true",
+                "capabilities",
+                "must not include more than one tray capability",
             ));
         }
         validate_relative_path("frontend.dist", &self.frontend.dist)?;
@@ -151,14 +186,15 @@ pub struct ProjectApp {
     pub identifier: String,
     #[serde(default)]
     pub icon: Option<String>,
-    #[serde(default)]
-    pub tray_icon: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct ProjectCapabilities {
-    pub tray: bool,
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
+#[serde(tag = "type", deny_unknown_fields, rename_all = "camelCase")]
+pub enum ProjectCapability {
+    Tray {
+        #[serde(default)]
+        icon: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
@@ -593,12 +629,14 @@ mod tests {
     "projectName": "example-app",
     "name": "Example App",
     "identifier": "dev.cefari.example-app",
-    "icon": "assets/icon.png",
-    "trayIcon": "assets/tray-icon.png"
+    "icon": "assets/icon.png"
   },
-  "capabilities": {
-    "tray": true
-  },
+  "capabilities": [
+    {
+      "type": "tray",
+      "icon": "assets/tray-icon.png"
+    }
+  ],
   "frontend": {
     "dist": "frontend/dist",
     "devPort": 5173
@@ -621,12 +659,8 @@ mod tests {
 
         assert_eq!(project.app.project_name, "example-app");
         assert_eq!(project.app.name, "Example App");
-        assert!(project.capabilities.tray);
         assert_eq!(project.app.icon.as_deref(), Some("assets/icon.png"));
-        assert_eq!(
-            project.app.tray_icon.as_deref(),
-            Some("assets/tray-icon.png")
-        );
+        assert_eq!(project.tray_icon(), Some("assets/tray-icon.png"));
         assert_eq!(project.package.product_name, "Example App");
         assert_eq!(project.package.version, "1.2.3");
         assert_eq!(project.frontend.dev_port, 5173);
@@ -662,8 +696,7 @@ mod tests {
         project.validate().expect("config should validate");
 
         assert_eq!(project.frontend.dev_port, 5174);
-        assert!(!project.capabilities.tray);
-        assert!(project.app.tray_icon.is_none());
+        assert!(project.tray_capability().is_none());
         assert_eq!(
             project.frontend.build_command.as_deref(),
             Some(
@@ -704,7 +737,7 @@ mod tests {
     }
 
     #[test]
-    fn validates_tray_icon_when_tray_capability_is_enabled() {
+    fn validates_tray_icon_when_tray_capability_is_missing_icon() {
         let project: ProjectConfig = serde_json::from_str(
             r#"{
   "app": {
@@ -712,9 +745,11 @@ mod tests {
     "name": "Example App",
     "identifier": "dev.cefari.example-app"
   },
-  "capabilities": {
-    "tray": true
-  },
+  "capabilities": [
+    {
+      "type": "tray"
+    }
+  ],
   "frontend": {
     "dist": "frontend/dist"
   },
@@ -736,8 +771,54 @@ mod tests {
         assert_eq!(
             error,
             ProjectConfigValidationError::new(
-                "app.trayIcon",
-                "is required when capabilities.tray is true"
+                "capabilities[].icon",
+                "is required for tray capabilities"
+            )
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_tray_capabilities() {
+        let project: ProjectConfig = serde_json::from_str(
+            r#"{
+  "app": {
+    "projectName": "example-app",
+    "name": "Example App",
+    "identifier": "dev.cefari.example-app"
+  },
+  "capabilities": [
+    {
+      "type": "tray",
+      "icon": "assets/tray-icon.png"
+    },
+    {
+      "type": "tray",
+      "icon": "assets/another-tray-icon.png"
+    }
+  ],
+  "frontend": {
+    "dist": "frontend/dist"
+  },
+  "daemon": {
+    "entry": "daemon/main.ts"
+  },
+  "package": {
+    "productName": "Example App",
+    "version": "1.2.3"
+  }
+}"#,
+        )
+        .expect("config should parse");
+
+        let error = project
+            .validate()
+            .expect_err("duplicate tray capabilities should fail");
+
+        assert_eq!(
+            error,
+            ProjectConfigValidationError::new(
+                "capabilities",
+                "must not include more than one tray capability"
             )
         );
     }

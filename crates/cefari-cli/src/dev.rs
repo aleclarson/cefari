@@ -165,9 +165,9 @@ impl DevProcesses {
         devtools: &DevtoolsEndpoint,
     ) -> Result<()> {
         let frontend_url = self.frontend_url.as_deref();
-        let tray_icon = if project.capabilities.tray {
-            let configured_tray_icon = project.app.tray_icon.as_deref().ok_or_else(|| {
-                anyhow::anyhow!("app.tray_icon is required when capabilities.tray is true")
+        let tray_icon = if project.tray_capability().is_some() {
+            let configured_tray_icon = project.tray_icon().ok_or_else(|| {
+                anyhow::anyhow!("capabilities[].icon is required for tray capabilities")
             })?;
             let tray_icon = project_dir.join(configured_tray_icon);
             Some(tray_icon.canonicalize().with_context(|| {

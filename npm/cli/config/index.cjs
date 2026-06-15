@@ -4,4 +4,8 @@ function defineConfig(config) {
   return config;
 }
 
-module.exports = { defineConfig };
+function tray(config) {
+  return { type: "tray", ...config };
+}
+
+module.exports = { defineConfig, tray };

@@ -269,13 +269,13 @@ fn package_icon_path(
 }
 
 fn package_tray_icon_path(project_dir: &Path, project: &ProjectConfig) -> Result<Option<PathBuf>> {
-    if !project.capabilities.tray {
+    if project.tray_capability().is_none() {
         return Ok(None);
     }
 
-    let tray_icon = project.app.tray_icon.as_deref().ok_or_else(|| {
-        anyhow::anyhow!("app.tray_icon is required when capabilities.tray is true")
-    })?;
+    let tray_icon = project
+        .tray_icon()
+        .ok_or_else(|| anyhow::anyhow!("capabilities[].icon is required for tray capabilities"))?;
     required_project_file(project_dir, tray_icon, "configured tray icon").map(Some)
 }
 
@@ -339,9 +339,8 @@ fn write_package_manifest(
         product_name: project.package.product_name.clone(),
         identifier: project.app.identifier.clone(),
         tray_icon: project
-            .capabilities
-            .tray
-            .then_some("tray-icon.png".to_owned()),
+            .tray_capability()
+            .map(|_| "tray-icon.png".to_owned()),
         desktop_binary: desktop_executable_name(project),
         frontend_dir: normalize(&build_dir.join("frontend")),
         daemon_dir: normalize(&build_dir.join("daemon")),
@@ -428,7 +427,7 @@ mod tests {
     };
 
     use crate::project::{
-        DaemonConfig, FrontendConfig, PackageConfig, ProjectApp, ProjectCapabilities, ProjectConfig,
+        DaemonConfig, FrontendConfig, PackageConfig, ProjectApp, ProjectCapability, ProjectConfig,
     };
 
     use super::{PackageManifest, verify_cef_package_payload};
@@ -510,9 +509,10 @@ mod tests {
                 name: "Example App".to_owned(),
                 identifier: "dev.cefari.example-app".to_owned(),
                 icon: None,
-                tray_icon: Some("assets/tray-icon.png".to_owned()),
             },
-            capabilities: ProjectCapabilities { tray: true },
+            capabilities: vec![ProjectCapability::Tray {
+                icon: Some("assets/tray-icon.png".to_owned()),
+            }],
             frontend: FrontendConfig {
                 dist: "frontend/dist".to_owned(),
                 build_command: None,

@@ -245,7 +245,7 @@ mod tests {
     use std::fs;
 
     use crate::project::{
-        DaemonConfig, FrontendConfig, PackageConfig, ProjectApp, ProjectCapabilities, ProjectConfig,
+        DaemonConfig, FrontendConfig, PackageConfig, ProjectApp, ProjectCapability, ProjectConfig,
     };
 
     use super::{
@@ -327,9 +327,10 @@ mod tests {
                 name: "Example App".to_owned(),
                 identifier: "dev.cefari.example-app".to_owned(),
                 icon: None,
-                tray_icon: Some("assets/tray-icon.png".to_owned()),
             },
-            capabilities: ProjectCapabilities { tray: true },
+            capabilities: vec![ProjectCapability::Tray {
+                icon: Some("assets/tray-icon.png".to_owned()),
+            }],
             frontend: FrontendConfig {
                 dist: "frontend/dist".to_owned(),
                 build_command: None,

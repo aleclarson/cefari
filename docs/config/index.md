@@ -8,7 +8,7 @@ The config file is TypeScript executed by Deno. It should default-export a
 JSON-serializable object, usually through `defineConfig`:
 
 ```ts
-import { defineConfig } from "@cefari/cli";
+import { defineConfig, tray } from "@cefari/cli";
 
 export default defineConfig({
   app: {
@@ -16,9 +16,11 @@ export default defineConfig({
     name: "My Cefari App",
     identifier: "dev.cefari.my-cefari-app",
   },
-  capabilities: {
-    tray: false,
-  },
+  capabilities: [
+    tray({
+      icon: "assets/tray-icon.png",
+    }),
+  ],
   frontend: {
     dist: "frontend/dist",
     devPort: 5173,
@@ -40,8 +42,7 @@ ports, and malformed command arrays are rejected before commands use the config.
 
 ## Sections
 
-- [`app`](app.md): project name, display name, app identifier, app icon, and tray
-  icon.
+- [`app`](app.md): project name, display name, app identifier, and app icon.
 - [`capabilities`](capabilities.md): opt-in native desktop integrations.
 - [`frontend`](frontend.md): frontend dist path and optional build/dev commands.
 - [`daemon`](daemon.md): Deno daemon entrypoint.

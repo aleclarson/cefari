@@ -109,7 +109,7 @@ fn tray_icon_path(paths: &RuntimePaths) -> Result<PathBuf> {
     }
 
     anyhow::bail!(
-        "tray icon is required; configure app.tray_icon and package it as {PACKAGED_TRAY_ICON}"
+        "tray icon is required; configure tray({{ icon }}) and package it as {PACKAGED_TRAY_ICON}"
     )
 }
 
