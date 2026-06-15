@@ -52,6 +52,19 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.1 --activate
+
+      - name: Install TypeScript dependencies
+        run: pnpm --dir npm install --frozen-lockfile
+
       - name: Install CEF build tools on macOS
         if: runner.os == 'macOS'
         run: brew install cmake ninja
@@ -75,7 +88,7 @@ jobs:
           cargo install cargo-codesign --version 0.4.2 --locked
 
       - name: Build cefari CLI
-        run: npm run --prefix npm build
+        run: pnpm --dir npm build
 
       - name: Create release sample project
         run: node npm/dist/bin/cefari.js init .release/cefari-sample --name "Cefari Release Sample"
@@ -178,11 +191,24 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.1 --activate
+
+      - name: Install TypeScript dependencies
+        run: pnpm --dir npm install --frozen-lockfile
+
       - name: Install cargo-codesign
         run: cargo install cargo-codesign --version 0.4.2 --locked
 
       - name: Build cefari CLI
-        run: npm run --prefix npm build
+        run: pnpm --dir npm build
 
       - name: Download native package artifacts
         uses: actions/download-artifact@v4
@@ -277,6 +303,19 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.1 --activate
+
+      - name: Install TypeScript dependencies
+        run: pnpm --dir npm install --frozen-lockfile
+
       - name: Install CEF build tools on macOS
         if: runner.os == 'macOS'
         run: brew install cmake ninja
@@ -307,20 +346,20 @@ jobs:
 
       - name: Build npm package binaries
         run: |
-          npm run --prefix npm build
+          pnpm --dir npm build
           cargo build -p cefari-desktop --release
 
       - name: Assemble npm package
         shell: bash
         run: |
           mkdir -p .release/npm
-          npm pack ./npm --pack-destination .release/npm
+          pnpm --dir npm pack --pack-destination ../.release/npm
 
       - name: Verify npm package
         shell: bash
         run: |
-          npm run --prefix npm check
-          npm run --prefix npm test
+          pnpm --dir npm check
+          pnpm --dir npm test
 
       - name: Upload npm package
         uses: actions/upload-artifact@v4
@@ -346,6 +385,14 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.1 --activate
+
+      - name: Install TypeScript dependencies
+        run: pnpm --dir npm install --frozen-lockfile
+
       - name: Download npm package artifacts
         uses: actions/download-artifact@v4
         with:
@@ -364,7 +411,7 @@ jobs:
           echo "CEFARI_NPM_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Build npm root package
-        run: npm run --prefix npm build
+        run: pnpm --dir npm build
 
       - name: Publish npm packages
         shell: bash
@@ -373,4 +420,4 @@ jobs:
         run: |
           set -euo pipefail
 
-          npm publish ./npm --access public --provenance
+          pnpm --dir npm publish --access public --provenance --no-git-checks

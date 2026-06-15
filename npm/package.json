@@ -4,6 +4,7 @@
   "description": "Cefari TypeScript developer CLI",
   "license": "MIT OR Apache-2.0",
   "type": "module",
+  "packageManager": "pnpm@11.5.1",
   "bin": {
     "cefari": "dist/bin/cefari.js"
   },
@@ -30,7 +31,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc -p tsconfig.json --noEmit && deno check src/app/mod.ts tests/app/cefari_app_test.ts",
-    "test": "npm run build && node --test dist/tests/*.test.js && deno test tests/app"
+    "test": "pnpm build && node --test dist/tests/*.test.js && deno test tests/app"
   },
   "dependencies": {
     "cmd-ts": "^0.15.0",

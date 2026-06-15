@@ -89,6 +89,19 @@ jobs:
         with:
           go-version: stable
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.1 --activate
+
+      - name: Install TypeScript dependencies
+        run: pnpm --dir npm install --frozen-lockfile
+
       - name: Install Linux desktop build libraries
         run: |
           sudo apt-get update
@@ -138,7 +151,7 @@ jobs:
       - name: Build cefari CLI
         shell: bash
         run: |
-          npm run --prefix npm build
+          pnpm --dir npm build
           mkdir -p .ci/bin
           cat > .ci/bin/cefari <<'SH'
           #!/usr/bin/env bash
@@ -244,6 +257,19 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.1 --activate
+
+      - name: Install TypeScript dependencies
+        run: pnpm --dir npm install --frozen-lockfile
+
       - name: Install Linux desktop build libraries
         if: runner.os == 'Linux'
         run: |
@@ -265,7 +291,7 @@ jobs:
         run: cargo install cargo-packager --version 0.11.8 --locked
 
       - name: Build cefari CLI
-        run: npm run --prefix npm build
+        run: pnpm --dir npm build
 
       - name: Build cefari desktop runtime
         run: cargo build -p cefari-desktop --release
@@ -369,11 +395,11 @@ jobs:
           esac
 
           mkdir -p .ci/npm
-          npm pack ./npm --pack-destination .ci/npm
+          pnpm --dir npm pack --pack-destination ../.ci/npm
           echo "CEFARI_NPM_TARGET=$npm_target" >> "$GITHUB_ENV"
 
       - name: Verify npm CLI package
         shell: bash
         run: |
-          npm run --prefix npm check
-          npm run --prefix npm test
+          pnpm --dir npm check
+          pnpm --dir npm test

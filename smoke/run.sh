@@ -39,7 +39,7 @@ rm -rf "$smoke_dir/.cefari"
 mkdir -p "$home_dir"
 
 echo "building cefari binaries"
-npm run --prefix npm build
+pnpm --dir npm build
 cargo build -p cefari-desktop
 
 if [[ ! -f "$repo_root/npm/dist/bin/cefari.js" ]]; then

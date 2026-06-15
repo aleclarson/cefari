@@ -50,6 +50,19 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.1 --activate
+
+      - name: Install TypeScript dependencies
+        run: pnpm --dir npm install --frozen-lockfile
+
       - name: Install CEF build tools on macOS
         if: runner.os == 'macOS'
         run: brew install cmake ninja
@@ -71,7 +84,7 @@ jobs:
         run: cargo install cargo-packager --version 0.11.8 --locked
 
       - name: Build cefari CLI
-        run: npm run --prefix npm build
+        run: pnpm --dir npm build
 
       - name: Create verification project
         run: node npm/dist/bin/cefari.js init .verify/cefari-sample --name "Cefari Platform Verification"

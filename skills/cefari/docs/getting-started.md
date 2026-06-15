@@ -11,15 +11,16 @@ Use this page as the entry point. It branches into task-oriented guides under
 Install the tools Cefari uses for local development and release work:
 
 - Node.js
+- pnpm
 - Rust and Cargo
 - Deno 2.8+
 - `cargo-packager` when creating native packages
 - `cargo-codesign` when signing, notarizing, or generating update signatures
 
-Install the developer-facing CLI through npm:
+Install the developer-facing CLI from the npm registry:
 
 ```bash
-npm install -g cefari
+pnpm add -g cefari
 ```
 
 The npm package installs the TypeScript/Node `cefari` command.

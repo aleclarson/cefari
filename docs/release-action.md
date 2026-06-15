@@ -68,10 +68,10 @@ with:
   cefari-version: "0.1.0"
 ```
 
-When `install-cli` is `true`, the action installs `cefari` from npm and
-then runs release commands through the configured `cefari-command`.
+When `install-cli` is `true`, the action installs `cefari` from npm with pnpm
+and then runs release commands through the configured `cefari-command`.
 Dry runs print the planned install and release commands without requiring the
-CLI to exist. Non-dry runs fail early when `npm` or the configured Cefari
+CLI to exist. Non-dry runs fail early when `pnpm` or the configured Cefari
 command is unavailable. `cefari-version` is required when `install-cli` is
 `true`; the action does not default to `latest`.
 

@@ -19,8 +19,9 @@ git switch -c codex/my-change
 
 ## Install Local Tools
 
-Cefari is a Rust workspace with Deno-based TypeScript packages and templates.
-Use a current stable Rust toolchain with Rust 1.85 or newer and Deno 2.x.
+Cefari is a Rust workspace with a pnpm-managed TypeScript package and Deno
+templates. Use a current stable Rust toolchain with Rust 1.85 or newer,
+Node.js 22 or newer, pnpm 11.5.1, and Deno 2.x.
 
 On macOS, install the native build tools used by CI:
 
@@ -60,7 +61,7 @@ cargo build --workspace
 Build only the CLI:
 
 ```bash
-npm run --prefix npm build
+pnpm --dir npm build
 ```
 
 Run the CLI from source:
@@ -75,7 +76,7 @@ Install the local CLI when you want to use `cefari` directly while testing
 projects or templates:
 
 ```bash
-npm install -g ./npm
+pnpm add -g ./npm
 cefari --help
 ```
 
@@ -118,7 +119,7 @@ Run Rust tests:
 ```bash
 cargo test --workspace
 cargo test -p cefari-core
-npm run --prefix npm test
+pnpm --dir npm test
 cargo test -p cefari-desktop
 cargo test -p cefari-core services::tests -- --nocapture
 ```
@@ -132,8 +133,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 Run TypeScript package checks:
 
 ```bash
-npm run --prefix npm check
-npm run --prefix npm test
+pnpm --dir npm check
+pnpm --dir npm test
 ```
 
 Check the template workspace:
@@ -204,8 +205,8 @@ When Rust IPC types change, keep the generated TypeScript declarations in sync:
 ```bash
 cargo test -p cefari-core generated_typescript_bindings_are_current
 cp crates/cefari-core/bindings/ipc.ts npm/src/app/ipc.ts
-npm run --prefix npm check
-npm run --prefix npm test
+pnpm --dir npm check
+pnpm --dir npm test
 ```
 
 ## Build And Package Smoke Tests
@@ -270,8 +271,8 @@ cargo check --workspace
 cargo check -p cefari-desktop
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
-npm run --prefix npm check
-npm run --prefix npm test
+pnpm --dir npm check
+pnpm --dir npm test
 ```
 
 Review the exact changes:
