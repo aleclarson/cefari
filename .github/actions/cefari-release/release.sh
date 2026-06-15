@@ -30,6 +30,18 @@ update_input_dir="$project_path/dist/update-input"
 release_assets=()
 github_release_assets=()
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=.github/actions/cefari-release/lib/common.sh
+source "$script_dir/lib/common.sh"
+# shellcheck source=.github/actions/cefari-release/lib/assets.sh
+source "$script_dir/lib/assets.sh"
+# shellcheck source=.github/actions/cefari-release/lib/config-version.sh
+source "$script_dir/lib/config-version.sh"
+# shellcheck source=.github/actions/cefari-release/lib/update.sh
+source "$script_dir/lib/update.sh"
+# shellcheck source=.github/actions/cefari-release/lib/github-release.sh
+source "$script_dir/lib/github-release.sh"
+
 write_outputs() {
   {
     echo "package-dir=$package_dir"
@@ -38,190 +50,6 @@ write_outputs() {
     echo "release-artifacts=$release_artifacts_file"
     echo "release-mode=$mode"
   } >> "$GITHUB_OUTPUT"
-}
-
-fail() {
-  echo "cefari-release: $*" >&2
-  exit 1
-}
-
-bool_input() {
-  case "$1" in
-    true|false) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-quote_args() {
-  printf "%q" "$1"
-  shift
-  for arg in "$@"; do
-    printf " %q" "$arg"
-  done
-}
-
-run_cmd() {
-  printf "+ "
-  quote_args "$@"
-  printf "\n"
-  if [[ "$dry_run" != "true" ]]; then
-    "$@"
-  fi
-}
-
-command_available() {
-  command -v "$1" >/dev/null 2>&1
-}
-
-validate_command_available() {
-  local command_name="$1"
-  if [[ "$dry_run" == "true" ]]; then
-    return 0
-  fi
-  command_available "$command_name" || fail "$command_name is required but was not found"
-}
-
-is_release_artifact() {
-  local path="$1"
-  case "$path" in
-    *.app|*.dmg|*.app.tar.gz|*.AppImage|*.deb|*.rpm|*.exe|*.msi|*.zip|*.tar.gz) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-is_signable_artifact() {
-  local path="$1"
-  local platform="$2"
-  case "$platform:$path" in
-    macos:*.app|macos:*.dmg) return 0 ;;
-    linux:*.AppImage|linux:*.deb|linux:*.rpm|linux:*.tar.gz|linux:*.zip) return 0 ;;
-    windows:*.exe|windows:*.msi|windows:*.zip) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-is_notarizable_artifact() {
-  local path="$1"
-  case "$path" in
-    *.app|*.dmg) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-archive_directory_artifact() {
-  local artifact="$1"
-  local archive_name
-  archive_name="$(basename "$artifact").tar.gz"
-  mkdir -p "$github_release_assets_dir"
-  run_cmd tar -czf "$github_release_assets_dir/$archive_name" -C "$(dirname "$artifact")" "$(basename "$artifact")"
-  github_release_assets+=("$github_release_assets_dir/$archive_name")
-}
-
-prepare_github_release_assets() {
-  github_release_assets=()
-  rm -rf "$github_release_assets_dir"
-  mkdir -p "$github_release_assets_dir"
-  for artifact in "${release_assets[@]}"; do
-    if [[ -f "$artifact" ]]; then
-      github_release_assets+=("$artifact")
-    elif [[ -d "$artifact" ]]; then
-      archive_directory_artifact "$artifact"
-    fi
-  done
-  if [[ -d "$update_dir" ]]; then
-    while IFS= read -r artifact; do
-      github_release_assets+=("$artifact")
-    done < <(find "$update_dir" -type f -print | sort)
-  fi
-  [[ "${#github_release_assets[@]}" -gt 0 ]] || fail "no uploadable GitHub release assets were prepared"
-}
-
-infer_update_target() {
-  echo "$update_target"
-}
-
-read_project_package_version() {
-  local loader_dir
-  loader_dir="$(mktemp -d)"
-  trap 'rm -rf "$loader_dir"' RETURN
-  cat > "$loader_dir/cefari-cli-config-api.js" <<'JS'
-export function defineConfig(config) {
-  return config;
-}
-
-export function tray(config) {
-  return { type: "tray", ...config };
-}
-JS
-  cat > "$loader_dir/import_map.json" <<'JSON'
-{
-  "imports": {
-    "@cefari/cli": "./cefari-cli-config-api.js"
-  }
-}
-JSON
-  deno run \
-    --quiet \
-    "--allow-read=$project_path,$loader_dir" \
-    --allow-env \
-    --import-map "$loader_dir/import_map.json" \
-    - "$project_path/cefari.config.ts" <<'JS'
-import { pathToFileURL } from "node:url";
-
-const config = (await import(pathToFileURL(Deno.args[0]).href)).default;
-const version = config?.package?.version;
-if (typeof version === "string") {
-  console.log(version);
-}
-JS
-}
-
-read_package_metadata_version() {
-  local metadata="$package_dir/cargo-packager.toml"
-  [[ -f "$metadata" ]] || fail "package metadata not found at $metadata"
-  awk '
-    /^[[:space:]]*version[[:space:]]*=/ {
-      line = $0
-      sub(/^[^=]*=[[:space:]]*/, "", line)
-      sub(/^[[:space:]]*"/, "", line)
-      sub(/".*$/, "", line)
-      print line
-      exit
-    }
-  ' "$metadata"
-}
-
-create_update_input_archive() {
-  local target="$1"
-  local archive="$update_input_dir/$target.zip"
-  rm -rf "$update_input_dir"
-  mkdir -p "$update_input_dir"
-  rm -f "$archive"
-  (
-    cd "$package_dir/output"
-    zip -qr "$archive" .
-  )
-  echo "$archive"
-}
-
-collect_release_assets() {
-  local output_dir="$package_dir/output"
-  [[ -d "$output_dir" ]] || fail "package output directory not found at $output_dir"
-
-  release_assets=()
-  while IFS= read -r artifact; do
-    if is_release_artifact "$artifact"; then
-      release_assets+=("$artifact")
-    fi
-  done < <(find "$output_dir" -mindepth 1 -maxdepth 1 \( -type f -o -type d \) -print | sort)
-
-  [[ "${#release_assets[@]}" -gt 0 ]] || fail "no release artifacts found under $output_dir"
-  mkdir -p "$(dirname "$release_artifacts_file")"
-  : > "$release_artifacts_file"
-  for artifact in "${release_assets[@]}"; do
-    echo "$artifact" >> "$release_artifacts_file"
-    echo "collected release artifact: $artifact"
-  done
 }
 
 [[ "$mode" == "release" || "$mode" == "prerelease" ]] || fail "mode must be release or prerelease"
@@ -341,24 +169,7 @@ else
 fi
 
 if [[ "$create_github_release" == "true" ]]; then
-  if [[ -z "$release_tag" ]]; then
-    release_tag="${GITHUB_REF_NAME:-}"
-  fi
-  if [[ "$dry_run" == "true" ]]; then
-    echo "+ gh release upload/create for $release_tag"
-  else
-    [[ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]] || fail "GH_TOKEN or GITHUB_TOKEN is required when create-github-release is true"
-    validate_command_available gh
-    prepare_github_release_assets
-    create_release_args=(gh release create "$release_tag" --title "${release_name:-$release_tag}")
-    [[ "$mode" == "prerelease" ]] && create_release_args+=(--prerelease)
-    if gh release view "$release_tag" >/dev/null 2>&1; then
-      echo "GitHub release already exists: $release_tag"
-    else
-      run_cmd "${create_release_args[@]}"
-    fi
-    run_cmd gh release upload "$release_tag" "${github_release_assets[@]}" --clobber
-  fi
+  publish_github_release
 else
   echo "GitHub release creation skipped"
 fi
