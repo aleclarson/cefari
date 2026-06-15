@@ -159,7 +159,11 @@ function trayIconEnv(config: ResolvedCefariConfig): Record<string, string> {
   return tray === undefined ? {} : { CEFARI_TRAY_ICON: resolve(config.root, tray.icon) };
 }
 
-function resolveDesktopRuntime(root: string, deps: DevDependencies): string {
+export function resolveDesktopRuntime(
+  root: string,
+  deps: Pick<DevDependencies, "env" | "spawnSync">,
+  release = false,
+): string {
   const configured = deps.env[CEFARI_DESKTOP_RUNTIME_ENV];
   if (configured !== undefined && configured !== "") {
     if (!existsSync(configured)) {
@@ -177,7 +181,11 @@ function resolveDesktopRuntime(root: string, deps: DevDependencies): string {
 
   const manifest = findWorkspaceManifest(root);
   if (manifest !== null) {
-    const status = deps.spawnSync("cargo", ["build", "--manifest-path", manifest, "-p", "cefari-desktop"], {
+    const args = ["build", "--manifest-path", manifest, "-p", "cefari-desktop"];
+    if (release) {
+      args.push("--release");
+    }
+    const status = deps.spawnSync("cargo", args, {
       cwd: dirname(manifest),
       stdio: "inherit",
       env: deps.env,
@@ -188,7 +196,7 @@ function resolveDesktopRuntime(root: string, deps: DevDependencies): string {
     if (status.status !== 0) {
       throw new Error(`cargo build -p cefari-desktop failed with status ${status.status}`);
     }
-    const runtime = join(dirname(manifest), "target", "debug", binaryName);
+    const runtime = join(dirname(manifest), "target", release ? "release" : "debug", binaryName);
     if (existsSync(runtime)) {
       return runtime;
     }

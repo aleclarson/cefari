@@ -1,4 +1,5 @@
 import { binary, command, flag, number, option, optional, positional, run, string, subcommands } from "cmd-ts";
+import { runCefariBuild } from "./build.js";
 import { runCefariDev } from "./dev.js";
 
 export const VERSION = "0.1.0";
@@ -87,7 +88,9 @@ const build = command({
     path: projectPath,
     release,
   },
-  handler: () => placeholder("build"),
+  handler: async ({ path, release }) => {
+    await runCefariBuild({ root: path, release });
+  },
 });
 
 const packageApp = command({

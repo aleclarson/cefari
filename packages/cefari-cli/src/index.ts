@@ -1,4 +1,10 @@
 export {
+  createViteBuildConfig,
+  runCefariBuild,
+  type BuildDependencies,
+  type BuildOptions,
+} from "./build.js";
+export {
   cefariCli,
   runCefariCli,
   VERSION,
