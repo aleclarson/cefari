@@ -9,14 +9,12 @@ const CEFARI_SMOKE_BACKGROUND_ENV: &str = "CEFARI_SMOKE_BACKGROUND";
 mod imp {
     #![allow(clippy::transmute_ptr_to_ptr)]
 
+    mod bridge;
+    mod navigation;
     mod runtime;
     mod state;
 
-    use std::{
-        fs,
-        path::PathBuf,
-        sync::{Arc, Mutex},
-    };
+    use std::{fs, path::PathBuf, sync::Arc};
 
     use anyhow::{Context, Result};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -26,36 +24,34 @@ mod imp {
 
     use cef::rc::Rc as _;
     use cef::wrapper::message_router::{
-        BrowserSideCallback, BrowserSideHandler, BrowserSideRouter,
-        MessageRouterBrowserSideHandlerCallbacks, MessageRouterConfig, MessageRouterRendererSide,
-        MessageRouterRendererSideHandlerCallbacks, RendererSideRouter,
+        BrowserSideRouter, MessageRouterBrowserSideHandlerCallbacks, MessageRouterConfig,
+        MessageRouterRendererSide, MessageRouterRendererSideHandlerCallbacks, RendererSideRouter,
     };
     use cef::{
         App, BrowserProcessHandler, Client, DownloadHandler, ImplApp, ImplBrowser as _,
         ImplBrowserProcessHandler, ImplClient, ImplCommandLine as _, ImplDownloadHandler,
-        ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler, ImplProcessMessage as _,
-        ImplRenderHandler, ImplRenderProcessHandler, ImplRequest as _, ImplRequestHandler,
-        ImplResourceRequestHandler, ImplSchemeRegistrar as _, LifeSpanHandler, LoadHandler,
-        RenderHandler, RenderProcessHandler, RequestHandler, ResourceRequestHandler, SchemeOptions,
-        WrapApp, WrapBrowserProcessHandler, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
+        ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler, ImplRenderHandler,
+        ImplRenderProcessHandler, ImplRequestHandler, ImplResourceRequestHandler,
+        ImplSchemeRegistrar as _, LifeSpanHandler, LoadHandler, RenderHandler,
+        RenderProcessHandler, RequestHandler, ResourceRequestHandler, SchemeOptions, WrapApp,
+        WrapBrowserProcessHandler, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
         WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler, WrapRequestHandler,
         WrapResourceRequestHandler, wrap_app, wrap_browser_process_handler, wrap_client,
         wrap_download_handler, wrap_life_span_handler, wrap_load_handler, wrap_render_handler,
         wrap_render_process_handler, wrap_request_handler, wrap_resource_request_handler,
     };
 
-    use crate::desktop_bridge::{
-        BridgeOriginPolicy, NavigationDecision, NavigationPolicy, NavigationSurface,
-        denied_response_json, origin_from_url, transport_error_response_json,
-    };
+    use crate::desktop_bridge::{BridgeOriginPolicy, NavigationPolicy, NavigationSurface};
     use crate::desktop_ui::CEFARI_APP_SCHEME;
-    use crate::external;
 
     use super::paths::CefRuntimePathConfig;
-    pub use runtime::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime, MessagePumpScheduler};
-    use state::{
-        SharedAppSchemeState, SharedBridgeIpcState, SharedBrowserState, SharedMessagePumpState,
+    use bridge::{CefariBridgeIpcHandler, bridge_router_config};
+    use navigation::{
+        cef_userfree_string, frame_url, handle_navigation_decision, inject_bridge_script,
+        message_name, optional_cef_string, request_url,
     };
+    pub use runtime::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime, MessagePumpScheduler};
+    use state::{SharedAppSchemeState, SharedBrowserState, SharedMessagePumpState};
 
     fn cef_settings(runtime_paths: &CefRuntimePathConfig) -> cef::Settings {
         let mut settings = cef::Settings {
@@ -157,14 +153,6 @@ mod imp {
 
     fn display_optional_path(path: Option<&PathBuf>) -> String {
         path.map_or_else(|| "<unset>".to_owned(), |path| path.display().to_string())
-    }
-
-    fn bridge_router_config() -> MessageRouterConfig {
-        MessageRouterConfig {
-            js_query_function: "__CEFARI_IPC_QUERY__".to_owned(),
-            js_cancel_function: "__CEFARI_IPC_QUERY_CANCEL__".to_owned(),
-            ..Default::default()
-        }
     }
 
     wrap_app! {
@@ -796,69 +784,6 @@ mod imp {
         }
     }
 
-    struct CefariBridgeIpcHandler {
-        bridge_ipc: SharedBridgeIpcState,
-        origin_policy: BridgeOriginPolicy,
-    }
-
-    impl CefariBridgeIpcHandler {
-        fn new(bridge_ipc: SharedBridgeIpcState, origin_policy: BridgeOriginPolicy) -> Self {
-            Self {
-                bridge_ipc,
-                origin_policy,
-            }
-        }
-    }
-
-    impl BrowserSideHandler for CefariBridgeIpcHandler {
-        fn on_query_str(
-            &self,
-            _browser: Option<cef::Browser>,
-            frame: Option<cef::Frame>,
-            _query_id: i64,
-            request: &str,
-            _persistent: bool,
-            callback: Arc<Mutex<dyn BrowserSideCallback>>,
-        ) -> bool {
-            let frame_url = frame
-                .as_ref()
-                .map(|frame| cef_userfree_string(&frame.url()))
-                .unwrap_or_default();
-            let origin = origin_from_url(&frame_url).unwrap_or_default();
-            if !self.origin_policy.is_trusted_origin(&origin) {
-                let response =
-                    denied_response_json(request, "origin is not allowed to use the Cefari bridge");
-                if let Ok(callback) = callback.lock() {
-                    callback.success_str(&response);
-                }
-                warn!(
-                    frame_url,
-                    origin, "denied CEF bridge IPC from untrusted frame"
-                );
-                return true;
-            }
-
-            if let Err(error) = self.bridge_ipc.send(CefBridgeIpcRequest {
-                origin,
-                request_json: request.to_owned(),
-                callback: callback.clone(),
-            }) {
-                if let Ok(callback) = callback.lock() {
-                    let response =
-                        transport_error_response_json(request, "native IPC transport failed");
-                    callback.success_str(&response);
-                }
-                error!(
-                    %error,
-                    frame_url,
-                    "failed to enqueue CEF bridge IPC request"
-                );
-            }
-
-            true
-        }
-    }
-
     wrap_render_handler! {
         struct CefariRenderHandler;
 
@@ -871,120 +796,6 @@ mod imp {
                 debug!(input_mode = ?input_mode, "CEF virtual keyboard requested");
             }
         }
-    }
-
-    fn optional_cef_string(value: Option<&cef::CefString>) -> String {
-        value.map(ToString::to_string).unwrap_or_default()
-    }
-
-    fn cef_userfree_string(value: &cef::CefStringUserfree) -> String {
-        let value: Option<&cef::sys::_cef_string_utf16_t> = value.into();
-        let Some(value) = value else {
-            return String::new();
-        };
-        if value.str_.is_null() || value.length == 0 {
-            return String::new();
-        }
-
-        cef::CefString::from(*value).to_string()
-    }
-
-    fn frame_url(frame: Option<&mut cef::Frame>) -> String {
-        frame
-            .map(|frame| cef_userfree_string(&frame.url()))
-            .unwrap_or_default()
-    }
-
-    fn request_url(request: Option<&mut cef::Request>) -> String {
-        request
-            .map(|request| cef_userfree_string(&request.url()))
-            .unwrap_or_default()
-    }
-
-    fn message_name(message: Option<&mut cef::ProcessMessage>) -> String {
-        message
-            .map(|message| cef_userfree_string(&message.name()))
-            .unwrap_or_default()
-    }
-
-    fn handle_navigation_decision(
-        policy: &NavigationPolicy,
-        surface: NavigationSurface,
-        url: &str,
-        operation: &str,
-        details: &[(&str, String)],
-    ) -> ::std::os::raw::c_int {
-        let decision = policy.decide(surface, url);
-        match decision.decision {
-            NavigationDecision::Allow => {
-                debug!(url, surface = ?surface, reason = decision.reason, operation, "allowed CEF navigation");
-                0
-            }
-            NavigationDecision::OpenExternally => {
-                match external::open_external_url(url) {
-                    Ok(()) => {
-                        info!(
-                            url,
-                            surface = ?surface,
-                            reason = decision.reason,
-                            operation,
-                            details = ?details,
-                            "opened CEF navigation externally"
-                        );
-                    }
-                    Err(error) => {
-                        warn!(
-                            url,
-                            surface = ?surface,
-                            reason = decision.reason,
-                            operation,
-                            details = ?details,
-                            %error,
-                            "failed to open CEF navigation externally"
-                        );
-                    }
-                }
-                1
-            }
-            NavigationDecision::Deny => {
-                warn!(
-                    url,
-                    surface = ?surface,
-                    reason = decision.reason,
-                    operation,
-                    details = ?details,
-                    "denied CEF navigation"
-                );
-                1
-            }
-        }
-    }
-
-    fn inject_bridge_script(origin_policy: &BridgeOriginPolicy, frame: &mut cef::Frame) {
-        if frame.is_main() == 0 {
-            debug!("skipping Cefari bridge injection for non-main frame");
-            return;
-        }
-
-        let frame_url = cef_userfree_string(&frame.url());
-        let origin = origin_from_url(&frame_url);
-        let Some(script) = origin_policy.bridge_script_for_url(&frame_url) else {
-            debug!(
-                frame_url,
-                origin = origin.as_deref().unwrap_or_default(),
-                "skipping Cefari bridge injection for untrusted frame"
-            );
-            return;
-        };
-
-        let code = cef::CefString::from(script);
-        let script_url = cef::CefString::from("cefari://bridge/bootstrap.js");
-        frame.execute_java_script(Some(&code), Some(&script_url), 1);
-        info!(
-            frame_url,
-            origin = origin.as_deref().unwrap_or_default(),
-            "Cefari bridge script injected"
-        );
     }
 
     pub fn initialize(paths: &cefari_core::RuntimePaths) -> Result<CefRuntime> {
