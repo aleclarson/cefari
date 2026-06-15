@@ -8,7 +8,7 @@ surface is intentionally small: `init`, `dev`, `build`, and `package`.
 Install released CLI builds through npm:
 
 ```bash
-npm install -g cefari
+npm install -g @cefari/cli
 ```
 
 The npm distribution provides the TypeScript/Node `@cefari/cli` command and the

@@ -19,7 +19,7 @@ Install the tools Cefari uses for local development and release work:
 Install the developer-facing CLI through npm:
 
 ```bash
-npm install -g cefari
+npm install -g @cefari/cli
 ```
 
 The npm package installs the TypeScript/Node `cefari` command.
