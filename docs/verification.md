@@ -18,7 +18,7 @@ Docs were checked against:
 - `templates/vite-react-basic/cefari.config.ts`, `deno.json`, frontend and daemon
   workspace manifests, and template workflows
 - `.github/actions/cefari-release/action.yml` and
-  `.github/actions/cefari-release/release.sh`
+  `.github/actions/cefari-release/src/main.ts`
 - `crates/cefari-core/src/ipc.rs` and `crates/cefari-core/bindings/ipc.ts`
 - `crates/cefari-desktop/src/desktop_bridge.rs`, `desktop_ipc.rs`,
   `desktop_menu.rs`, `desktop_tray.rs`, and `desktop_notifications.rs`
@@ -41,10 +41,9 @@ cargo test -p cefari-desktop desktop_notifications
 deno task --cwd templates/vite-react-basic/frontend check
 actionlint docs/examples/cefari-release-workflow.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml
 actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml docs/examples/cefari-release-workflow.yml
-shellcheck .github/actions/cefari-release/release.sh
-bash -n .github/actions/cefari-release/release.sh
+deno task --cwd .github/actions/cefari-release check
 node npm/dist/bin/cefari.js init .ci/release-action-sample --name "Release Action CI"
-GITHUB_OUTPUT=/tmp/cefari-release-output.txt GITHUB_ACTION_PATH="$PWD/.github/actions/cefari-release" CEFARI_PROJECT_PATH=templates/vite-react-basic CEFARI_RELEASE_MODE=prerelease CEFARI_TARGETS=linux-x86_64 CEFARI_COMMAND=cefari CEFARI_INSTALL_CLI=false CEFARI_RELEASE_VERSION=0.0.0-ci CEFARI_RELEASE_TAG=release-action-ci-dry-run CEFARI_CREATE_GITHUB_RELEASE=false CEFARI_UPLOAD_ARTIFACTS=false CEFARI_DRY_RUN=true .github/actions/cefari-release/release.sh
+GITHUB_OUTPUT=/tmp/cefari-release-output.txt GITHUB_ACTION_PATH="$PWD/.github/actions/cefari-release" CEFARI_PROJECT_PATH=templates/vite-react-basic CEFARI_RELEASE_MODE=prerelease CEFARI_TARGETS=linux-x86_64 CEFARI_COMMAND=cefari CEFARI_INSTALL_CLI=false CEFARI_RELEASE_VERSION=0.0.0-ci CEFARI_RELEASE_TAG=release-action-ci-dry-run CEFARI_CREATE_GITHUB_RELEASE=false CEFARI_UPLOAD_ARTIFACTS=false CEFARI_DRY_RUN=true deno run --config .github/actions/cefari-release/deno.json --allow-read --allow-write --allow-env --allow-run .github/actions/cefari-release/src/main.ts
 cargo test -p cefari-core ipc::tests::generated_typescript_bindings_are_current
 cargo test -p cefari-desktop
 pnpm --dir npm check

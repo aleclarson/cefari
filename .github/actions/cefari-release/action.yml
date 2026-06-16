@@ -103,6 +103,10 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set up Deno
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: v2.8.x
     - id: release
       shell: bash
       env:
@@ -127,7 +131,13 @@ runs:
         CEFARI_UPDATE_KEY_ENV: ${{ inputs.update-key-env }}
         CEFARI_DRY_RUN: ${{ inputs.dry-run }}
       run: |
-        "$GITHUB_ACTION_PATH/release.sh"
+        deno run \
+          --config "$GITHUB_ACTION_PATH/deno.json" \
+          --allow-read \
+          --allow-write \
+          --allow-env \
+          --allow-run \
+          "$GITHUB_ACTION_PATH/src/main.ts"
     - name: Upload Cefari release artifacts
       if: ${{ inputs.upload-artifacts == 'true' && inputs.dry-run != 'true' }}
       uses: actions/upload-artifact@v4

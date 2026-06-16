@@ -105,7 +105,7 @@ jobs:
       - name: Install Linux desktop build libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libgtk-3-dev libayatana-appindicator3-dev libxdo-dev shellcheck
+          sudo apt-get install -y cmake ninja-build libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
 
       - name: Install actionlint
         run: |
@@ -115,7 +115,7 @@ jobs:
       - name: Lint release action and workflows
         shell: bash
         run: |
-          shellcheck .github/actions/cefari-release/release.sh
+          deno task --cwd .github/actions/cefari-release check
           actionlint \
             .github/workflows/*.yml \
             templates/vite-react-basic/.github/workflows/release.yml \
@@ -140,7 +140,13 @@ jobs:
           CEFARI_CREATE_GITHUB_RELEASE=false \
           CEFARI_UPLOAD_ARTIFACTS=false \
           CEFARI_DRY_RUN=true \
-            .github/actions/cefari-release/release.sh | tee .ci/release-action-dry-run.log
+            deno run \
+              --config .github/actions/cefari-release/deno.json \
+              --allow-read \
+              --allow-write \
+              --allow-env \
+              --allow-run \
+              .github/actions/cefari-release/src/main.ts | tee .ci/release-action-dry-run.log
 
           grep -q 'artifact collection skipped in dry-run' .ci/release-action-dry-run.log
           grep -q -- '--version 0.0.0-ci' .ci/release-action-dry-run.log
