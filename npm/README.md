@@ -1,11 +1,11 @@
 # cefari
 
-Umbrella package for Cefari app developers. It provides the developer-facing
-`cefari` command, `cefari.config.ts` helpers, and frontend app helpers.
+Umbrella package for Cefari app developers. It provides the Deno-first
+developer-facing `cefari` command, `cefari.config.ts` helpers, and frontend app
+helpers.
 
 The public command surface is intentionally small during Cefari's pre-alpha:
 
-- `cefari init`
 - `cefari dev`
 - `cefari build`
 - `cefari package`

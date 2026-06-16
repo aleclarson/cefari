@@ -10,7 +10,7 @@ behavior, read:
 
 ## App Notes
 
-- Prefer `cefari init` for new apps, then edit `cefari.config.ts` rather than
-  recreating generated structure by hand.
+- Prefer the checked-in Vite React template for new apps, then edit
+  `cefari.config.ts` rather than recreating app structure by hand.
 - Use `app.name` for display text and `app.projectName` for stable
   machine-readable output names.

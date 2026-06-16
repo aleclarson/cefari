@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,7 +23,9 @@ class FakeChild extends EventEmitter implements ChildLike {
 async function projectWithDevConfig(): Promise<{ root: string; runtime: string }> {
   const root = await mkdtemp(join(tmpdir(), "cefari-dev-"));
   const runtime = join(root, "cefari-desktop");
+  await mkdir(join(root, "ui"), { recursive: true });
   await writeFile(runtime, "");
+  await writeFile(join(root, "ui/deno.json"), JSON.stringify({ imports: { "local/app": "../src/app.ts" } }));
   await writeFile(
     join(root, "cefari.config.ts"),
     `import { defineConfig, tray } from "${configApi}";
@@ -105,6 +107,14 @@ test("starts Vite, daemon, and desktop with expected dev inputs", async () => {
 
   assert.deepEqual(viteConfigs[0], {
     root: join(root, "ui"),
+    resolve: {
+      alias: [
+        {
+          find: "local/app",
+          replacement: join(root, "src/app.ts"),
+        },
+      ],
+    },
     configFile: false,
     server: {
       host: "127.0.0.1",

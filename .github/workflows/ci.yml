@@ -161,12 +161,35 @@ jobs:
           mkdir -p .ci/bin
           cat > .ci/bin/cefari <<'SH'
           #!/usr/bin/env bash
-          exec node "$GITHUB_WORKSPACE/npm/dist/bin/cefari.js" "$@"
+          exec deno run \
+            --allow-read \
+            --allow-write \
+            --allow-run \
+            --allow-env \
+            --allow-net \
+            --allow-ffi \
+            --allow-sys \
+            "$GITHUB_WORKSPACE/npm/dist/bin/cefari.js" "$@"
           SH
           chmod +x .ci/bin/cefari
 
       - name: Create release action sample
-        run: node npm/dist/bin/cefari.js init .ci/release-action-sample --name "Release Action CI"
+        shell: bash
+        run: |
+          mkdir -p .ci/release-action-sample
+          cp -R templates/vite-react-basic/. .ci/release-action-sample/
+          rm -rf \
+            .ci/release-action-sample/.tmp \
+            .ci/release-action-sample/build \
+            .ci/release-action-sample/dist \
+            .ci/release-action-sample/node_modules
+          ruby -rjson -e '
+            path = ARGV.fetch(0)
+            data = JSON.parse(File.read(path))
+            data.fetch("imports")["cefari/app"] = File.expand_path("npm/src/app/mod.ts")
+            File.write(path, JSON.pretty_generate(data) + "\n")
+          ' .ci/release-action-sample/frontend/deno.json
+          deno install --config .ci/release-action-sample/deno.json
 
       - name: Create CEF fixture
         shell: bash
@@ -306,12 +329,35 @@ jobs:
         shell: bash
         run: |
           test -f npm/dist/bin/cefari.js
-          node npm/dist/bin/cefari.js --version | grep -E '^[0-9]+\.[0-9]+\.[0-9]+'
+          deno run \
+            --allow-read \
+            --allow-write \
+            --allow-run \
+            --allow-env \
+            --allow-net \
+            --allow-ffi \
+            --allow-sys \
+            npm/dist/bin/cefari.js --version | grep -E '^[0-9]+\.[0-9]+\.[0-9]+'
           mkdir -p .ci/cefari-cli
           cp -R npm/dist .ci/cefari-cli/
 
       - name: Create sample project
-        run: node npm/dist/bin/cefari.js init .ci/cefari-sample --name "CI Package Sample"
+        shell: bash
+        run: |
+          mkdir -p .ci/cefari-sample
+          cp -R templates/vite-react-basic/. .ci/cefari-sample/
+          rm -rf \
+            .ci/cefari-sample/.tmp \
+            .ci/cefari-sample/build \
+            .ci/cefari-sample/dist \
+            .ci/cefari-sample/node_modules
+          ruby -rjson -e '
+            path = ARGV.fetch(0)
+            data = JSON.parse(File.read(path))
+            data.fetch("imports")["cefari/app"] = File.expand_path("npm/src/app/mod.ts")
+            File.write(path, JSON.pretty_generate(data) + "\n")
+          ' .ci/cefari-sample/frontend/deno.json
+          deno install --config .ci/cefari-sample/deno.json
 
       - name: Create CEF fixture
         shell: bash
@@ -329,12 +375,30 @@ jobs:
           echo fixture > .ci/cef-fixture/locales/en-US.pak
 
       - name: Build sample project
-        run: node npm/dist/bin/cefari.js build .ci/cefari-sample
+        run: |
+          deno run \
+            --allow-read \
+            --allow-write \
+            --allow-run \
+            --allow-env \
+            --allow-net \
+            --allow-ffi \
+            --allow-sys \
+            npm/dist/bin/cefari.js build .ci/cefari-sample
         env:
           CEFARI_CEF_RESOURCES_DIR: .ci/cef-fixture
 
       - name: Package sample project metadata
-        run: node npm/dist/bin/cefari.js package .ci/cefari-sample
+        run: |
+          deno run \
+            --allow-read \
+            --allow-write \
+            --allow-run \
+            --allow-env \
+            --allow-net \
+            --allow-ffi \
+            --allow-sys \
+            npm/dist/bin/cefari.js package .ci/cefari-sample
 
       - name: Verify native package payload
         shell: bash
@@ -351,7 +415,7 @@ jobs:
         run: |
           test -f .ci/cefari-sample/build/frontend/index.html
           test -f .ci/cefari-sample/build/daemon/main.ts
-          test -f .ci/cefari-sample/build/daemon/cefari-sample-daemon || test -f .ci/cefari-sample/build/daemon/cefari-sample-daemon.exe
+          test -f .ci/cefari-sample/build/daemon/vite-react-basic-daemon || test -f .ci/cefari-sample/build/daemon/vite-react-basic-daemon.exe
           test -d .ci/cefari-sample/build/cef/resources
           test -f .ci/cefari-sample/build/cef/resources/archive.json
           test -f .ci/cefari-sample/build/cef/resources/libcef.fixture
@@ -367,7 +431,7 @@ jobs:
           test -f .ci/cefari-cli/dist/bin/cefari.js
           ruby -rjson -e '
             desktop_binary = JSON.parse(File.read(".ci/cefari-sample/dist/package/manifest.json")).fetch("desktop_binary")
-            abort "unexpected desktop_binary: #{desktop_binary}" unless desktop_binary.match?(/\Acefari-sample(\.exe)?\z/)
+            abort "unexpected desktop_binary: #{desktop_binary}" unless desktop_binary.match?(/\Avite-react-basic(\.exe)?\z/)
           '
           if grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json; then
             exit 1

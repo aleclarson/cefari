@@ -87,13 +87,46 @@ jobs:
         run: pnpm --dir npm build
 
       - name: Create verification project
-        run: node npm/dist/bin/cefari.js init .verify/cefari-sample --name "Cefari Platform Verification"
+        shell: bash
+        run: |
+          mkdir -p .verify/cefari-sample
+          cp -R templates/vite-react-basic/. .verify/cefari-sample/
+          rm -rf \
+            .verify/cefari-sample/.tmp \
+            .verify/cefari-sample/build \
+            .verify/cefari-sample/dist \
+            .verify/cefari-sample/node_modules
+          ruby -rjson -e '
+            path = ARGV.fetch(0)
+            data = JSON.parse(File.read(path))
+            data.fetch("imports")["cefari/app"] = File.expand_path("npm/src/app/mod.ts")
+            File.write(path, JSON.pretty_generate(data) + "\n")
+          ' .verify/cefari-sample/frontend/deno.json
+          deno install --config .verify/cefari-sample/deno.json
 
       - name: Build verification project
-        run: node npm/dist/bin/cefari.js build .verify/cefari-sample --release
+        run: |
+          deno run \
+            --allow-read \
+            --allow-write \
+            --allow-run \
+            --allow-env \
+            --allow-net \
+            --allow-ffi \
+            --allow-sys \
+            npm/dist/bin/cefari.js build .verify/cefari-sample --release
 
       - name: Package verification project
-        run: node npm/dist/bin/cefari.js package .verify/cefari-sample --release
+        run: |
+          deno run \
+            --allow-read \
+            --allow-write \
+            --allow-run \
+            --allow-env \
+            --allow-net \
+            --allow-ffi \
+            --allow-sys \
+            npm/dist/bin/cefari.js package .verify/cefari-sample --release
 
       - name: Verify native package payload
         shell: bash

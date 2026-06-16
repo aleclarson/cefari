@@ -6,6 +6,8 @@ import { spawnSync } from "node:child_process";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appBuildSource = resolve(packageRoot, "dist/.app-src");
 
+await rm(resolve(packageRoot, "dist"), { force: true, recursive: true });
+
 const tsc = spawnSync("tsc", ["-p", "tsconfig.json"], {
   cwd: packageRoot,
   stdio: "inherit",

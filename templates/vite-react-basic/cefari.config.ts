@@ -5,6 +5,7 @@ export default defineConfig(({ mode }) => ({
     projectName: "vite-react-basic",
     name: "Vite React Basic",
     identifier: "dev.cefari.vite-react-basic",
+    icon: "assets/512x512.png",
   },
   vite: {
     root: "frontend",

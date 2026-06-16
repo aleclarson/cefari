@@ -287,7 +287,8 @@ failure versus invalid Cefari config data.
 
 ## Generated Projects
 
-`cefari init` should generate `cefari.config.ts` instead of `cefari.toml`.
+Future project creation should generate `cefari.config.ts` instead of
+`cefari.toml`.
 
 Generated projects should also have enough TypeScript resolution support for the
 import to work in editors and in Deno. The preferred path is:

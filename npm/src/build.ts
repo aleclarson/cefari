@@ -1,9 +1,8 @@
 import { cp, mkdir, readFile, rm, writeFile, copyFile } from "node:fs/promises";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
-import { build as viteBuild } from "vite";
 import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { ResolvedCefariConfig } from "./config.js";
@@ -52,6 +51,7 @@ export function createViteBuildConfig(config: ResolvedCefariConfig, outDir: stri
   const root = realpathIfExists(resolve(config.root, config.vite.root));
   return {
     root,
+    ...viteResolveConfig(root),
     configFile:
       config.vite.configFile === false
         ? false
@@ -70,6 +70,29 @@ export function createViteBuildConfig(config: ResolvedCefariConfig, outDir: stri
 
 function realpathIfExists(path: string): string {
   return existsSync(path) ? realpathSync(path) : path;
+}
+
+function viteResolveConfig(root: string): Pick<InlineConfig, "resolve"> {
+  const alias = denoLocalImportAliases(root);
+  return alias.length === 0 ? {} : { resolve: { alias } };
+}
+
+function denoLocalImportAliases(root: string): Array<{ find: string; replacement: string }> {
+  const configPath = resolve(root, "deno.json");
+  if (!existsSync(configPath)) {
+    return [];
+  }
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as { imports?: Record<string, string> };
+  return Object.entries(config.imports ?? {})
+    .filter(([, value]) => isLocalImportTarget(value))
+    .map(([find, value]) => ({
+      find,
+      replacement: resolve(root, value),
+    }));
+}
+
+function isLocalImportTarget(value: string): boolean {
+  return value.startsWith(".") || value.startsWith("/");
 }
 
 async function buildDaemon(config: ResolvedCefariConfig, outputDir: string, deps: BuildDependencies): Promise<void> {
@@ -157,7 +180,10 @@ function platformExecutableName(stem: string): string {
 
 function defaultBuildDependencies(): BuildDependencies {
   return {
-    viteBuild,
+    async viteBuild(config) {
+      const { build } = await import("vite");
+      return build(config);
+    },
     spawnSync: (command, args, options) => spawnSync(command, args, options),
     env: process.env,
     stdout: process.stdout,

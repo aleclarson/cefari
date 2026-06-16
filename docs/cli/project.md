@@ -2,23 +2,6 @@
 
 Use project commands for day-to-day app development.
 
-## `cefari init`
-
-Create a new Cefari project:
-
-```bash
-cefari init [PATH] [--name NAME]
-```
-
-Arguments and options:
-
-- `PATH`: directory to create. Defaults to `cefari-app`.
-- `--name NAME`: application display name.
-
-The command refuses to initialize an existing path. The generated project
-includes `cefari.config.ts`, `frontend/index.html`, `daemon/main.ts`, an app README,
-and a Cefari agent skill.
-
 ## `cefari dev`
 
 Run the local development environment:

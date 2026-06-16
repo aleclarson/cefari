@@ -6,7 +6,7 @@ Use this reference when changing files under `templates/`.
 
 - Every checked-in template should be runnable with the local Cefari build.
 - Prefer commands that work from the repository root.
-- Keep template config aligned with `cefari init` output unless the template intentionally demonstrates a different setup.
+- Keep template config aligned with the documented starting-point app structure unless the template intentionally demonstrates a different setup.
 - For Deno workspaces, keep root, frontend, and daemon tasks coherent.
 
 ## Frontend

@@ -1,24 +1,20 @@
 # Scaffold An App
 
-Use `cefari init` to create a minimal Cefari project:
+Use the checked-in Vite React template as the current starting point while the
+project creation flow is being redesigned:
 
 ```bash
-cefari init my-cefari-app --name "My Cefari App"
+cp -R templates/vite-react-basic my-cefari-app
 ```
 
-If no path is supplied, the CLI creates `./cefari-app`.
+## Template Files
 
-## Generated Files
-
-The default scaffold creates:
+The template includes:
 
 - `cefari.config.ts`
-- `frontend/index.html`
+- `frontend/index.html` and React source files
 - `daemon/main.ts`
-- `.agents/skills/cefari/SKILL.md`
 - `README.md`
-
-The command refuses to overwrite an existing path.
 
 ## Project Name Rules
 
@@ -64,8 +60,8 @@ Cefari owns the Vite dev and build lifecycle directly. See
 For the complete app-developer config reference, see
 [`cefari.config.ts` Reference](../config/index.md).
 
-## Generated Agent Skill
+## Agent Skill
 
-`cefari init` copies the Cefari skill into `.agents/skills/cefari/`. That skill
-is a signpost to task-oriented Cefari reference documents for agents working
-inside generated apps.
+Copy the Cefari skill into `.agents/skills/cefari/` when you want project-local
+agent guidance. That skill is a signpost to task-oriented Cefari reference
+documents for agents working inside apps.

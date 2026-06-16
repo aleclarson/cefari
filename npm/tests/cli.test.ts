@@ -10,7 +10,18 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const cliPath = resolve(testDir, "../bin/cefari.js");
 
 async function cefari(args: string[]) {
-  return execFileAsync(process.execPath, [cliPath, ...args], {
+  return execFileAsync("deno", [
+    "run",
+    "--allow-read",
+    "--allow-write",
+    "--allow-run",
+    "--allow-env",
+    "--allow-net",
+    "--allow-ffi",
+    "--allow-sys",
+    cliPath,
+    ...args,
+  ], {
     cwd: resolve(testDir, ".."),
   });
 }
@@ -18,7 +29,7 @@ async function cefari(args: string[]) {
 test("prints root help with the simplified command set", async () => {
   const { stdout } = await cefari(["--help"]);
 
-  assert.match(stdout, /init/);
+  assert.doesNotMatch(stdout, /init/);
   assert.match(stdout, /dev/);
   assert.match(stdout, /build/);
   assert.match(stdout, /package/);

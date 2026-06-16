@@ -11,7 +11,7 @@ documentation.
 
 ## Task References
 
-- Project creation, `cefari init`, and generated app structure:
+- Project creation, template structure, and app setup:
   [project-creation.md](references/project-creation.md)
 - Release workflows, GitHub Actions, signing, notarization, and updates:
   [release-workflows.md](references/release-workflows.md)

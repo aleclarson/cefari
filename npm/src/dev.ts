@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer as createNetServer } from "node:net";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
-import { createServer } from "vite";
+import { fileURLToPath } from "node:url";
 import type { InlineConfig, ViteDevServer } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { CefariCapability, ResolvedCefariConfig } from "./config.js";
@@ -102,8 +102,10 @@ export async function startCefariDev(options: DevOptions = {}, deps = defaultDev
 }
 
 export function createViteDevConfig(config: ResolvedCefariConfig, port: number): InlineConfig {
+  const root = resolve(config.root, config.vite.root);
   return {
-    root: resolve(config.root, config.vite.root),
+    root,
+    ...viteResolveConfig(root),
     configFile:
       config.vite.configFile === false
         ? false
@@ -116,6 +118,29 @@ export function createViteDevConfig(config: ResolvedCefariConfig, port: number):
       strictPort: true,
     },
   };
+}
+
+function viteResolveConfig(root: string): Pick<InlineConfig, "resolve"> {
+  const alias = denoLocalImportAliases(root);
+  return alias.length === 0 ? {} : { resolve: { alias } };
+}
+
+function denoLocalImportAliases(root: string): Array<{ find: string; replacement: string }> {
+  const configPath = resolve(root, "deno.json");
+  if (!existsSync(configPath)) {
+    return [];
+  }
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as { imports?: Record<string, string> };
+  return Object.entries(config.imports ?? {})
+    .filter(([, value]) => isLocalImportTarget(value))
+    .map(([find, value]) => ({
+      find,
+      replacement: resolve(root, value),
+    }));
+}
+
+function isLocalImportTarget(value: string): boolean {
+  return value.startsWith(".") || value.startsWith("/");
 }
 
 function spawnDaemon(config: ResolvedCefariConfig, deps: DevDependencies): ChildLike {
@@ -208,8 +233,14 @@ export function resolveDesktopRuntime(
 }
 
 function bundledRuntimeCandidates(binaryName: string): string[] {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  const distDir = dirname(moduleDir);
   const exeDir = dirname(process.execPath);
   return [
+    join(distDir, "bin", binaryName),
+    join(distDir, "bin", "cefari-runtime", binaryName),
+    join(dirname(distDir), "lib", "cefari", binaryName),
+    join(dirname(distDir), "libexec", "cefari", binaryName),
     join(exeDir, binaryName),
     join(exeDir, "cefari-runtime", binaryName),
     join(dirname(exeDir), "lib", "cefari", binaryName),
@@ -307,7 +338,10 @@ async function childExit(description: string, child: ChildLike): Promise<void> {
 
 function defaultDevDependencies(): DevDependencies {
   return {
-    createServer: (config) => createServer(config),
+    async createServer(config) {
+      const { createServer } = await import("vite");
+      return createServer(config);
+    },
     spawn: (command, args, options) => spawn(command, args, options) as ChildProcess,
     spawnSync: (command, args, options) => spawnSync(command, args, options),
     env: process.env,

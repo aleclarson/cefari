@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,8 +15,10 @@ async function projectWithBuildConfig(): Promise<{ root: string; runtime: string
   const root = await mkdtemp(join(tmpdir(), "cefari-build-"));
   const runtime = join(root, "cefari-desktop");
   const cefResources = join(root, "cef-fixture");
+  await mkdir(join(root, "ui"), { recursive: true });
   await mkdir(join(root, "daemon"), { recursive: true });
   await mkdir(cefResources, { recursive: true });
+  await writeFile(join(root, "ui/deno.json"), JSON.stringify({ imports: { "local/app": "../src/app.ts" } }));
   await writeFile(join(root, "daemon/main.ts"), "console.log('daemon');\n");
   await writeFile(runtime, "desktop-runtime");
   await writeFile(
@@ -90,14 +92,23 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
 
   await runCefariBuild({ root, release: true }, deps);
 
+  const frontendRoot = realpathSync(join(root, "ui"));
   assert.deepEqual(viteConfigs[0], {
-    root: join(root, "ui"),
+    root: frontendRoot,
+    resolve: {
+      alias: [
+        {
+          find: "local/app",
+          replacement: join(frontendRoot, "../src/app.ts"),
+        },
+      ],
+    },
     configFile: false,
     build: {
       outDir: join(root, "build/frontend"),
       emptyOutDir: true,
       rollupOptions: {
-        input: join(root, "ui/index.html"),
+        input: join(frontendRoot, "index.html"),
       },
     },
   });

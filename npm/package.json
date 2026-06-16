@@ -1,7 +1,7 @@
 {
   "name": "cefari",
   "version": "0.1.0",
-  "description": "Cefari TypeScript developer CLI",
+  "description": "Cefari Deno-first developer CLI",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@11.5.1",

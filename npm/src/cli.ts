@@ -1,7 +1,6 @@
 import { binary, command, flag, number, option, optional, positional, run, string, subcommands } from "cmd-ts";
 import { runCefariBuild } from "./build.js";
 import { runCefariDev } from "./dev.js";
-import { runCefariInit } from "./init.js";
 import {
   runCefariPackage,
   runPackageNotarize,
@@ -15,11 +14,10 @@ import {
 
 export const VERSION = "0.1.0";
 
-export type CliTopLevelCommand = "init" | "dev" | "build" | "package" | "unknown";
+export type CliTopLevelCommand = "dev" | "build" | "package" | "unknown";
 export type CliPackageCommand = "package" | "sign" | "notarize" | "update" | "release";
 
 type PlaceholderCommand =
-  | "init"
   | "dev"
   | "build"
   | "package"
@@ -108,22 +106,6 @@ const outputDir = option({
   type: optional(string),
   long: "output-dir",
   description: "Directory where update artifacts are written.",
-});
-
-const init = command({
-  name: "init",
-  description: "Create a new Cefari project.",
-  args: {
-    path: projectPath,
-    name: option({
-      type: optional(string),
-      long: "name",
-      description: "Application display name.",
-    }),
-  },
-  handler: async ({ path, name }) => {
-    await runCefariInit({ path, name });
-  },
 });
 
 const dev = command({
@@ -317,9 +299,8 @@ const packageCommands = subcommands({
 export const cefariCli = subcommands({
   name: "cefari",
   version: VERSION,
-  description: "Create, develop, build, package, and release Cefari apps.",
+  description: "Develop, build, package, and release Cefari apps.",
   cmds: {
-    init,
     dev,
     build,
     package: packageCommands,

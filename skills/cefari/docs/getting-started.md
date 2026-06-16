@@ -23,27 +23,19 @@ Install the developer-facing CLI from the npm registry:
 pnpm add -g cefari
 ```
 
-The npm package installs the TypeScript/Node `cefari` command.
+The npm package installs the Deno-first `cefari` command.
 
 ## Create An App
 
-Create a minimal project:
+Use the checked-in Vite React template as the current starting point while the
+project creation flow is being redesigned:
 
 ```bash
-cefari init my-cefari-app --name "My Cefari App"
+cp -R templates/vite-react-basic my-cefari-app
 ```
 
-The generated `cefari.config.ts` includes:
-
-- `app.projectName`, a lowercase machine name used for executable output
-  names
-- `app.name` and `app.identifier`
-- `vite.root`, `vite.configFile`, and `vite.devPort`
-- `daemon.entry`
-- `package.productName`
-- `package.version`
-
-For full scaffolding guidance, see [Scaffold An App](guides/scaffolding.md).
+Edit `my-cefari-app/cefari.config.ts` for the app name, identifier, package
+version, Vite settings, and daemon entry.
 
 ## Run In Development
 
