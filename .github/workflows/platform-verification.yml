@@ -96,12 +96,7 @@ jobs:
             .verify/cefari-sample/build \
             .verify/cefari-sample/dist \
             .verify/cefari-sample/node_modules
-          ruby -rjson -e '
-            path = ARGV.fetch(0)
-            data = JSON.parse(File.read(path))
-            data.fetch("imports")["cefari/app"] = File.expand_path("npm/src/app/mod.ts")
-            File.write(path, JSON.pretty_generate(data) + "\n")
-          ' .verify/cefari-sample/frontend/deno.json
+          deno eval 'const path = Deno.args[0]; const data = JSON.parse(await Deno.readTextFile(path)); data.imports["cefari/app"] = Deno.cwd() + "/npm/src/app/mod.ts"; await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");' .verify/cefari-sample/frontend/deno.json
           deno install --config .verify/cefari-sample/deno.json
 
       - name: Build verification project
@@ -119,7 +114,7 @@ jobs:
         run: |
           cargo tree -p cefari-desktop -i cefari-core | grep '^cefari-core'
           scripts/extract-native-package-payload.sh .verify/cefari-sample/dist/package/output .verify/package-inspect
-          ruby scripts/verify-native-package-payload.rb .verify/package-inspect "$RUNNER_OS"
+          deno run -A scripts/verify-native-package-payload.ts .verify/package-inspect "$RUNNER_OS"
 
       - name: Upload inspected package payload
         uses: actions/upload-artifact@v4

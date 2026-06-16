@@ -32,7 +32,7 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Check Cefari skill docs
-        run: scripts/sync-cefari-skill-docs.rb --check
+        run: deno run -A scripts/sync-cefari-skill-docs.ts --check
 
       - name: Check workspace
         run: cargo check --workspace
@@ -121,7 +121,7 @@ jobs:
             templates/vite-react-basic/.github/workflows/release.yml \
             templates/vite-react-basic/.github/workflows/prerelease.yml \
             docs/examples/cefari-release-workflow.yml
-          ruby -e 'require "yaml"; ARGV.each { |p| YAML.load_file(p) }' .github/actions/cefari-release/action.yml
+          deno eval 'import { parse } from "jsr:@std/yaml"; for (const path of Deno.args) parse(await Deno.readTextFile(path));' .github/actions/cefari-release/action.yml
 
       - name: Validate release action dry run
         shell: bash
@@ -172,12 +172,7 @@ jobs:
             .ci/release-action-sample/build \
             .ci/release-action-sample/dist \
             .ci/release-action-sample/node_modules
-          ruby -rjson -e '
-            path = ARGV.fetch(0)
-            data = JSON.parse(File.read(path))
-            data.fetch("imports")["cefari/app"] = File.expand_path("npm/src/app/mod.ts")
-            File.write(path, JSON.pretty_generate(data) + "\n")
-          ' .ci/release-action-sample/frontend/deno.json
+          deno eval 'const path = Deno.args[0]; const data = JSON.parse(await Deno.readTextFile(path)); data.imports["cefari/app"] = Deno.cwd() + "/npm/src/app/mod.ts"; await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");' .ci/release-action-sample/frontend/deno.json
           deno install --config .ci/release-action-sample/deno.json
 
       - name: Create CEF fixture
@@ -226,7 +221,7 @@ jobs:
           grep -q . "$RELEASE_ARTIFACTS"
           grep -q 'version = "0.0.0-ci"' "$PACKAGE_DIR/cargo-packager.toml"
           scripts/extract-native-package-payload.sh "$PACKAGE_DIR/output" .ci/release-action-package-inspect
-          ruby scripts/verify-native-package-payload.rb \
+          deno run -A scripts/verify-native-package-payload.ts \
             .ci/release-action-package-inspect \
             "$RUNNER_OS" \
             "$PACKAGE_DIR/manifest.json"
@@ -333,12 +328,7 @@ jobs:
             .ci/cefari-sample/build \
             .ci/cefari-sample/dist \
             .ci/cefari-sample/node_modules
-          ruby -rjson -e '
-            path = ARGV.fetch(0)
-            data = JSON.parse(File.read(path))
-            data.fetch("imports")["cefari/app"] = File.expand_path("npm/src/app/mod.ts")
-            File.write(path, JSON.pretty_generate(data) + "\n")
-          ' .ci/cefari-sample/frontend/deno.json
+          deno eval 'const path = Deno.args[0]; const data = JSON.parse(await Deno.readTextFile(path)); data.imports["cefari/app"] = Deno.cwd() + "/npm/src/app/mod.ts"; await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");' .ci/cefari-sample/frontend/deno.json
           deno install --config .ci/cefari-sample/deno.json
 
       - name: Create CEF fixture
@@ -373,7 +363,7 @@ jobs:
         run: |
           test -d .ci/cefari-sample/dist/package/output
           scripts/extract-native-package-payload.sh .ci/cefari-sample/dist/package/output .ci/package-inspect
-          ruby scripts/verify-native-package-payload.rb \
+          deno run -A scripts/verify-native-package-payload.ts \
             .ci/package-inspect \
             "$RUNNER_OS" \
             .ci/cefari-sample/dist/package/manifest.json
@@ -397,10 +387,7 @@ jobs:
         shell: bash
         run: |
           test -f .ci/cefari-cli/dist/bin/cefari.js
-          ruby -rjson -e '
-            desktop_binary = JSON.parse(File.read(".ci/cefari-sample/dist/package/manifest.json")).fetch("desktop_binary")
-            abort "unexpected desktop_binary: #{desktop_binary}" unless desktop_binary.match?(/\Avite-react-basic(\.exe)?\z/)
-          '
+          deno eval 'const manifest = JSON.parse(await Deno.readTextFile(".ci/cefari-sample/dist/package/manifest.json")); const desktopBinary = manifest.desktop_binary; if (!/^vite-react-basic(\.exe)?$/.test(desktopBinary)) throw new Error("unexpected desktop_binary: " + desktopBinary);'
           if grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json; then
             exit 1
           fi

@@ -100,12 +100,7 @@ jobs:
             .release/cefari-sample/build \
             .release/cefari-sample/dist \
             .release/cefari-sample/node_modules
-          ruby -rjson -e '
-            path = ARGV.fetch(0)
-            data = JSON.parse(File.read(path))
-            data.fetch("imports")["cefari/app"] = File.expand_path("npm/src/app/mod.ts")
-            File.write(path, JSON.pretty_generate(data) + "\n")
-          ' .release/cefari-sample/frontend/deno.json
+          deno eval 'const path = Deno.args[0]; const data = JSON.parse(await Deno.readTextFile(path)); data.imports["cefari/app"] = Deno.cwd() + "/npm/src/app/mod.ts"; await Deno.writeTextFile(path, JSON.stringify(data, null, 2) + "\n");' .release/cefari-sample/frontend/deno.json
           deno install --config .release/cefari-sample/deno.json
 
       - name: Build release sample project
@@ -123,30 +118,26 @@ jobs:
         run: |
           test -d .release/cefari-sample/dist/package/output
           find .release/cefari-sample/dist/package/output -mindepth 1 -maxdepth 1 -print -quit | grep -q .
-          ruby <<'RUBY'
-          require "json"
-
-          manifest = JSON.parse(File.read(".release/cefari-sample/dist/package/manifest.json"))
-          required_files = [
-            manifest.fetch("frontend_dir") + "/index.html",
-            manifest.fetch("daemon_executable"),
-            manifest.fetch("cef_archive_json")
-          ]
-          required_dirs = [
-            manifest.fetch("daemon_dir"),
-            manifest.fetch("cef_resources")
-          ]
-
-          unless manifest.fetch("desktop_binary").match?(/\Acefari-release-sample(\.exe)?\z/)
-            abort "unexpected desktop binary #{manifest.fetch("desktop_binary")}"
-          end
-
-          missing_files = required_files.reject { |path| File.file?(path) }
-          missing_dirs = required_dirs.reject { |path| Dir.exist?(path) }
-
-          abort "missing package input files: #{missing_files.join(", ")}" unless missing_files.empty?
-          abort "missing package input dirs: #{missing_dirs.join(", ")}" unless missing_dirs.empty?
-          RUBY
+          deno eval '
+            const manifest = JSON.parse(await Deno.readTextFile(".release/cefari-sample/dist/package/manifest.json"));
+            const requiredFiles = [
+              manifest.frontend_dir + "/index.html",
+              manifest.daemon_executable,
+              manifest.cef_archive_json,
+            ];
+            const requiredDirs = [manifest.daemon_dir, manifest.cef_resources];
+            if (!/^cefari-release-sample(\.exe)?$/.test(manifest.desktop_binary)) {
+              throw new Error("unexpected desktop binary " + manifest.desktop_binary);
+            }
+            const isFile = async (path) => await Deno.stat(path).then((stat) => stat.isFile).catch(() => false);
+            const isDirectory = async (path) => await Deno.stat(path).then((stat) => stat.isDirectory).catch(() => false);
+            const missingFiles = [];
+            const missingDirs = [];
+            for (const path of requiredFiles) if (!await isFile(path)) missingFiles.push(path);
+            for (const path of requiredDirs) if (!await isDirectory(path)) missingDirs.push(path);
+            if (missingFiles.length) throw new Error("missing package input files: " + missingFiles.join(", "));
+            if (missingDirs.length) throw new Error("missing package input dirs: " + missingDirs.join(", "));
+          '
 
       - name: Verify native package payload
         shell: bash
@@ -158,7 +149,7 @@ jobs:
           output_dir=".release/cefari-sample/dist/package/output"
           inspect_dir=".release/package-inspect"
           scripts/extract-native-package-payload.sh "$output_dir" "$inspect_dir"
-          ruby scripts/verify-native-package-payload.rb \
+          deno run -A scripts/verify-native-package-payload.ts \
             "$inspect_dir" \
             "$RUNNER_OS" \
             .release/cefari-sample/dist/package/manifest.json
