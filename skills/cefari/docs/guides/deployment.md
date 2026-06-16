@@ -86,7 +86,13 @@ CEFARI_INSTALL_CLI=false \
 CEFARI_RELEASE_VERSION=0.0.0-verification \
 CEFARI_RELEASE_TAG=verification-0.0.0 \
 CEFARI_DRY_RUN=true \
-.github/actions/cefari-release/release.sh
+deno run \
+  --config .github/actions/cefari-release/deno.json \
+  --allow-read \
+  --allow-write \
+  --allow-env \
+  --allow-run \
+  .github/actions/cefari-release/src/main.ts
 ```
 
 Dry-run mode prints the planned build, package, signing, notarization, update,
