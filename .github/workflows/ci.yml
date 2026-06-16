@@ -351,11 +351,12 @@ jobs:
         run: |
           test -f .ci/cefari-sample/build/frontend/index.html
           test -f .ci/cefari-sample/build/daemon/main.ts
-          test -f .ci/cefari-sample/build/daemon/ci-package-sample-daemon || test -f .ci/cefari-sample/build/daemon/ci-package-sample-daemon.exe
+          test -f .ci/cefari-sample/build/daemon/cefari-sample-daemon || test -f .ci/cefari-sample/build/daemon/cefari-sample-daemon.exe
           test -d .ci/cefari-sample/build/cef/resources
           test -f .ci/cefari-sample/build/cef/resources/archive.json
           test -f .ci/cefari-sample/build/cef/resources/libcef.fixture
           test -f .ci/cefari-sample/build/cef/manifest.json
+          test -f .ci/cefari-sample/assets/512x512.png
           test -f .ci/cefari-sample/dist/package/cargo-packager.toml
           test -f .ci/cefari-sample/dist/package/manifest.json
           grep -q "build/cef/resources" .ci/cefari-sample/dist/package/manifest.json
@@ -366,7 +367,7 @@ jobs:
           test -f .ci/cefari-cli/dist/bin/cefari.js
           ruby -rjson -e '
             desktop_binary = JSON.parse(File.read(".ci/cefari-sample/dist/package/manifest.json")).fetch("desktop_binary")
-            abort "unexpected desktop_binary: #{desktop_binary}" unless desktop_binary.match?(/\Aci-package-sample(\.exe)?\z/)
+            abort "unexpected desktop_binary: #{desktop_binary}" unless desktop_binary.match?(/\Acefari-sample(\.exe)?\z/)
           '
           if grep -q 'cefari-cli' .ci/cefari-sample/dist/package/manifest.json; then
             exit 1
