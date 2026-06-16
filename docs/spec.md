@@ -6,6 +6,8 @@ APIs.
 
 ## App Project Model
 
+> This section explains how a Cefari app describes itself.
+
 - Cefari apps are described by a `cefari.config.ts` file.
 - The config can define the app's stable identity.
   - It sets the machine name used for generated executables.
@@ -31,6 +33,8 @@ APIs.
 
 ## Project Creation And Templates
 
+> This section covers the starter app and example release workflows.
+
 - Cefari includes a Vite React starter template.
   - The template has separate frontend and daemon workspaces.
   - The frontend is a Vite app.
@@ -42,6 +46,8 @@ APIs.
   - The workflows show platform matrix setup for macOS, Linux, and Windows.
 
 ## Local Development
+
+> This section describes what Cefari runs while you build locally.
 
 - Cefari can run an app in local development mode.
   - It starts the Vite dev server.
@@ -58,6 +64,8 @@ APIs.
   - The contract is opt-in and does not make app chrome draggable by default.
 
 ## Build
+
+> This section lists the artifacts Cefari can produce for an app.
 
 - Cefari can build all app runtime pieces.
   - It builds the Vite frontend into `build/frontend/`.
@@ -79,6 +87,8 @@ APIs.
 
 ## Package Assembly
 
+> This section explains how Cefari prepares native packages.
+
 - Cefari can prepare native package assembly metadata.
   - It writes package metadata under `dist/package/`.
   - It writes a `cargo-packager` configuration.
@@ -96,6 +106,8 @@ APIs.
   - It includes configured tray icons.
 
 ## Release Tooling
+
+> This section covers signing, notarization, updates, and release automation.
 
 - Cefari can sign packaged artifacts.
   - It supports macOS, Windows, and Linux signing targets.
@@ -127,6 +139,8 @@ APIs.
 
 ## Native Desktop Runtime
 
+> This section describes the Rust runtime that ships with an app.
+
 - Cefari ships a Rust desktop runtime.
   - It owns CEF startup.
   - It owns windowing.
@@ -148,6 +162,8 @@ APIs.
 
 ## Frontend TypeScript APIs
 
+> This section lists the typed APIs available to frontend code.
+
 - Cefari exposes frontend APIs through `cefari/app`.
   - Apps can import a single `cefari` object.
   - Apps can import individual namespaces.
@@ -164,6 +180,8 @@ APIs.
 
 ## App And Window APIs
 
+> This section covers app lifecycle and native window controls.
+
 - Apps can ask the native runtime to quit.
 - Apps can show the native window.
 - Apps can focus the native window.
@@ -176,6 +194,8 @@ APIs.
 
 ## Shell APIs
 
+> This section covers OS shell actions exposed to frontend code.
+
 - Apps can open the runtime log location.
 - Apps can ask the OS to open external URLs.
   - URLs are validated by Rust before opening.
@@ -185,6 +205,8 @@ APIs.
   - The current desktop dispatcher reports it as unsupported.
 
 ## Updates
+
+> This section describes update checks, apply flows, and update events.
 
 - Apps can read updater state.
   - The updater can report that updates are not configured.
@@ -204,6 +226,8 @@ APIs.
 
 ## Daemon Service
 
+> This section covers the Deno daemon and its frontend status API.
+
 - Cefari can run a Deno daemon beside the frontend.
 - Apps can read daemon service status from the frontend.
 - Apps can subscribe to daemon service status changes.
@@ -211,6 +235,8 @@ APIs.
   commands.
 
 ## Tray And Menu Bar
+
+> This section explains tray and menu-bar integration.
 
 - Apps can opt into tray or menu-bar integration.
   - The config requires a tray icon.
@@ -220,6 +246,8 @@ APIs.
 - Frontend code can subscribe to tray restore-window events.
 
 ## Notifications
+
+> This section describes native notification support and its current limits.
 
 - Cefari prepares native notification support during desktop startup.
   - It uses the configured app identifier.
@@ -241,6 +269,8 @@ APIs.
     unsupported.
 
 ## App Data Filesystem
+
+> This section covers app-scoped file access from frontend code.
 
 - Apps can access files inside Cefari's managed app-data directory.
   - Paths are relative to the app-data directory.
@@ -274,6 +304,8 @@ APIs.
 
 ## Platform And Distribution Support
 
+> This section names the platforms and tools Cefari builds on.
+
 - Cefari targets desktop app distribution on macOS, Linux, and Windows.
 - Cefari uses CEF for the embedded browser runtime.
 - Cefari uses Vite for frontend development and builds.
@@ -284,6 +316,8 @@ APIs.
   updater signatures.
 
 ## Project Status
+
+> This section states Cefari's current maturity and compatibility stance.
 
 - Cefari is pre-alpha.
 - Breaking changes are expected.
