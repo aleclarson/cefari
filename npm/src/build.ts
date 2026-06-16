@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, rm, writeFile, copyFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
@@ -49,8 +49,9 @@ export async function runCefariBuild(options: BuildOptions = {}, deps = defaultB
 }
 
 export function createViteBuildConfig(config: ResolvedCefariConfig, outDir: string): InlineConfig {
+  const root = realpathIfExists(resolve(config.root, config.vite.root));
   return {
-    root: resolve(config.root, config.vite.root),
+    root,
     configFile:
       config.vite.configFile === false
         ? false
@@ -60,8 +61,15 @@ export function createViteBuildConfig(config: ResolvedCefariConfig, outDir: stri
     build: {
       outDir,
       emptyOutDir: true,
+      rollupOptions: {
+        input: resolve(root, "index.html"),
+      },
     },
   };
+}
+
+function realpathIfExists(path: string): string {
+  return existsSync(path) ? realpathSync(path) : path;
 }
 
 async function buildDaemon(config: ResolvedCefariConfig, outputDir: string, deps: BuildDependencies): Promise<void> {

@@ -96,6 +96,9 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
     build: {
       outDir: join(root, "build/frontend"),
       emptyOutDir: true,
+      rollupOptions: {
+        input: join(root, "ui/index.html"),
+      },
     },
   });
   assert.deepEqual(spawned[0], {

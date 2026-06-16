@@ -92,9 +92,7 @@ function frontendTemplate(displayName: string): string {
 }
 
 function viteConfigTemplate(): string {
-  return `import { defineConfig } from "vite";
-
-export default defineConfig({});
+  return `export default {};
 `;
 }
 
