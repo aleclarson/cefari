@@ -83,8 +83,10 @@ test("package writes metadata and manifest for build artifacts", async () => {
   await runCefariPackage({ root, releaseVersion: "1.2.3" }, packageDeps(spawned));
 
   const metadata = await readFile(join(root, "dist/package/cargo-packager.toml"), "utf8");
+  const packageFormat = process.platform === "darwin" ? "dmg" : process.platform === "win32" ? "nsis" : "deb";
   assert.match(metadata, /name = "dev\.cefari\.package"/);
   assert.match(metadata, /version = "1\.2\.3"/);
+  assert.match(metadata, new RegExp(`formats = \\["${packageFormat}"\\]`));
   assert.match(metadata, /target = "frontend"/);
   assert.match(metadata, /target = "tray-icon\.png"/);
   const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));

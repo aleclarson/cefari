@@ -198,6 +198,7 @@ async function writePackageMetadata(
     `product_name = ${tomlString(config.package.productName)}`,
     `version = ${tomlString(releaseVersion ?? config.package.version)}`,
     `identifier = ${tomlString(config.app.identifier)}`,
+    `formats = [${tomlString(defaultPackageFormat())}]`,
     `binaries_dir = ${tomlString(join(buildDir, "desktop"))}`,
     "",
     "[[binaries]]",
@@ -320,6 +321,16 @@ function defaultUpdateFormat(target: string): UpdatePackageFormat {
     return "nsis";
   }
   return "appimage";
+}
+
+function defaultPackageFormat(): string {
+  if (process.platform === "darwin") {
+    return "dmg";
+  }
+  if (process.platform === "win32") {
+    return "nsis";
+  }
+  return "deb";
 }
 
 function daemonExecutableName(config: ResolvedCefariConfig): string {
