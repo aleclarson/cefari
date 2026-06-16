@@ -32,9 +32,8 @@ export async function readProjectPackageVersion(config: ReleaseConfig): Promise<
     const command = new Deno.Command("deno", {
       args: [
         "run",
+        "-A",
         "--quiet",
-        `--allow-read=${resolve(config.projectPath)},${loaderDir}`,
-        "--allow-env",
         "--import-map",
         importMap,
         "-",

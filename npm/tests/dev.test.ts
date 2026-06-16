@@ -126,7 +126,7 @@ test("starts Vite, daemon, and desktop with expected dev inputs", async () => {
   assert.equal(session.devtoolsUrl, "http://127.0.0.1:9222");
 
   assert.equal(spawned[0].command, "deno");
-  assert.deepEqual(spawned[0].args, ["run", "--watch", "--allow-read", "--allow-net", "daemon/main.ts"]);
+  assert.deepEqual(spawned[0].args, ["run", "-A", "--watch", "daemon/main.ts"]);
   assert.equal(spawned[0].options.cwd, root);
   assert.equal(spawned[0].options.env?.CEFARI_DAEMON_LOG, join(root, ".cefari", "daemon.log"));
 

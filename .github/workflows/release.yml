@@ -110,26 +110,12 @@ jobs:
 
       - name: Build release sample project
         run: |
-          deno run \
-            --allow-read \
-            --allow-write \
-            --allow-run \
-            --allow-env \
-            --allow-net \
-            --allow-ffi \
-            --allow-sys \
+          deno run -A \
             npm/dist/bin/cefari.js build .release/cefari-sample --release
 
       - name: Package release sample project
         run: |
-          deno run \
-            --allow-read \
-            --allow-write \
-            --allow-run \
-            --allow-env \
-            --allow-net \
-            --allow-ffi \
-            --allow-sys \
+          deno run -A \
             npm/dist/bin/cefari.js package .release/cefari-sample --release
 
       - name: Verify release package artifacts
@@ -184,14 +170,7 @@ jobs:
           shopt -s nullglob
           artifacts=(.release/cefari-sample/dist/package/output/*)
           for artifact in "${artifacts[@]}"; do
-            deno run \
-              --allow-read \
-              --allow-write \
-              --allow-run \
-              --allow-env \
-              --allow-net \
-              --allow-ffi \
-              --allow-sys \
+            deno run -A \
               npm/dist/bin/cefari.js package sign "$artifact" --platform "${{ matrix.target.sign_platform }}"
           done
 
@@ -202,14 +181,7 @@ jobs:
           shopt -s nullglob
           artifacts=(.release/cefari-sample/dist/package/output/*.app .release/cefari-sample/dist/package/output/*.dmg)
           for artifact in "${artifacts[@]}"; do
-            deno run \
-              --allow-read \
-              --allow-write \
-              --allow-run \
-              --allow-env \
-              --allow-net \
-              --allow-ffi \
-              --allow-sys \
+            deno run -A \
               npm/dist/bin/cefari.js package notarize "$artifact"
           done
 
@@ -291,14 +263,7 @@ jobs:
             package_name="$(basename "$package_dir" | sed 's/^native-package-//')"
             archive=".release/update/${package_name}.zip"
             (cd "$package_dir" && zip -r "$GITHUB_WORKSPACE/$archive" .)
-            deno run \
-              --allow-read \
-              --allow-write \
-              --allow-run \
-              --allow-env \
-              --allow-net \
-              --allow-ffi \
-              --allow-sys \
+            deno run -A \
               npm/dist/bin/cefari.js package update "$archive" \
               --url "${CEFARI_UPDATE_BASE_URL}/$(basename "$archive")" \
               --version "$CEFARI_RELEASE_VERSION" \

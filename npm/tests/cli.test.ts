@@ -12,13 +12,7 @@ const cliPath = resolve(testDir, "../bin/cefari.js");
 async function cefari(args: string[]) {
   return execFileAsync("deno", [
     "run",
-    "--allow-read",
-    "--allow-write",
-    "--allow-run",
-    "--allow-env",
-    "--allow-net",
-    "--allow-ffi",
-    "--allow-sys",
+    "-A",
     cliPath,
     ...args,
   ], {

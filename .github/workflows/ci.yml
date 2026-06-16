@@ -140,12 +140,8 @@ jobs:
           CEFARI_CREATE_GITHUB_RELEASE=false \
           CEFARI_UPLOAD_ARTIFACTS=false \
           CEFARI_DRY_RUN=true \
-            deno run \
+            deno run -A \
               --config .github/actions/cefari-release/deno.json \
-              --allow-read \
-              --allow-write \
-              --allow-env \
-              --allow-run \
               .github/actions/cefari-release/src/main.ts | tee .ci/release-action-dry-run.log
 
           grep -q 'artifact collection skipped in dry-run' .ci/release-action-dry-run.log
@@ -161,14 +157,7 @@ jobs:
           mkdir -p .ci/bin
           cat > .ci/bin/cefari <<'SH'
           #!/usr/bin/env bash
-          exec deno run \
-            --allow-read \
-            --allow-write \
-            --allow-run \
-            --allow-env \
-            --allow-net \
-            --allow-ffi \
-            --allow-sys \
+          exec deno run -A \
             "$GITHUB_WORKSPACE/npm/dist/bin/cefari.js" "$@"
           SH
           chmod +x .ci/bin/cefari
@@ -329,14 +318,7 @@ jobs:
         shell: bash
         run: |
           test -f npm/dist/bin/cefari.js
-          deno run \
-            --allow-read \
-            --allow-write \
-            --allow-run \
-            --allow-env \
-            --allow-net \
-            --allow-ffi \
-            --allow-sys \
+          deno run -A \
             npm/dist/bin/cefari.js --version | grep -E '^[0-9]+\.[0-9]+\.[0-9]+'
           mkdir -p .ci/cefari-cli
           cp -R npm/dist .ci/cefari-cli/
@@ -376,28 +358,14 @@ jobs:
 
       - name: Build sample project
         run: |
-          deno run \
-            --allow-read \
-            --allow-write \
-            --allow-run \
-            --allow-env \
-            --allow-net \
-            --allow-ffi \
-            --allow-sys \
+          deno run -A \
             npm/dist/bin/cefari.js build .ci/cefari-sample
         env:
           CEFARI_CEF_RESOURCES_DIR: .ci/cef-fixture
 
       - name: Package sample project metadata
         run: |
-          deno run \
-            --allow-read \
-            --allow-write \
-            --allow-run \
-            --allow-env \
-            --allow-net \
-            --allow-ffi \
-            --allow-sys \
+          deno run -A \
             npm/dist/bin/cefari.js package .ci/cefari-sample
 
       - name: Verify native package payload

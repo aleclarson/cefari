@@ -146,7 +146,7 @@ function isLocalImportTarget(value: string): boolean {
 function spawnDaemon(config: ResolvedCefariConfig, deps: DevDependencies): ChildLike {
   const cefariDir = join(config.root, ".cefari");
   const daemonLog = join(cefariDir, "daemon.log");
-  return deps.spawn("deno", ["run", "--watch", "--allow-read", "--allow-net", config.daemon.entry], {
+  return deps.spawn("deno", ["run", "-A", "--watch", config.daemon.entry], {
     cwd: config.root,
     env: {
       ...deps.env,

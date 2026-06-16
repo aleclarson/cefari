@@ -19,7 +19,7 @@ daemon: {
 `cefari dev` runs the daemon with Deno watch mode from the project root:
 
 ```bash
-deno run --watch --allow-read --allow-net <entry>
+deno run -A --watch <entry>
 ```
 
 ## Build Behavior

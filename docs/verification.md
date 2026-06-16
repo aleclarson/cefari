@@ -35,7 +35,7 @@ cefari --help
 cp -R templates/vite-react-basic /tmp/cefari-docs-smoke
 cefari package
 cefari --help
-deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-ffi --allow-sys npm/dist/bin/cefari.js --help
+deno run -A npm/dist/bin/cefari.js --help
 pnpm --dir npm test
 cargo test -p cefari-desktop desktop_notifications
 deno task --cwd templates/vite-react-basic/frontend check
@@ -43,7 +43,7 @@ actionlint docs/examples/cefari-release-workflow.yml templates/vite-react-basic/
 actionlint .github/workflows/*.yml templates/vite-react-basic/.github/workflows/release.yml templates/vite-react-basic/.github/workflows/prerelease.yml docs/examples/cefari-release-workflow.yml
 deno task --cwd .github/actions/cefari-release check
 cp -R templates/vite-react-basic .ci/release-action-sample
-GITHUB_OUTPUT=/tmp/cefari-release-output.txt GITHUB_ACTION_PATH="$PWD/.github/actions/cefari-release" CEFARI_PROJECT_PATH=templates/vite-react-basic CEFARI_RELEASE_MODE=prerelease CEFARI_TARGETS=linux-x86_64 CEFARI_COMMAND=cefari CEFARI_INSTALL_CLI=false CEFARI_RELEASE_VERSION=0.0.0-ci CEFARI_RELEASE_TAG=release-action-ci-dry-run CEFARI_CREATE_GITHUB_RELEASE=false CEFARI_UPLOAD_ARTIFACTS=false CEFARI_DRY_RUN=true deno run --config .github/actions/cefari-release/deno.json --allow-read --allow-write --allow-env --allow-run .github/actions/cefari-release/src/main.ts
+GITHUB_OUTPUT=/tmp/cefari-release-output.txt GITHUB_ACTION_PATH="$PWD/.github/actions/cefari-release" CEFARI_PROJECT_PATH=templates/vite-react-basic CEFARI_RELEASE_MODE=prerelease CEFARI_TARGETS=linux-x86_64 CEFARI_COMMAND=cefari CEFARI_INSTALL_CLI=false CEFARI_RELEASE_VERSION=0.0.0-ci CEFARI_RELEASE_TAG=release-action-ci-dry-run CEFARI_CREATE_GITHUB_RELEASE=false CEFARI_UPLOAD_ARTIFACTS=false CEFARI_DRY_RUN=true deno run -A --config .github/actions/cefari-release/deno.json .github/actions/cefari-release/src/main.ts
 cargo test -p cefari-core ipc::tests::generated_typescript_bindings_are_current
 cargo test -p cefari-desktop
 pnpm --dir npm check

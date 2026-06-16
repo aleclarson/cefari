@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-ffi --allow-sys
+#!/usr/bin/env -S deno run -A
 
 import { runCefariCli } from "../src/index.js";
 

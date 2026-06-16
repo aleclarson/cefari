@@ -106,26 +106,12 @@ jobs:
 
       - name: Build verification project
         run: |
-          deno run \
-            --allow-read \
-            --allow-write \
-            --allow-run \
-            --allow-env \
-            --allow-net \
-            --allow-ffi \
-            --allow-sys \
+          deno run -A \
             npm/dist/bin/cefari.js build .verify/cefari-sample --release
 
       - name: Package verification project
         run: |
-          deno run \
-            --allow-read \
-            --allow-write \
-            --allow-run \
-            --allow-env \
-            --allow-net \
-            --allow-ffi \
-            --allow-sys \
+          deno run -A \
             npm/dist/bin/cefari.js package .verify/cefari-sample --release
 
       - name: Verify native package payload
