@@ -6,6 +6,11 @@ export interface InitOptions {
   name?: string;
 }
 
+const defaultAppIconPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAALUlEQVR4Ae3KwQkAMAwDsWj/lXbJgRL8ngVvMBAgs2CHgVCCueI/1EFVZFpCgg2zRwM4DwAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 export async function runCefariInit(options: InitOptions = {}): Promise<void> {
   const destination = resolve(options.path ?? "cefari-app");
   if (await exists(destination)) {
@@ -17,7 +22,9 @@ export async function runCefariInit(options: InitOptions = {}): Promise<void> {
 
   await mkdir(resolve(destination, "frontend"), { recursive: true });
   await mkdir(resolve(destination, "daemon"), { recursive: true });
+  await mkdir(resolve(destination, "assets"), { recursive: true });
   await writeFile(resolve(destination, "cefari.config.ts"), configTemplate(projectName, displayName));
+  await writeFile(resolve(destination, "assets/app-icon.png"), defaultAppIconPng);
   await writeFile(resolve(destination, "frontend/index.html"), frontendTemplate(displayName));
   await writeFile(resolve(destination, "frontend/vite.config.js"), viteConfigTemplate());
   await writeFile(resolve(destination, "daemon/main.ts"), daemonTemplate(displayName));
@@ -57,6 +64,7 @@ export default defineConfig({
     projectName: "${escapeString(projectName)}",
     name: "${escapeString(displayName)}",
     identifier: "dev.cefari.${escapeString(projectName)}",
+    icon: "assets/app-icon.png",
   },
   vite: {
     root: "frontend",
