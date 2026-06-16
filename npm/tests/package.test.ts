@@ -91,7 +91,10 @@ test("package writes metadata and manifest for build artifacts", async () => {
   assert.equal(manifest.product_name, "Package App");
   assert.equal(manifest.tray_icon, "tray-icon.png");
   assert.match(manifest.daemon_executable, /package-app-daemon/);
-  assert.equal(spawned[0].command, "cargo-packager");
+  assert.deepEqual(spawned[0], {
+    command: "cargo-packager",
+    args: ["--config", join(root, "dist/package/cargo-packager.toml"), "--out-dir", join(root, "dist/package/output")],
+  });
 });
 
 test("package sign maps to cargo-codesign macos args", async () => {

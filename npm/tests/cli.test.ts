@@ -56,6 +56,7 @@ test("documents nested package release subcommand", async () => {
   const { stdout } = await cefari(["package", "release", "--help"]);
 
   assert.match(stdout, /--version/);
+  assert.match(stdout, /--update-key-env/);
   assert.match(stdout, /--dry-run/);
 });
 

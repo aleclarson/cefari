@@ -98,6 +98,12 @@ const keyEnv = option({
   description: "Environment variable containing the update signing key.",
 });
 
+const releaseUpdateKeyEnv = option({
+  type: optional(string),
+  long: "update-key-env",
+  description: "Environment variable containing the update signing key.",
+});
+
 const outputDir = option({
   type: optional(string),
   long: "output-dir",
@@ -254,7 +260,7 @@ const packageRelease = command({
     }),
     updateTarget,
     updateFormat,
-    updateKeyEnv: keyEnv,
+    updateKeyEnv: releaseUpdateKeyEnv,
     githubRelease: flag({
       long: "github-release",
       description: "Create or update a GitHub release.",

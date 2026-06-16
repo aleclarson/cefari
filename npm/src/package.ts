@@ -237,7 +237,7 @@ async function writePackageManifest(
 function runCargoPackager(packageDir: string, deps: PackageDependencies): void {
   const config = join(packageDir, "cargo-packager.toml");
   const output = join(packageDir, "output");
-  const command = deps.spawnSync("cargo-packager", ["--config", config, "--output", output], {
+  const command = deps.spawnSync("cargo-packager", ["--config", config, "--out-dir", output], {
     cwd: packageDir,
     env: deps.env,
     stdio: "inherit",
