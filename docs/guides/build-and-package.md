@@ -19,6 +19,7 @@ If `PATH` is omitted, Cefari uses the current directory.
 `cefari build` writes generated artifacts under `build/`:
 
 - `build/frontend/`
+- `build/config/cefari.json`
 - `build/daemon/main.ts`
 - `build/daemon/<projectName>-daemon`
 - `build/desktop/<projectName>`
@@ -57,6 +58,12 @@ When Cefari is running from a source checkout, the CLI still builds
 `CEFARI_DESKTOP_RUNTIME=/path/to/cefari-desktop` to force a specific prebuilt
 runtime and skip the Cargo build.
 
+## Runtime Config
+
+`cefari build` writes `build/config/cefari.json` for the desktop runtime. The
+file contains the app identity, app version, and configured deep-link schemes
+that the runtime needs after packaging.
+
 ## CEF Resources
 
 `cefari build` prepares CEF resources as part of the build. The package step
@@ -65,8 +72,9 @@ Native packages include the prepared CEF resource directory as the package
 resource target `cef`; at runtime, Cefari uses that directory for CEF resources,
 locales when present, and platform framework files when present.
 Packaging verifies that the desktop binary used as the CEF subprocess is present,
-that `archive.json` exists, that the CEF resource directory contains runtime
-payload files, and that `cef/locales/` contains at least one locale file.
+that `build/config/cefari.json` exists, that `archive.json` exists, that the CEF
+resource directory contains runtime payload files, and that `cef/locales/`
+contains at least one locale file.
 
 On macOS, packages that include `Chromium Embedded Framework.framework` must be
 signed and notarized with that framework payload intact. Run
@@ -87,6 +95,9 @@ assembly metadata under `dist/package/`:
 When `cargo-packager` is available, Cefari invokes it and writes native package
 output under `dist/package/output/`. When it is not available, Cefari leaves the
 metadata in place and reports that native package generation was skipped.
+
+Configured deep-link schemes are written to Cargo Packager metadata during this
+step. Packaged apps use that metadata for OS protocol registration.
 
 For release-profile packaging:
 

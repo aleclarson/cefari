@@ -22,10 +22,22 @@ Available event names:
 - `windowShown`
 - `windowFocused`
 - `windowClosed`
+- `deepLinkOpened`
 - `trayRestoreWindow`
 - `updateStateChanged`
 - `serviceStatusChanged`
 - `notification.response`
+
+Subscribe to deep links when the app config registers URL schemes:
+
+```ts
+import { cefari } from "cefari/app";
+
+cefari.on("deepLinkOpened", (event) => {
+  const url = new URL(event.url);
+  console.log(url.protocol, url.pathname);
+});
+```
 
 Namespace helpers call the same event system:
 

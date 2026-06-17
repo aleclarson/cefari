@@ -48,6 +48,13 @@ Tests may install a mock bridge on `globalThis.cefari` or `window.cefari`.
 Production app code should treat the bridge as runtime-provided and use
 `cefari.isAvailable()` to check for it.
 
+Native events use the same bridge. For example, an opened configured deep link
+arrives as:
+
+```ts
+{ event: "deepLinkOpened", payload: { url: "myapp://open/item" } }
+```
+
 ## Current Command Surface
 
 The generated command union currently includes:

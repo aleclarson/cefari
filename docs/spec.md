@@ -26,6 +26,7 @@ APIs.
   - It sets the app version used by package metadata and update checks.
 - The config can opt into native capabilities.
   - Tray and menu-bar integration is available when configured.
+  - Deep-link URL schemes are available when configured.
   - Native capabilities are disabled unless the app opts in.
 - Config paths are resolved relative to the app project.
   - Path fields must remain inside the project.
@@ -69,6 +70,7 @@ APIs.
 
 - Cefari can build all app runtime pieces.
   - It builds the Vite frontend into `build/frontend/`.
+  - It writes runtime config into `build/config/cefari.json`.
   - It copies the daemon source entry into `build/daemon/main.ts`.
   - It compiles the daemon into a project-named executable.
   - It prepares a desktop runtime executable.
@@ -101,9 +103,11 @@ APIs.
 - Cefari validates package inputs before assembly.
   - It expects build artifacts to already exist.
   - It checks the desktop executable.
+  - It checks runtime config.
   - It checks CEF resource metadata.
   - It checks for locale files.
   - It includes configured tray icons.
+  - It registers configured deep-link URL schemes.
 
 ## Release Tooling
 
@@ -153,6 +157,10 @@ APIs.
   - The frontend talks to the runtime through `window.cefari`.
   - The runtime exposes a typed IPC contract.
   - The TypeScript package re-exports the generated IPC types.
+- Cefari can receive configured OS deep links.
+  - Configured URL schemes are registered in packaged apps.
+  - Opened deep links are delivered to frontend code as events.
+  - A second process can forward deep links to the already-running app.
 - Cefari separates reusable runtime helpers from desktop concerns.
   - Shared config, paths, resources, logging inputs, services, updates, and IPC
     types live in the core crate.
@@ -174,6 +182,7 @@ APIs.
   - Apps can subscribe to named events.
   - Apps can subscribe to all native events.
   - Event subscriptions return unsubscribe functions.
+  - Apps can subscribe to deep-link open events.
 - Cefari exposes typed errors.
   - Unsupported native calls report a typed unsupported error.
   - Runtime IPC errors are wrapped as `CefariError` values.
@@ -200,6 +209,10 @@ APIs.
 - Apps can ask the OS to open external URLs.
   - URLs are validated by Rust before opening.
   - String URLs and `URL` objects are accepted by the TypeScript wrapper.
+- Apps can receive configured custom URL schemes from the OS.
+  - Deep links are delivered as typed frontend events.
+  - The event payload includes the opened URL string.
+  - Unconfigured custom schemes are ignored by the runtime.
 - Cefari reserves a UI reload command.
   - The frontend wrapper exists.
   - The current desktop dispatcher reports it as unsupported.

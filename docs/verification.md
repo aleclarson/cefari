@@ -3,7 +3,7 @@
 This page records the evidence used to keep the documentation grounded in the
 current repository state.
 
-Last checked: 2026-06-13.
+Last checked: 2026-06-17.
 
 ## Source Evidence
 
@@ -21,7 +21,8 @@ Docs were checked against:
   `.github/actions/cefari-release/src/main.ts`
 - `crates/cefari-core/src/ipc.rs` and `crates/cefari-core/bindings/ipc.ts`
 - `crates/cefari-desktop/src/desktop_bridge.rs`, `desktop_ipc.rs`,
-  `desktop_menu.rs`, `desktop_tray.rs`, and `desktop_notifications.rs`
+  `desktop_menu.rs`, `desktop_tray.rs`, `desktop_single_instance.rs`, and
+  `desktop_notifications.rs`
 - `npm/src/app/mod.ts`, namespace wrapper modules, and
   `npm/tests/app/cefari_app_test.ts`
 
@@ -49,6 +50,36 @@ cargo test -p cefari-desktop
 pnpm --dir npm check
 pnpm --dir npm test
 ```
+
+## Deep Link Verification
+
+Automated checks cover deep-link config validation, generated package metadata,
+runtime config output, typed IPC events, event filtering, primary runtime URL
+classification, and secondary-process forwarding helpers.
+
+Manual packaged-app checks are still required for OS protocol registration:
+
+```bash
+cefari build /path/to/project --release
+cefari package /path/to/project --release
+```
+
+After installing or launching the packaged app, open a configured URL such as
+`myapp://open/item`. Expected behavior:
+
+- the app opens if it was not running
+- the existing app window focuses if it was already running
+- the frontend receives `cefari.on("deepLinkOpened", ...)`
+- unconfigured custom schemes are ignored by Cefari
+
+Platform notes:
+
+- macOS: verify from Finder, Terminal `open 'myapp://open/item'`, or a browser
+  prompt after installing the packaged app.
+- Windows: verify from the Run dialog or `start myapp://open/item` after
+  installing the packaged app.
+- Linux: verify through the desktop environment or `xdg-open
+  'myapp://open/item'` after installing the packaged app.
 
 ## Release Action CI
 
