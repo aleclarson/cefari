@@ -6,8 +6,8 @@ use std::{
 
 use anyhow::{Context, Result};
 use cefari_core::{
-    CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse, DeepLinkOpenEvent,
-    RuntimePaths,
+    CefariIpcCommand, CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
+    DeepLinkOpenEvent, RuntimePaths, WindowCreateRequest,
 };
 use tao::{
     event::{Event, StartCause, WindowEvent},
@@ -23,6 +23,7 @@ use crate::{
 
 const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
 const CEFARI_SMOKE_BACKGROUND_ENV: &str = "CEFARI_SMOKE_BACKGROUND";
+const CEFARI_SMOKE_CREATE_WINDOW_ENV: &str = "CEFARI_SMOKE_CREATE_WINDOW";
 const CEFARI_SMOKE_EXIT_AFTER_MS_ENV: &str = "CEFARI_SMOKE_EXIT_AFTER_MS";
 const CEF_MESSAGE_PUMP_FALLBACK_INTERVAL: Duration = Duration::from_millis(16);
 
@@ -93,6 +94,7 @@ pub(crate) fn run_native_shell(
         guards,
         deep_link_forwarder,
         menu,
+        shell_ui.clone(),
         paths,
         runtime_operations,
         devtools_enabled,
@@ -102,9 +104,10 @@ pub(crate) fn run_native_shell(
 fn run_event_loop(
     event_loop: EventLoop<UserEvent>,
     mut window_manager: window::WindowManager,
-    guards: RuntimeGuards,
+    mut guards: RuntimeGuards,
     _deep_link_forwarder: desktop_single_instance::DeepLinkForwarder,
     menu: desktop_menu::DesktopMenu,
+    shell_ui: desktop_ui::ShellUi,
     paths: RuntimePaths,
     runtime_operations: runtime::RuntimeOperations,
     devtools_enabled: bool,
@@ -113,22 +116,46 @@ fn run_event_loop(
 
     let mut cef_message_pump_deadline = Some(Instant::now());
     let mut tray = None;
-    event_loop.run(move |event, _, control_flow| {
-        let _guards = &guards;
+    let mut smoke_secondary_created = false;
+    event_loop.run(move |event, event_loop_target, control_flow| {
         let _menu = &menu;
         let _tray = &tray;
         *control_flow = ControlFlow::Wait;
 
         match event {
             Event::NewEvents(start_cause) => match start_cause {
-                StartCause::Init if desktop_tray::tray_enabled(&paths) => {
-                    match desktop_tray::DesktopTray::new(runtime_operations.app_config(), &paths) {
-                        Ok(desktop_tray) => {
-                            tray = Some(desktop_tray);
+                StartCause::Init => {
+                    if desktop_tray::tray_enabled(&paths) {
+                        match desktop_tray::DesktopTray::new(runtime_operations.app_config(), &paths)
+                        {
+                            Ok(desktop_tray) => {
+                                tray = Some(desktop_tray);
+                            }
+                            Err(error) => {
+                                error!(%error, "failed to initialize tray icon");
+                            }
                         }
-                        Err(error) => {
-                            error!(%error, "failed to initialize tray icon");
-                        }
+                    }
+                    if smoke_create_window_requested() && !smoke_secondary_created {
+                        smoke_secondary_created = true;
+                        let mut context = DesktopShellContext {
+                            window_manager: &mut window_manager,
+                            event_loop: event_loop_target,
+                            shell_ui: &shell_ui,
+                            paths: &paths,
+                            cef_runtime: &mut guards.cef_runtime,
+                            runtime_operations: &runtime_operations,
+                            source_window_id: None,
+                            should_exit: false,
+                        };
+                        let response = desktop_ipc::DesktopIpcDispatcher::dispatch(
+                            CefariIpcRequest {
+                                id: "cefari.smoke.create_window".to_owned(),
+                                command: smoke_create_window_command(),
+                            },
+                            &mut context,
+                        );
+                        handle_ipc_response(&response);
                     }
                 }
                 StartCause::ResumeTimeReached { .. } | StartCause::WaitCancelled { .. } => {
@@ -158,9 +185,12 @@ fn run_event_loop(
                 {
                     let mut context = DesktopShellContext {
                         window_manager: &mut window_manager,
+                        event_loop: event_loop_target,
+                        shell_ui: &shell_ui,
                         paths: &paths,
-                        cef_runtime: &guards.cef_runtime,
+                        cef_runtime: &mut guards.cef_runtime,
                         runtime_operations: &runtime_operations,
+                        source_window_id: None,
                         should_exit: false,
                     };
                     let response = desktop_ipc::DesktopIpcDispatcher::dispatch(
@@ -182,9 +212,12 @@ fn run_event_loop(
                 if let Some(command) = desktop_tray::ipc_command_for_event(&tray_event) {
                     let mut context = DesktopShellContext {
                         window_manager: &mut window_manager,
+                        event_loop: event_loop_target,
+                        shell_ui: &shell_ui,
                         paths: &paths,
-                        cef_runtime: &guards.cef_runtime,
+                        cef_runtime: &mut guards.cef_runtime,
                         runtime_operations: &runtime_operations,
+                        source_window_id: None,
                         should_exit: false,
                     };
                     let response = desktop_ipc::DesktopIpcDispatcher::dispatch(
@@ -215,9 +248,12 @@ fn run_event_loop(
                 );
                 let mut context = DesktopShellContext {
                     window_manager: &mut window_manager,
+                    event_loop: event_loop_target,
+                    shell_ui: &shell_ui,
                     paths: &paths,
-                    cef_runtime: &guards.cef_runtime,
+                    cef_runtime: &mut guards.cef_runtime,
                     runtime_operations: &runtime_operations,
+                    source_window_id: Some(source_window_id),
                     should_exit: false,
                 };
                 let bridge = desktop_bridge::CefariBridge::new(
@@ -237,27 +273,49 @@ fn run_event_loop(
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
+                window_id: tao_window_id,
                 ..
             } => {
-                if let Err(error) = guards.cef_runtime.close_browser(false) {
-                    debug!(%error, "CEF browser close skipped or failed");
+                let window_id = window_manager
+                    .window_id_for_tao(tao_window_id)
+                    .unwrap_or_else(|| window::MAIN_WINDOW_ID.to_owned());
+                if let Err(error) = guards
+                    .cef_runtime
+                    .close_browser_for_window(&window_id, false)
+                {
+                    debug!(%error, %window_id, "CEF browser close skipped or failed");
                 }
-                log_cef_lifecycle_result(
-                    guards.cef_runtime.emit_event(&CefariIpcEvent::WindowClosed(
-                        cefari_core::WindowIdEvent {
-                            window_id: window::MAIN_WINDOW_ID.to_owned(),
-                        },
-                    )),
+                let state = if window_id == window::MAIN_WINDOW_ID {
+                    let state = window_manager.close_main();
+                    *control_flow = ControlFlow::Exit;
+                    state
+                } else {
+                    match window_manager.remove_window(&window_id) {
+                        Ok(state) => state,
+                        Err(error) => {
+                            debug!(%error, %window_id, "Tao close requested for unknown Cefari window");
+                            return;
+                        }
+                    }
+                };
+                emit_window_event(
+                    &guards.cef_runtime,
+                    &CefariIpcEvent::WindowClosed(cefari_core::WindowIdEvent {
+                        window_id: state.id,
+                    }),
                     "emitted Cefari window closed event",
                 );
-                window_manager.close_main();
             }
             Event::WindowEvent {
                 event: WindowEvent::Resized(size),
+                window_id: tao_window_id,
                 ..
             } => {
+                let window_id = window_manager
+                    .window_id_for_tao(tao_window_id)
+                    .unwrap_or_else(|| window::MAIN_WINDOW_ID.to_owned());
                 log_cef_lifecycle_result(
-                    guards.cef_runtime.notify_browser_resized(),
+                    guards.cef_runtime.notify_browser_resized_for_window(&window_id),
                     "resized CEF browser after Tao window resize",
                 );
                 debug!(
@@ -272,14 +330,20 @@ fn run_event_loop(
                         scale_factor,
                         new_inner_size,
                     },
+                window_id: tao_window_id,
                 ..
             } => {
+                let window_id = window_manager
+                    .window_id_for_tao(tao_window_id)
+                    .unwrap_or_else(|| window::MAIN_WINDOW_ID.to_owned());
                 log_cef_lifecycle_result(
-                    guards.cef_runtime.notify_browser_screen_info_changed(),
+                    guards
+                        .cef_runtime
+                        .notify_browser_screen_info_changed_for_window(&window_id),
                     "notified CEF browser of screen info change",
                 );
                 log_cef_lifecycle_result(
-                    guards.cef_runtime.notify_browser_resized(),
+                    guards.cef_runtime.notify_browser_resized_for_window(&window_id),
                     "resized CEF browser after Tao scale-factor change",
                 );
                 debug!(
@@ -291,34 +355,53 @@ fn run_event_loop(
             }
             Event::WindowEvent {
                 event: WindowEvent::Moved(position),
+                window_id: tao_window_id,
                 ..
             } => {
+                let window_id = window_manager
+                    .window_id_for_tao(tao_window_id)
+                    .unwrap_or_else(|| window::MAIN_WINDOW_ID.to_owned());
                 log_cef_lifecycle_result(
-                    guards.cef_runtime.notify_browser_move_or_resize_started(),
+                    guards
+                        .cef_runtime
+                        .notify_browser_move_or_resize_started_for_window(&window_id),
                     "notified CEF browser of Tao window move",
                 );
                 debug!(x = position.x, y = position.y, "Tao window moved");
             }
             Event::WindowEvent {
                 event: WindowEvent::Focused(focused),
+                window_id: tao_window_id,
                 ..
             } => {
+                let window_id = window_manager
+                    .window_id_for_tao(tao_window_id)
+                    .unwrap_or_else(|| window::MAIN_WINDOW_ID.to_owned());
                 log_cef_lifecycle_result(
-                    guards.cef_runtime.focus_browser(focused),
+                    guards
+                        .cef_runtime
+                        .focus_browser_for_window(&window_id, focused),
                     "updated CEF browser focus",
                 );
             }
             Event::WindowEvent {
                 event: WindowEvent::Destroyed,
+                window_id: tao_window_id,
                 ..
             } => {
-                if guards.cef_runtime.has_browser() {
+                if let Some(window_id) = window_manager.window_id_for_tao(tao_window_id) {
+                    if window_id == window::MAIN_WINDOW_ID {
+                        *control_flow = ControlFlow::Exit;
+                    } else if let Err(error) = window_manager.remove_window(&window_id) {
+                        debug!(%error, %window_id, "Tao destroyed unknown secondary window");
+                    }
+                } else if guards.cef_runtime.has_browser() {
                     log_cef_lifecycle_result(
                         guards.cef_runtime.close_browser(true),
                         "force-closed CEF browser after Tao window destruction",
                     );
+                    *control_flow = ControlFlow::Exit;
                 }
-                *control_flow = ControlFlow::Exit;
             }
             Event::MainEventsCleared => {
                 pump_due_cef_message_loop(&guards.cef_runtime, &mut cef_message_pump_deadline);
@@ -423,7 +506,7 @@ fn deliver_deep_link_url(
     window_manager: &mut window::WindowManager,
     cef_runtime: &desktop_cef::CefRuntime,
 ) {
-    if let Err(error) = window_manager.focus_main() {
+    if let Err(error) = window_manager.focus_window(window::MAIN_WINDOW_ID) {
         debug!(%error, "failed to focus main window for deep link");
     }
     let event = CefariIpcEvent::DeepLinkOpened(DeepLinkOpenEvent {
@@ -446,6 +529,34 @@ fn smoke_exit_delay() -> Option<Duration> {
 
 pub(crate) fn smoke_background_requested() -> bool {
     std::env::var(CEFARI_SMOKE_BACKGROUND_ENV).is_ok_and(|value| value == "1")
+}
+
+fn smoke_create_window_requested() -> bool {
+    std::env::var(CEFARI_SMOKE_CREATE_WINDOW_ENV).is_ok_and(|value| value == "1")
+}
+
+fn smoke_create_window_command() -> CefariIpcCommand {
+    CefariIpcCommand::WindowCreate(WindowCreateRequest {
+        id: Some("smoke-secondary".to_owned()),
+        route: Some("/smoke-secondary".to_owned()),
+        title: Some("Cefari Smoke Secondary".to_owned()),
+        width: Some(720),
+        height: Some(560),
+        min_width: None,
+        min_height: None,
+        max_width: None,
+        max_height: None,
+        x: None,
+        y: None,
+        visible: Some(!smoke_background_requested()),
+        focused: Some(!smoke_background_requested()),
+        resizable: None,
+        decorations: None,
+        always_on_top: None,
+        parent_id: None,
+        modal: None,
+        persist_key: None,
+    })
 }
 
 fn dev_mode_requested() -> bool {
@@ -480,6 +591,14 @@ fn log_cef_lifecycle_result(result: Result<()>, success_message: &'static str) {
         Ok(()) => debug!("{success_message}"),
         Err(error) => debug!(%error, "{success_message} skipped or failed"),
     }
+}
+
+fn emit_window_event(
+    cef_runtime: &desktop_cef::CefRuntime,
+    event: &CefariIpcEvent,
+    success_message: &'static str,
+) {
+    log_cef_lifecycle_result(cef_runtime.emit_event(event), success_message);
 }
 
 fn cef_message_pump_deadline(delay_ms: i64) -> Instant {
@@ -565,7 +684,7 @@ fn handle_ipc_response(response: &CefariIpcResponse) {
 mod tests {
     use super::{
         OpenedUrlAction, apply_cef_message_pump_control_flow, cef_message_pump_deadline,
-        earliest_deadline, opened_url_action,
+        earliest_deadline, opened_url_action, smoke_create_window_command,
     };
     use std::time::{Duration, Instant};
     use tao::event_loop::ControlFlow;
@@ -615,5 +734,17 @@ mod tests {
             opened_url_action("unknown", &schemes),
             OpenedUrlAction::Unsupported
         );
+    }
+
+    #[test]
+    fn smoke_create_window_command_targets_secondary_route() {
+        let cefari_core::CefariIpcCommand::WindowCreate(request) = smoke_create_window_command()
+        else {
+            panic!("smoke command should create a window");
+        };
+
+        assert_eq!(request.id.as_deref(), Some("smoke-secondary"));
+        assert_eq!(request.route.as_deref(), Some("/smoke-secondary"));
+        assert_eq!(request.title.as_deref(), Some("Cefari Smoke Secondary"));
     }
 }

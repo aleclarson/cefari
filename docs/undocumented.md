@@ -5,10 +5,8 @@ the supported feature inventory or another documentation page.
 
 ## Pending Placement
 
-- Multi-window native runtime support is planned but not yet supported. The
-  current contract proposal lives in
+- Multi-window parent/modal behavior and window-state persistence are planned
+  but not yet supported. The current contract proposal lives in
   [`docs/proposals/multi-window-support.md`](proposals/multi-window-support.md).
-  The IPC schema, `cefari.windows` TypeScript manager, and `cefari.window`
-  current-window facade reserve `windowCurrent`, `windowList`, `windowCreate`,
-  target-aware window controls, and window-scoped lifecycle events, but
-  secondary native window creation is still pending.
+  The IPC schema reserves parent, modal, and persistence fields before those
+  options are wired end to end.

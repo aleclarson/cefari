@@ -34,6 +34,19 @@ impl SharedBrowserState {
             .context("CEF main browser is not available")
     }
 
+    pub(super) fn browser_for_window(&self, window_id: &str) -> Result<cef::Browser> {
+        let state = self.0.borrow();
+        let browser_identifier = state
+            .browser_windows
+            .browser_identifier(window_id)
+            .with_context(|| format!("CEF browser for window {window_id} is not available"))?;
+        state
+            .browsers
+            .get(&browser_identifier)
+            .cloned()
+            .with_context(|| format!("CEF browser {browser_identifier} is not retained"))
+    }
+
     pub(super) fn browsers(&self) -> Vec<cef::Browser> {
         self.0.borrow().browsers.values().cloned().collect()
     }
@@ -139,6 +152,14 @@ impl BrowserWindowRegistry {
         self.browser_windows
             .get(&browser_identifier)
             .map(String::as_str)
+    }
+
+    fn browser_identifier(&self, window_id: &str) -> Option<i32> {
+        self.browser_windows
+            .iter()
+            .find_map(|(identifier, registered_window_id)| {
+                (registered_window_id == window_id).then_some(*identifier)
+            })
     }
 }
 
@@ -255,6 +276,9 @@ mod tests {
         assert_eq!(registry.window_id(7), Some("main"));
         assert_eq!(registry.window_id(9), Some("settings"));
         assert_eq!(registry.window_id(11), None);
+        assert_eq!(registry.browser_identifier("main"), Some(7));
+        assert_eq!(registry.browser_identifier("settings"), Some(9));
+        assert_eq!(registry.browser_identifier("missing"), None);
 
         registry.unregister(7);
 

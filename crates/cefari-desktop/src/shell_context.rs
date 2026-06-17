@@ -3,20 +3,25 @@ use cefari_core::{
     CefariIpcEvent, DialogCommand, DialogResult, DownloadCommand, DownloadResult, FileResult,
     FilesCommand, RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult,
     UpdateStateResult, WindowCreateRequest, WindowIdEvent, WindowListResult, WindowSetTitleRequest,
-    WindowState, WindowStateEvent, WindowTargetRequest,
+    WindowState, WindowStateEvent, WindowTarget, WindowTargetRequest,
 };
+use tao::event_loop::EventLoopWindowTarget;
 use tracing::debug;
 
 use crate::{
     desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, external, runtime,
     window,
 };
+use crate::{desktop_ui, event_loop::UserEvent};
 
 pub(crate) struct DesktopShellContext<'a> {
     pub(crate) window_manager: &'a mut window::WindowManager,
+    pub(crate) event_loop: &'a EventLoopWindowTarget<UserEvent>,
+    pub(crate) shell_ui: &'a desktop_ui::ShellUi,
     pub(crate) paths: &'a RuntimePaths,
-    pub(crate) cef_runtime: &'a desktop_cef::CefRuntime,
+    pub(crate) cef_runtime: &'a mut desktop_cef::CefRuntime,
     pub(crate) runtime_operations: &'a runtime::RuntimeOperations,
+    pub(crate) source_window_id: Option<String>,
     pub(crate) should_exit: bool,
 }
 
@@ -28,36 +33,62 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn window_current(&mut self) -> Result<WindowState> {
-        Ok(self.window_manager.main_state())
+        let id = self
+            .source_window_id
+            .as_deref()
+            .unwrap_or(window::MAIN_WINDOW_ID);
+        self.window_manager.state(id)
     }
 
     fn window_list(&mut self) -> Result<WindowListResult> {
         Ok(WindowListResult {
-            windows: vec![self.window_manager.main_state()],
+            windows: self.window_manager.states(),
         })
     }
 
-    fn window_create(&mut self, _request: &WindowCreateRequest) -> Result<WindowState> {
-        anyhow::bail!("creating secondary windows is not available yet")
+    fn window_create(&mut self, request: &WindowCreateRequest) -> Result<WindowState> {
+        let state = self
+            .window_manager
+            .create_secondary(self.event_loop, request)?;
+        let url = window::window_url(&self.shell_ui.url(), &state.id, state.route.as_deref())?;
+        if let Err(error) = self.cef_runtime.create_browser_for_window(
+            &state.id,
+            self.window_manager.window(&state.id)?,
+            &url,
+        ) {
+            let _ = self.window_manager.remove_window(&state.id);
+            return Err(error);
+        }
+        self.emit_event(&CefariIpcEvent::WindowCreated(state_event(&state)));
+        Ok(state)
     }
 
     fn window_show(&mut self, request: &WindowTargetRequest) -> Result<WindowState> {
-        ensure_main_target(request)?;
-        let state = self.window_manager.show_main()?;
+        let id = self.target_window_id(request)?;
+        let state = self.window_manager.show_window(&id)?;
         self.emit_event(&CefariIpcEvent::WindowShown(state_event(&state)));
         Ok(state)
     }
 
     fn window_focus(&mut self, request: &WindowTargetRequest) -> Result<WindowState> {
-        ensure_main_target(request)?;
-        let state = self.window_manager.focus_main()?;
+        let id = self.target_window_id(request)?;
+        let state = self.window_manager.focus_window(&id)?;
+        if let Err(error) = self.cef_runtime.focus_browser_for_window(&id, true) {
+            debug!(%error, window_id = %id, "failed to focus CEF browser for window");
+        }
         self.emit_event(&CefariIpcEvent::WindowFocused(state_event(&state)));
         Ok(state)
     }
 
     fn window_close(&mut self, request: &WindowTargetRequest) -> Result<WindowState> {
-        ensure_main_target(request)?;
-        let state = self.window_manager.close_main();
+        let id = self.target_window_id(request)?;
+        if let Err(error) = self.cef_runtime.close_browser_for_window(&id, false) {
+            debug!(%error, window_id = %id, "failed to close CEF browser for window");
+        }
+        let state = self.window_manager.remove_window(&id)?;
+        if id == window::MAIN_WINDOW_ID {
+            self.should_exit = true;
+        }
         self.emit_event(&CefariIpcEvent::WindowClosed(WindowIdEvent {
             window_id: state.id.clone(),
         }));
@@ -65,10 +96,10 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn window_set_title(&mut self, request: &WindowSetTitleRequest) -> Result<WindowState> {
-        ensure_main_target(&WindowTargetRequest {
+        let id = self.target_window_id(&WindowTargetRequest {
             target: request.target.clone(),
         })?;
-        let state = self.window_manager.set_main_title(&request.title)?;
+        let state = self.window_manager.set_window_title(&id, &request.title)?;
         self.emit_event(&CefariIpcEvent::WindowTitleChanged(state_event(&state)));
         Ok(state)
     }
@@ -78,7 +109,11 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn reload_ui(&mut self) -> Result<()> {
-        self.cef_runtime.reload_browser()
+        let id = self
+            .source_window_id
+            .as_deref()
+            .unwrap_or(window::MAIN_WINDOW_ID);
+        self.cef_runtime.reload_browser_for_window(id)
     }
 
     fn open_external_url(&mut self, url: &str) -> Result<()> {
@@ -117,12 +152,20 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn tray_restore_window(&mut self) -> Result<TrayResult> {
-        self.window_focus(&WindowTargetRequest { target: None })?;
+        self.window_focus(&WindowTargetRequest {
+            target: Some(WindowTarget {
+                id: Some(window::MAIN_WINDOW_ID.to_owned()),
+            }),
+        })?;
         Ok(TrayResult { restored: true })
     }
 
     fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult> {
-        desktop_dialogs::dispatch(command, self.paths, self.window_manager.main_window().ok())
+        desktop_dialogs::dispatch(
+            command,
+            self.paths,
+            self.window_manager.window(window::MAIN_WINDOW_ID).ok(),
+        )
     }
 
     fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult> {
@@ -144,25 +187,21 @@ fn state_event(state: &WindowState) -> WindowStateEvent {
     }
 }
 
-fn ensure_main_target(request: &WindowTargetRequest) -> Result<()> {
-    let Some(target) = &request.target else {
-        return Ok(());
-    };
-    let Some(id) = target.id.as_deref() else {
-        return Ok(());
-    };
-
-    if id == window::MAIN_WINDOW_ID {
-        Ok(())
-    } else {
-        anyhow::bail!("window {id} is not available")
-    }
-}
-
 impl DesktopShellContext<'_> {
     fn emit_event(&self, event: &CefariIpcEvent) {
         if let Err(error) = self.cef_runtime.emit_event(event) {
             debug!(%error, ?event, "failed to emit Cefari IPC event");
         }
+    }
+
+    fn target_window_id(&self, request: &WindowTargetRequest) -> Result<String> {
+        let id = request
+            .target
+            .as_ref()
+            .and_then(|target| target.id.as_deref())
+            .or(self.source_window_id.as_deref())
+            .unwrap_or(window::MAIN_WINDOW_ID);
+        self.window_manager.state(id)?;
+        Ok(id.to_owned())
     }
 }

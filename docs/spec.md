@@ -192,14 +192,28 @@ APIs.
 > This section covers app lifecycle and native window controls.
 
 - Apps can ask the native runtime to quit.
-- Apps can show the native window.
-- Apps can focus the native window.
-- Apps can close the native window.
-- Apps can set the native window title.
+- Apps can control the current native window through `cefari.window`.
+  - Apps can read the current window state.
+  - Apps can show the current window.
+  - Apps can focus the current window.
+  - Apps can close the current window.
+  - Apps can set the current window title.
+- Apps can create and manage secondary native windows through `cefari.windows`.
+  - Secondary windows use Cefari string IDs.
+  - The startup window is always `main`.
+  - Apps can list live windows.
+  - Apps can get a window by ID.
+  - Apps can show, focus, close, and retitle a window by ID.
+- Secondary windows load trusted app frontend content.
+  - Development windows resolve routes against the configured Vite dev URL.
+  - Packaged windows load `cefari://app/index.html` and carry the route in URL
+    metadata.
+  - Arbitrary external URLs are not trusted app windows.
 - Apps can subscribe to window events.
-  - A window-shown event is available.
-  - A window-focused event is available.
-  - A window-closed event is available.
+  - Window events include the Cefari window ID.
+  - Created, shown, focused, blurred, close-requested, closed, moved, resized,
+    and title-changed events are available.
+  - `cefari.windows` event helpers can filter by window ID.
 
 ## Shell APIs
 

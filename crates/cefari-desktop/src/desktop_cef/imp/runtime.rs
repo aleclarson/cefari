@@ -267,8 +267,20 @@ impl CefRuntime {
         Ok(())
     }
 
+    pub fn reload_browser_for_window(&self, window_id: &str) -> Result<()> {
+        let browser = self.state.browser_for_window(window_id)?;
+        browser.reload();
+        Ok(())
+    }
+
     pub fn focus_browser(&self, focused: bool) -> Result<()> {
         let host = self.browser_host()?;
+        host.set_focus(i32::from(focused));
+        Ok(())
+    }
+
+    pub fn focus_browser_for_window(&self, window_id: &str, focused: bool) -> Result<()> {
+        let host = self.browser_host_for_window(window_id)?;
         host.set_focus(i32::from(focused));
         Ok(())
     }
@@ -291,14 +303,32 @@ impl CefRuntime {
         Ok(())
     }
 
+    pub fn close_browser_for_window(&self, window_id: &str, force_close: bool) -> Result<()> {
+        let host = self.browser_host_for_window(window_id)?;
+        host.close_browser(i32::from(force_close));
+        Ok(())
+    }
+
     pub fn notify_browser_resized(&self) -> Result<()> {
         let host = self.browser_host()?;
         host.was_resized();
         Ok(())
     }
 
+    pub fn notify_browser_resized_for_window(&self, window_id: &str) -> Result<()> {
+        let host = self.browser_host_for_window(window_id)?;
+        host.was_resized();
+        Ok(())
+    }
+
     pub fn notify_browser_screen_info_changed(&self) -> Result<()> {
         let host = self.browser_host()?;
+        host.notify_screen_info_changed();
+        Ok(())
+    }
+
+    pub fn notify_browser_screen_info_changed_for_window(&self, window_id: &str) -> Result<()> {
+        let host = self.browser_host_for_window(window_id)?;
         host.notify_screen_info_changed();
         Ok(())
     }
@@ -319,6 +349,12 @@ impl CefRuntime {
         Ok(DownloadResult::Revealed(cefari_core::DownloadIdResult {
             id: id.to_owned(),
         }))
+    }
+
+    pub fn notify_browser_move_or_resize_started_for_window(&self, window_id: &str) -> Result<()> {
+        let host = self.browser_host_for_window(window_id)?;
+        host.notify_move_or_resize_started();
+        Ok(())
     }
 
     pub fn emit_event(&self, event: &CefariIpcEvent) -> Result<()> {
@@ -359,6 +395,16 @@ impl CefRuntime {
         browser
             .host()
             .with_context(|| format!("CEF browser {} has no host", browser.identifier()))
+    }
+
+    fn browser_host_for_window(&self, window_id: &str) -> Result<cef::BrowserHost> {
+        let browser = self.state.browser_for_window(window_id)?;
+        browser.host().with_context(|| {
+            format!(
+                "CEF browser {} for window {window_id} has no host",
+                browser.identifier()
+            )
+        })
     }
 }
 
