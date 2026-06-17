@@ -1,18 +1,17 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use cefari_core::{
     DialogCommand, DialogResult, DownloadCommand, DownloadResult, FileResult, FilesCommand,
     RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult,
     WindowState,
 };
-use tao::window::Window;
 
 use crate::{
     desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, external, runtime,
+    window,
 };
 
 pub(crate) struct DesktopShellContext<'a> {
-    pub(crate) window: &'a mut Option<Window>,
-    pub(crate) window_title: &'a mut String,
+    pub(crate) window_manager: &'a mut window::WindowManager,
     pub(crate) paths: &'a RuntimePaths,
     pub(crate) cef_runtime: &'a desktop_cef::CefRuntime,
     pub(crate) runtime_operations: &'a runtime::RuntimeOperations,
@@ -21,43 +20,25 @@ pub(crate) struct DesktopShellContext<'a> {
 
 impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     fn quit_app(&mut self) -> Result<()> {
-        *self.window = None;
+        self.window_manager.close_main();
         self.should_exit = true;
         Ok(())
     }
 
     fn window_show(&mut self) -> Result<WindowState> {
-        let window = self
-            .window
-            .as_ref()
-            .context("main window is no longer available")?;
-        window.set_visible(true);
-        Ok(self.window_state())
+        self.window_manager.show_main()
     }
 
     fn window_focus(&mut self) -> Result<WindowState> {
-        let window = self
-            .window
-            .as_ref()
-            .context("main window is no longer available")?;
-        window.set_visible(true);
-        window.set_focus();
-        Ok(self.window_state())
+        self.window_manager.focus_main()
     }
 
     fn window_close(&mut self) -> Result<WindowState> {
-        *self.window = None;
-        Ok(self.window_state())
+        Ok(self.window_manager.close_main())
     }
 
     fn window_set_title(&mut self, title: &str) -> Result<WindowState> {
-        let window = self
-            .window
-            .as_ref()
-            .context("main window is no longer available")?;
-        window.set_title(title);
-        title.clone_into(self.window_title);
-        Ok(self.window_state())
+        self.window_manager.set_main_title(title)
     }
 
     fn open_logs(&mut self) -> Result<()> {
@@ -92,7 +73,7 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
 
     fn update_restart(&mut self) -> Result<()> {
         desktop_app::restart_current_executable()?;
-        *self.window = None;
+        self.window_manager.close_main();
         self.should_exit = true;
         Ok(())
     }
@@ -109,7 +90,7 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult> {
-        desktop_dialogs::dispatch(command, self.paths, self.window.as_ref())
+        desktop_dialogs::dispatch(command, self.paths, self.window_manager.main_window().ok())
     }
 
     fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult> {
@@ -121,15 +102,5 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
 
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
         desktop_files::AppDataFs::open(self.paths)?.dispatch(command)
-    }
-}
-
-impl DesktopShellContext<'_> {
-    fn window_state(&self) -> WindowState {
-        WindowState {
-            visible: self.window.as_ref().is_some_and(Window::is_visible),
-            focused: self.window.as_ref().is_some_and(Window::is_focused),
-            title: self.window_title.clone(),
-        }
     }
 }
