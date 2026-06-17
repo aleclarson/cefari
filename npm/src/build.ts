@@ -34,12 +34,15 @@ export async function runCefariBuild(options: BuildOptions = {}, deps = defaultB
   const frontendOut = join(buildDir, "frontend");
   const daemonOut = join(buildDir, "daemon");
   const desktopOut = join(buildDir, "desktop");
+  const configOut = join(buildDir, "config");
 
   await mkdir(frontendOut, { recursive: true });
   await mkdir(daemonOut, { recursive: true });
   await mkdir(desktopOut, { recursive: true });
+  await mkdir(configOut, { recursive: true });
 
   await deps.viteBuild(createViteBuildConfig(config, frontendOut));
+  await writeDesktopConfig(config, configOut);
   await buildDaemon(config, daemonOut, deps);
   await prepareCefResources(root, deps);
   await buildDesktop(config, desktopOut, Boolean(options.release), deps);
@@ -93,6 +96,29 @@ function denoLocalImportAliases(root: string): Array<{ find: string; replacement
 
 function isLocalImportTarget(value: string): boolean {
   return value.startsWith(".") || value.startsWith("/");
+}
+
+async function writeDesktopConfig(config: ResolvedCefariConfig, outputDir: string): Promise<void> {
+  const deepLinkSchemes = config.capabilities
+    .filter((capability) => capability.type === "deepLinks")
+    .flatMap((capability) => capability.schemes);
+  await writeFile(
+    join(outputDir, "cefari.json"),
+    `${JSON.stringify(
+      {
+        app: {
+          identifier: config.app.identifier,
+          display_name: config.app.name,
+          version: config.package.version,
+        },
+        deep_links: {
+          schemes: deepLinkSchemes,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
 
 async function buildDaemon(config: ResolvedCefariConfig, outputDir: string, deps: BuildDependencies): Promise<void> {

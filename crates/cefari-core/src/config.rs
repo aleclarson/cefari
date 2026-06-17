@@ -8,6 +8,7 @@ use crate::{Error, Result};
 #[serde(default, deny_unknown_fields)]
 pub struct CefariConfig {
     pub app: AppConfig,
+    pub deep_links: DeepLinkConfig,
     pub updates: UpdateConfig,
     pub service: ServiceConfig,
 }
@@ -35,6 +36,12 @@ impl Default for AppConfig {
 pub struct UpdateConfig {
     pub endpoint: Option<String>,
     pub public_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct DeepLinkConfig {
+    pub schemes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -95,6 +102,9 @@ mod tests {
                 "identifier": "dev.cefari.test",
                 "display_name": "Test Cefari",
                 "version": "1.2.3"
+              },
+              "deep_links": {
+                "schemes": ["testapp"]
               }
             }"#,
         )
@@ -108,6 +118,7 @@ mod tests {
                 version: "1.2.3".to_owned(),
             }
         );
+        assert_eq!(config.deep_links.schemes, vec!["testapp"]);
         assert_eq!(config.service, ServiceConfig::default());
     }
 

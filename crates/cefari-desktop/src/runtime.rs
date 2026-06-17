@@ -7,8 +7,8 @@ use anyhow::Result;
 use cefari_core::{
     AppConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, PendingUpdate,
     RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState, check_for_update,
-    install_service, install_update, load_config, service_manager, service_status, start_service,
-    stop_service, update_id,
+    install_service, install_update, load_config, packaged_resources_dir, resolve_resource,
+    service_manager, service_status, start_service, stop_service, update_id,
 };
 
 const DAEMON_EXECUTABLE_NAME: &str = if cfg!(windows) {
@@ -144,6 +144,10 @@ impl RuntimeOperations {
         &self.config.app
     }
 
+    pub fn deep_link_schemes(&self) -> &[String] {
+        &self.config.deep_links.schemes
+    }
+
     pub fn daemon_service_spec(&self) -> CefariServiceSpec {
         let log_config = RuntimeLogConfig::new(&self.paths);
         CefariServiceSpec::daemon(self.daemon_program())
@@ -198,10 +202,51 @@ pub struct AppliedUpdate {
 
 fn load_desktop_config(path: &Path) -> Result<CefariConfig> {
     if path.exists() {
-        load_config(path).map_err(Into::into)
-    } else {
-        Ok(CefariConfig::default())
+        return load_config(path).map_err(Into::into);
     }
+
+    if let Some(packaged_config) = packaged_config_file() {
+        return load_config(packaged_config).map_err(Into::into);
+    }
+
+    Ok(CefariConfig::default())
+}
+
+fn packaged_config_file() -> Option<PathBuf> {
+    platform_package_formats()
+        .iter()
+        .filter_map(|format| packaged_resources_dir(*format).ok())
+        .find_map(|dir| resolve_resource(dir, "config/cefari.json").ok())
+}
+
+#[cfg(target_os = "macos")]
+fn platform_package_formats() -> &'static [cefari_core::PackageFormat] {
+    &[
+        cefari_core::PackageFormat::App,
+        cefari_core::PackageFormat::Dmg,
+    ]
+}
+
+#[cfg(target_os = "windows")]
+fn platform_package_formats() -> &'static [cefari_core::PackageFormat] {
+    &[
+        cefari_core::PackageFormat::Nsis,
+        cefari_core::PackageFormat::Wix,
+    ]
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn platform_package_formats() -> &'static [cefari_core::PackageFormat] {
+    &[
+        cefari_core::PackageFormat::Deb,
+        cefari_core::PackageFormat::AppImage,
+        cefari_core::PackageFormat::Pacman,
+    ]
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+fn platform_package_formats() -> &'static [cefari_core::PackageFormat] {
+    &[]
 }
 
 #[cfg(test)]

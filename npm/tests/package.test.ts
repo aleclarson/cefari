@@ -14,6 +14,7 @@ const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
 async function projectWithPackageBuild(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "cefari-package-"));
   await mkdir(join(root, "build/frontend"), { recursive: true });
+  await mkdir(join(root, "build/config"), { recursive: true });
   await mkdir(join(root, "build/daemon"), { recursive: true });
   await mkdir(join(root, "build/desktop"), { recursive: true });
   await mkdir(join(root, "build/cef/resources"), { recursive: true });
@@ -21,6 +22,10 @@ async function projectWithPackageBuild(): Promise<string> {
   await writeFile(join(root, "assets/app.png"), "app-icon");
   await writeFile(join(root, "assets/tray.png"), "tray-icon");
   await writeFile(join(root, "build/frontend/index.html"), "<!doctype html>");
+  await writeFile(
+    join(root, "build/config/cefari.json"),
+    JSON.stringify({ app: { identifier: "dev.cefari.package" }, deep_links: { schemes: ["packageapp"] } }),
+  );
   await writeFile(join(root, "build/daemon/package-app-daemon"), "daemon");
   await writeFile(join(root, "build/desktop/package-app"), "desktop");
   await writeFile(
@@ -89,12 +94,14 @@ test("package writes metadata and manifest for build artifacts", async () => {
   assert.match(metadata, /version = "1\.2\.3"/);
   assert.match(metadata, new RegExp(`formats = \\["${packageFormat}"\\]`));
   assert.match(metadata, /target = "frontend"/);
+  assert.match(metadata, /target = "config"/);
   assert.match(metadata, /target = "tray-icon\.png"/);
   assert.match(metadata, /\[\[deep_link_protocols\]\]/);
   assert.match(metadata, /schemes = \["packageapp", "packageapp\+dev"\]/);
   const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
   assert.equal(manifest.product_name, "Package App");
   assert.equal(manifest.tray_icon, "tray-icon.png");
+  assert.match(manifest.config_file, /build\/config\/cefari\.json/);
   assert.match(manifest.daemon_executable, /package-app-daemon/);
   assert.deepEqual(spawned[0], {
     command: "cargo-packager",

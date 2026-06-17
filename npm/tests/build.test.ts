@@ -31,7 +31,7 @@ async function projectWithBuildConfig(): Promise<{ root: string; runtime: string
   await writeFile(join(cefResources, "libcef.dylib"), "cef");
   await writeFile(
     join(root, "cefari.config.ts"),
-    `import { defineConfig } from "${configApi}";
+    `import { deepLinks, defineConfig } from "${configApi}";
 
 export default defineConfig({
   app: {
@@ -44,6 +44,9 @@ export default defineConfig({
     configFile: false,
     devPort: 4444,
   },
+  capabilities: [
+    deepLinks({ schemes: ["buildapp"] }),
+  ],
   daemon: {
     entry: "daemon/main.ts",
   },
@@ -124,6 +127,16 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
     ],
   });
   assert.equal(await readFile(join(root, "build/daemon/main.ts"), "utf8"), "console.log('daemon');\n");
+  assert.deepEqual(JSON.parse(await readFile(join(root, "build/config/cefari.json"), "utf8")), {
+    app: {
+      identifier: "dev.cefari.build",
+      display_name: "Build App",
+      version: "0.1.0",
+    },
+    deep_links: {
+      schemes: ["buildapp"],
+    },
+  });
   assert.equal(await readFile(join(root, "build/desktop/build-app"), "utf8"), "desktop-runtime");
   assert.equal(existsSync(join(root, "build/cef/resources/archive.json")), true);
   assert.equal(existsSync(join(root, "build/cef/resources/libcef.dylib")), true);

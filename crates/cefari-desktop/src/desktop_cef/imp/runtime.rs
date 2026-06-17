@@ -5,13 +5,14 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use cefari_core::CefariIpcEvent;
 use tao::window::Window;
 use tracing::{error, info};
 
 use cef::wrapper::message_router::{
     BrowserSideCallback, BrowserSideRouter, MessageRouterBrowserSide,
 };
-use cef::{ImplBrowser as _, ImplBrowserHost as _};
+use cef::{ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _};
 
 use crate::desktop_bridge::{BridgeOriginPolicy, NavigationPolicy};
 
@@ -285,6 +286,24 @@ impl CefRuntime {
         Ok(())
     }
 
+    pub fn emit_event(&self, event: &CefariIpcEvent) -> Result<()> {
+        let browser = self.state.active_browser()?;
+        let frame = browser.main_frame().with_context(|| {
+            format!(
+                "CEF browser {} has no main frame for event delivery",
+                browser.identifier()
+            )
+        })?;
+        let event_json = serde_json::to_string(event)?;
+        let code = cefari_event_script(&event_json);
+        frame.execute_java_script(
+            Some(&cef::CefString::from(code.as_str())),
+            Some(&cef::CefString::from("cefari://bridge/events")),
+            1,
+        );
+        Ok(())
+    }
+
     pub fn pump_message_loop(&self) {
         if self.initialized {
             cef::do_message_loop_work();
@@ -308,6 +327,33 @@ impl CefRuntime {
         browser
             .host()
             .with_context(|| format!("CEF browser {} has no host", browser.identifier()))
+    }
+}
+
+fn cefari_event_script(event_json: &str) -> String {
+    format!(
+        "if (typeof window.__CEFARI_IPC_EVENT__ === 'function') window.__CEFARI_IPC_EVENT__({event_json});"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use cefari_core::{CefariIpcEvent, DeepLinkOpenEvent};
+
+    use super::cefari_event_script;
+
+    #[test]
+    fn cefari_event_script_passes_serialized_event_to_bridge_hook() {
+        let event = CefariIpcEvent::DeepLinkOpened(DeepLinkOpenEvent {
+            url: "myapp://open/item?id=1".to_owned(),
+        });
+        let event_json = serde_json::to_string(&event).expect("event should serialize");
+
+        let script = cefari_event_script(&event_json);
+
+        assert!(script.contains("window.__CEFARI_IPC_EVENT__"));
+        assert!(script.contains(r#""event":"deepLinkOpened""#));
+        assert!(script.contains(r#""url":"myapp://open/item?id=1""#));
     }
 }
 

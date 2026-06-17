@@ -6,8 +6,8 @@ use std::{
 
 use anyhow::{Context, Result};
 use cefari_core::{
-    CefariIpcCommand, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
-    OpenExternalUrlRequest, RuntimePaths,
+    CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse, DeepLinkOpenEvent,
+    RuntimePaths,
 };
 use tao::{
     event::{Event, StartCause, WindowEvent},
@@ -302,41 +302,45 @@ fn run_event_loop(
             }
             Event::Opened { urls } => {
                 for url in urls {
-                    if url.scheme() == "file" {
-                        url.to_file_path().map_or_else(
-                            |()| {
-                                error!(
-                                    %url,
-                                    "file URL cannot be converted to a local path: {url}"
-                                );
-                            },
-                            |path| {
-                                if let Err(error) = external::open_external_file(&path) {
-                                    error!(%url, %error, "failed to open external file");
+                    match opened_url_action(url.scheme(), runtime_operations.deep_link_schemes()) {
+                        OpenedUrlAction::File => {
+                            url.to_file_path().map_or_else(
+                                |()| {
+                                    error!(
+                                        %url,
+                                        "file URL cannot be converted to a local path: {url}"
+                                    );
+                                },
+                                |path| {
+                                    if let Err(error) = external::open_external_file(&path) {
+                                        error!(%url, %error, "failed to open external file");
+                                    }
+                                },
+                            );
+                        }
+                        OpenedUrlAction::DeepLink => {
+                            if let Some(window) = window.as_ref() {
+                                window.set_visible(true);
+                                window.set_focus();
+                            }
+                            let event = CefariIpcEvent::DeepLinkOpened(DeepLinkOpenEvent {
+                                url: url.to_string(),
+                            });
+                            match guards.cef_runtime.emit_event(&event) {
+                                Ok(()) => info!(%url, "delivered opened deep link"),
+                                Err(error) => {
+                                    error!(%url, %error, "failed to deliver opened deep link");
                                 }
-                            },
-                        );
-                    } else {
-                        let mut context = DesktopShellContext {
-                            window: &mut window,
-                            window_title: &mut window_title,
-                            paths: &paths,
-                            cef_runtime: &guards.cef_runtime,
-                            runtime_operations: &runtime_operations,
-                            should_exit: false,
-                        };
-                        let response = desktop_ipc::DesktopIpcDispatcher::dispatch(
-                            CefariIpcRequest {
-                                id: "cefari.opened_url".to_owned(),
-                                command: CefariIpcCommand::OpenExternalUrl(
-                                    OpenExternalUrlRequest {
-                                        url: url.to_string(),
-                                    },
-                                ),
-                            },
-                            &mut context,
-                        );
-                        handle_ipc_response(&response);
+                            }
+                        }
+                        OpenedUrlAction::External => {
+                            if let Err(error) = external::open_external_url(url.as_str()) {
+                                error!(%url, %error, "failed to open external URL");
+                            }
+                        }
+                        OpenedUrlAction::Unsupported => {
+                            info!(%url, "ignored opened URL with unconfigured scheme");
+                        }
                     }
                 }
             }
@@ -344,6 +348,30 @@ fn run_event_loop(
         }
         apply_cef_message_pump_control_flow(cef_message_pump_deadline.as_ref(), control_flow);
     });
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum OpenedUrlAction {
+    File,
+    DeepLink,
+    External,
+    Unsupported,
+}
+
+fn opened_url_action(scheme: &str, deep_link_schemes: &[String]) -> OpenedUrlAction {
+    if scheme.eq_ignore_ascii_case("file") {
+        return OpenedUrlAction::File;
+    }
+    if deep_link_schemes
+        .iter()
+        .any(|configured| configured == scheme)
+    {
+        return OpenedUrlAction::DeepLink;
+    }
+    if matches!(scheme, "http" | "https" | "mailto") {
+        return OpenedUrlAction::External;
+    }
+    OpenedUrlAction::Unsupported
 }
 
 fn schedule_smoke_exit_if_requested(event_loop: &EventLoop<UserEvent>) {
@@ -485,7 +513,8 @@ fn handle_ipc_response(response: &CefariIpcResponse) {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_cef_message_pump_control_flow, cef_message_pump_deadline, earliest_deadline,
+        OpenedUrlAction, apply_cef_message_pump_control_flow, cef_message_pump_deadline,
+        earliest_deadline, opened_url_action,
     };
     use std::time::{Duration, Instant};
     use tao::event_loop::ControlFlow;
@@ -516,5 +545,24 @@ mod tests {
         let mut exit = ControlFlow::Exit;
         apply_cef_message_pump_control_flow(Some(&later), &mut exit);
         assert_eq!(exit, ControlFlow::Exit);
+    }
+
+    #[test]
+    fn opened_url_action_classifies_configured_deep_links() {
+        let schemes = vec!["myapp".to_owned()];
+
+        assert_eq!(opened_url_action("file", &schemes), OpenedUrlAction::File);
+        assert_eq!(
+            opened_url_action("myapp", &schemes),
+            OpenedUrlAction::DeepLink
+        );
+        assert_eq!(
+            opened_url_action("https", &schemes),
+            OpenedUrlAction::External
+        );
+        assert_eq!(
+            opened_url_action("unknown", &schemes),
+            OpenedUrlAction::Unsupported
+        );
     }
 }

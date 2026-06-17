@@ -170,6 +170,7 @@ export async function runPackageRelease(options: ReleaseOptions = {}, deps = def
 function ensureBuildArtifacts(config: ResolvedCefariConfig, buildDir: string, cefResources: string): void {
   for (const path of [
     join(buildDir, "frontend", "index.html"),
+    join(buildDir, "config", "cefari.json"),
     join(buildDir, "daemon", daemonExecutableName(config)),
     join(buildDir, "desktop", desktopExecutableName(config)),
     join(cefResources, "archive.json"),
@@ -207,6 +208,7 @@ async function writePackageMetadata(
     "main = true",
     "",
     ...resourceToml(join(buildDir, "frontend"), "frontend"),
+    ...resourceToml(join(buildDir, "config"), "config"),
     ...resourceToml(join(buildDir, "daemon"), "daemon"),
     ...resourceToml(cefResources, "cef"),
     ...(tray === undefined ? [] : resourceToml(resolve(config.root, tray.icon), "tray-icon.png")),
@@ -229,6 +231,7 @@ async function writePackageManifest(
     tray_icon: config.capabilities.some((capability) => capability.type === "tray") ? "tray-icon.png" : null,
     desktop_binary: desktopExecutableName(config),
     frontend_dir: normalizePath(join(buildDir, "frontend")),
+    config_file: normalizePath(join(buildDir, "config", "cefari.json")),
     daemon_dir: normalizePath(join(buildDir, "daemon")),
     daemon_executable: normalizePath(join(buildDir, "daemon", daemonExecutableName(config))),
     cef_resources: normalizePath(cefResources),
