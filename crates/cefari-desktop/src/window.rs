@@ -2,6 +2,12 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use cefari_core::{WindowCreateRequest, WindowKind, WindowState};
+#[cfg(target_os = "macos")]
+use tao::platform::macos::{WindowBuilderExtMacOS, WindowExtMacOS};
+#[cfg(all(unix, not(target_os = "macos")))]
+use tao::platform::unix::{WindowBuilderExtUnix, WindowExtUnix};
+#[cfg(target_os = "windows")]
+use tao::platform::windows::{WindowBuilderExtWindows, WindowExtWindows};
 use tao::{
     dpi::{LogicalPosition, LogicalSize},
     event_loop::{EventLoop, EventLoopWindowTarget},
@@ -91,14 +97,18 @@ impl WindowManager {
         request: &WindowCreateRequest,
     ) -> Result<WindowState> {
         let id = self.resolve_create_id(request.id.as_deref())?;
+        let modal = request.modal.unwrap_or(false);
+        let parent_id = request.parent_id.clone();
+        validate_parent_options(&id, parent_id.as_deref(), modal, |id| {
+            self.record(id).is_some()
+        })?;
         let title = request
             .title
             .clone()
             .unwrap_or_else(default_secondary_window_title);
         let route = request.route.clone();
-        let modal = request.modal.unwrap_or(false);
-        let parent_id = request.parent_id.clone();
-        let window = secondary_window_builder(request, &title)
+        let parent_window = parent_id.as_deref().and_then(|id| self.record(id));
+        let window = secondary_window_builder(request, &title, parent_window)
             .build(event_loop)
             .with_context(|| format!("failed to create Cefari window {id}"))?;
         let tao_id = window.id();
@@ -109,12 +119,23 @@ impl WindowManager {
             title,
             route,
             modal,
-            parent_id,
+            parent_id: parent_id.clone(),
         };
         let state = record.state();
         self.secondary.insert(id.clone(), record);
         self.tao_windows.insert(tao_id, id);
+        if modal {
+            if let Some(parent_id) = parent_id.as_deref() {
+                self.set_parent_enabled(parent_id, false);
+            }
+        }
         Ok(state)
+    }
+
+    pub(crate) fn window_ids_closed_with(&self, id: &str) -> Vec<String> {
+        let mut ids = vec![id.to_owned()];
+        collect_child_window_ids(id, &self.secondary, &mut ids);
+        ids
     }
 
     pub(crate) fn remove_window(&mut self, id: &str) -> Result<WindowState> {
@@ -122,11 +143,15 @@ impl WindowManager {
             return Ok(self.close_main());
         }
 
+        for child_id in self.child_window_ids(id) {
+            let _ = self.remove_window(&child_id)?;
+        }
         let record = self
             .secondary
             .remove(id)
             .with_context(|| format!("window {id} is not available"))?;
         self.tao_windows.remove(&record.window.id());
+        self.restore_modal_parent_if_needed(&record);
         Ok(record.closed_state())
     }
 
@@ -180,6 +205,38 @@ impl WindowManager {
         } else {
             self.secondary.get_mut(id)
         }
+    }
+
+    fn child_window_ids(&self, id: &str) -> Vec<String> {
+        self.secondary
+            .values()
+            .filter(|record| record.parent_id.as_deref() == Some(id))
+            .map(|record| record.id.clone())
+            .collect()
+    }
+
+    fn restore_modal_parent_if_needed(&self, record: &WindowRecord) {
+        if !record.modal {
+            return;
+        }
+        let Some(parent_id) = record.parent_id.as_deref() else {
+            return;
+        };
+        if self.secondary.values().any(|secondary| {
+            secondary.modal
+                && secondary.parent_id.as_deref() == Some(parent_id)
+                && secondary.id != record.id
+        }) {
+            return;
+        }
+        self.set_parent_enabled(parent_id, true);
+    }
+
+    fn set_parent_enabled(&self, parent_id: &str, enabled: bool) {
+        let Some(parent) = self.record(parent_id) else {
+            return;
+        };
+        set_window_enabled(&parent.window, enabled);
     }
 
     fn resolve_create_id(&mut self, requested: Option<&str>) -> Result<String> {
@@ -279,7 +336,11 @@ fn main_window_builder(background_smoke: bool) -> WindowBuilder {
     builder
 }
 
-fn secondary_window_builder(request: &WindowCreateRequest, title: &str) -> WindowBuilder {
+fn secondary_window_builder(
+    request: &WindowCreateRequest,
+    title: &str,
+    parent: Option<&WindowRecord>,
+) -> WindowBuilder {
     let mut builder = WindowBuilder::new()
         .with_title(title)
         .with_inner_size(LogicalSize::new(
@@ -314,7 +375,83 @@ fn secondary_window_builder(request: &WindowCreateRequest, title: &str) -> Windo
         builder = builder.with_always_on_top(always_on_top);
     }
 
+    apply_native_parent(builder, parent)
+}
+
+#[cfg(target_os = "windows")]
+fn apply_native_parent(builder: WindowBuilder, parent: Option<&WindowRecord>) -> WindowBuilder {
+    match parent {
+        Some(parent) => builder.with_owner_window(parent.window.hwnd()),
+        None => builder,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn apply_native_parent(builder: WindowBuilder, parent: Option<&WindowRecord>) -> WindowBuilder {
+    match parent {
+        Some(parent) => builder.with_parent_window(parent.window.ns_window()),
+        None => builder,
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn apply_native_parent(builder: WindowBuilder, parent: Option<&WindowRecord>) -> WindowBuilder {
+    match parent {
+        Some(parent) => builder.with_transient_for(parent.window.gtk_window()),
+        None => builder,
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
+fn apply_native_parent(builder: WindowBuilder, _parent: Option<&WindowRecord>) -> WindowBuilder {
     builder
+}
+
+#[cfg(target_os = "windows")]
+fn set_window_enabled(window: &Window, enabled: bool) {
+    window.set_enable(enabled);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn set_window_enabled(_window: &Window, _enabled: bool) {}
+
+fn collect_child_window_ids(
+    parent_id: &str,
+    records: &HashMap<String, WindowRecord>,
+    ids: &mut Vec<String>,
+) {
+    let children = records
+        .values()
+        .filter(|record| record.parent_id.as_deref() == Some(parent_id))
+        .map(|record| record.id.clone())
+        .collect::<Vec<_>>();
+
+    for child_id in children {
+        ids.push(child_id.clone());
+        collect_child_window_ids(&child_id, records, ids);
+    }
+}
+
+fn validate_parent_options(
+    window_id: &str,
+    parent_id: Option<&str>,
+    modal: bool,
+    parent_exists: impl FnOnce(&str) -> bool,
+) -> Result<()> {
+    if modal && parent_id.is_none() {
+        anyhow::bail!("modal windows require parentId");
+    }
+    let Some(parent_id) = parent_id else {
+        return Ok(());
+    };
+    if parent_id == window_id {
+        anyhow::bail!("window cannot be its own parent");
+    }
+    validate_window_id(parent_id)?;
+    if !parent_exists(parent_id) {
+        anyhow::bail!("parent window {parent_id} is not available");
+    }
+    Ok(())
 }
 
 pub(crate) fn window_url(base_url: &str, window_id: &str, route: Option<&str>) -> Result<String> {
@@ -368,7 +505,8 @@ fn validate_window_id(id: &str) -> Result<()> {
 mod tests {
     use super::{
         MAIN_WINDOW_HEIGHT, MAIN_WINDOW_ID, MAIN_WINDOW_TITLE, MAIN_WINDOW_WIDTH,
-        MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, main_window_builder, window_url,
+        MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, main_window_builder, validate_parent_options,
+        window_url,
     };
 
     #[test]
@@ -418,5 +556,13 @@ mod tests {
     fn window_url_rejects_invalid_ids_and_routes() {
         assert!(window_url("cefari://app/index.html", "bad id", Some("/settings")).is_err());
         assert!(window_url("cefari://app/index.html", "settings", Some("settings")).is_err());
+    }
+
+    #[test]
+    fn parent_option_validation_requires_live_parent() {
+        assert!(validate_parent_options("child", Some("main"), true, |id| id == "main").is_ok());
+        assert!(validate_parent_options("child", Some("missing"), true, |_| false).is_err());
+        assert!(validate_parent_options("child", None, true, |_| false).is_err());
+        assert!(validate_parent_options("child", Some("child"), false, |_| true).is_err());
     }
 }

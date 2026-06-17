@@ -5,8 +5,8 @@ the supported feature inventory or another documentation page.
 
 ## Pending Placement
 
-- Multi-window parent/modal behavior and window-state persistence are planned
-  but not yet supported. The current contract proposal lives in
+- Multi-window window-state persistence is planned but not yet supported. The
+  current contract proposal lives in
   [`docs/proposals/multi-window-support.md`](proposals/multi-window-support.md).
-  The IPC schema reserves parent, modal, and persistence fields before those
-  options are wired end to end.
+  The IPC schema reserves persistence fields before those options are wired end
+  to end.

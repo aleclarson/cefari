@@ -279,11 +279,13 @@ fn run_event_loop(
                 let window_id = window_manager
                     .window_id_for_tao(tao_window_id)
                     .unwrap_or_else(|| window::MAIN_WINDOW_ID.to_owned());
-                if let Err(error) = guards
-                    .cef_runtime
-                    .close_browser_for_window(&window_id, false)
-                {
-                    debug!(%error, %window_id, "CEF browser close skipped or failed");
+                for closing_id in window_manager.window_ids_closed_with(&window_id) {
+                    if let Err(error) = guards
+                        .cef_runtime
+                        .close_browser_for_window(&closing_id, false)
+                    {
+                        debug!(%error, window_id = %closing_id, "CEF browser close skipped or failed");
+                    }
                 }
                 let state = if window_id == window::MAIN_WINDOW_ID {
                     let state = window_manager.close_main();

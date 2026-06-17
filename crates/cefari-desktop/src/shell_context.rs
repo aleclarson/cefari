@@ -82,8 +82,13 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
 
     fn window_close(&mut self, request: &WindowTargetRequest) -> Result<WindowState> {
         let id = self.target_window_id(request)?;
-        if let Err(error) = self.cef_runtime.close_browser_for_window(&id, false) {
-            debug!(%error, window_id = %id, "failed to close CEF browser for window");
+        for closing_id in self.window_manager.window_ids_closed_with(&id) {
+            if let Err(error) = self
+                .cef_runtime
+                .close_browser_for_window(&closing_id, false)
+            {
+                debug!(%error, window_id = %closing_id, "failed to close CEF browser for window");
+            }
         }
         let state = self.window_manager.remove_window(&id)?;
         if id == window::MAIN_WINDOW_ID {

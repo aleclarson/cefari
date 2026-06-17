@@ -204,11 +204,19 @@ APIs.
   - Apps can list live windows.
   - Apps can get a window by ID.
   - Apps can show, focus, close, and retitle a window by ID.
+  - Apps can assign a parent window when creating a secondary window.
+  - Modal windows require a valid parent window.
+  - Closing a parent closes its child windows.
 - Secondary windows load trusted app frontend content.
   - Development windows resolve routes against the configured Vite dev URL.
   - Packaged windows load `cefari://app/index.html` and carry the route in URL
     metadata.
   - Arbitrary external URLs are not trusted app windows.
+- Parent and modal behavior is best-effort across platforms.
+  - Windows uses owner windows for dialog-like secondary windows.
+  - macOS uses native parent-window ordering.
+  - Linux uses transient windows where the backend supports it.
+  - Cefari always tracks parent and modal state in `WindowState`.
 - Apps can subscribe to window events.
   - Window events include the Cefari window ID.
   - Created, shown, focused, blurred, close-requested, closed, moved, resized,
