@@ -1,11 +1,14 @@
 use anyhow::{Context, Result};
 use cefari_core::{
-    FileResult, FilesCommand, RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult,
-    UpdateStateResult, WindowState,
+    CefariIpcError, FileResult, FilesCommand, NotificationCommand, NotificationResult,
+    RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult,
+    WindowState,
 };
 use tao::window::Window;
 
-use crate::{desktop_app, desktop_cef, desktop_files, desktop_ipc, external, runtime};
+use crate::{
+    desktop_app, desktop_cef, desktop_files, desktop_ipc, desktop_notifications, external, runtime,
+};
 
 pub(crate) struct DesktopShellContext<'a> {
     pub(crate) window: &'a mut Option<Window>,
@@ -13,6 +16,7 @@ pub(crate) struct DesktopShellContext<'a> {
     pub(crate) paths: &'a RuntimePaths,
     pub(crate) cef_runtime: &'a desktop_cef::CefRuntime,
     pub(crate) runtime_operations: &'a runtime::RuntimeOperations,
+    pub(crate) desktop_notifier: Option<&'a desktop_notifications::DesktopNotifier>,
     pub(crate) should_exit: bool,
 }
 
@@ -103,6 +107,63 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     fn tray_restore_window(&mut self) -> Result<TrayResult> {
         self.window_focus()?;
         Ok(TrayResult { restored: true })
+    }
+
+    fn notification(
+        &mut self,
+        command: &NotificationCommand,
+    ) -> Result<NotificationResult, CefariIpcError> {
+        let notifier = self.desktop_notifier.ok_or_else(|| {
+            desktop_ipc::unsupported_notification(
+                command,
+                "desktop notifications are not available",
+            )
+        })?;
+
+        match command {
+            NotificationCommand::PermissionState => notifier
+                .permission_allowed_blocking()
+                .map(|allowed| NotificationResult::PermissionState { allowed })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+            NotificationCommand::RequestPermission => notifier
+                .request_permission_once_blocking()
+                .map(|allowed| NotificationResult::PermissionRequested { allowed })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+            NotificationCommand::Capabilities => {
+                Ok(NotificationResult::Capabilities(notifier.capabilities()))
+            }
+            NotificationCommand::RegisterCategories(request) => notifier
+                .register_categories(&request.categories)
+                .map(|count| NotificationResult::CategoriesRegistered { count })
+                .map_err(|error| CefariIpcError::InvalidCommand {
+                    message: format!("notification.registerCategories: {error}"),
+                }),
+            NotificationCommand::Send(request) => notifier
+                .send_blocking(request)
+                .map(|outcome| match outcome {
+                    desktop_notifications::NotificationSendOutcome::Delivered { id } => {
+                        NotificationResult::Sent { id }
+                    }
+                    desktop_notifications::NotificationSendOutcome::PermissionDenied => {
+                        NotificationResult::PermissionDenied
+                    }
+                })
+                .map_err(|error| CefariIpcError::InvalidCommand {
+                    message: format!("notification.send: {error}"),
+                }),
+            NotificationCommand::Active => notifier
+                .active_notifications_blocking()
+                .map(|notifications| NotificationResult::Active { notifications })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+            NotificationCommand::RemoveDelivered(request) => notifier
+                .remove_delivered(&request.ids)
+                .map(|count| NotificationResult::Removed { count })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+            NotificationCommand::RemoveAllDelivered => notifier
+                .remove_all_delivered_blocking()
+                .map(|count| NotificationResult::Removed { count })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+        }
     }
 
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
