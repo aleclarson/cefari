@@ -217,6 +217,38 @@ APIs.
   - The frontend wrapper exists.
   - The current desktop dispatcher reports it as unsupported.
 
+## Native Dialogs
+
+> This section covers native file and folder selection dialogs.
+
+- Apps can open native dialogs from the frontend.
+  - They can choose one file.
+  - They can choose multiple files.
+  - They can choose one folder.
+  - They can choose multiple folders.
+  - They can choose a save path.
+- Native dialogs support common dialog options.
+  - Apps can set a dialog title.
+  - Apps can set file extension filters.
+  - Apps can set a default native directory.
+  - Apps can set a default app-data directory.
+  - Apps can set a default file name.
+  - Apps can request main-window modality.
+  - Apps can request directory creation when the platform supports it.
+- Dialog cancellation is a normal result.
+  - Canceling a dialog does not throw a frontend error.
+  - Invalid dialog requests still report typed Cefari errors.
+- Save dialogs select a path.
+  - They do not write files.
+  - They do not overwrite files.
+- Native dialog paths are separate from app-data filesystem paths.
+  - Selected native paths do not expand `cefari.fs` access.
+  - App-data default directories use app-data path validation.
+  - File filters are user-interface hints, not security boundaries.
+- Native dialog behavior can vary by platform.
+  - Cefari supports macOS, Linux, and Windows native dialogs.
+  - Some option details depend on the operating system dialog backend.
+
 ## Updates
 
 > This section describes update checks, apply flows, and update events.

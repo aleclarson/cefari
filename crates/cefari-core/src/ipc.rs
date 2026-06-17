@@ -40,6 +40,7 @@ pub enum CefariIpcCommand {
     ServiceStatus,
     TrayRestoreWindow,
     Notification(NotificationCommand),
+    Dialog(DialogCommand),
     Files(FilesCommand),
 }
 
@@ -56,6 +57,7 @@ pub enum CefariIpcResult {
     ServiceStatus(ServiceStatusResult),
     Tray(TrayResult),
     Notification(NotificationResult),
+    Dialog(DialogResult),
     File(FileResult),
 }
 
@@ -154,6 +156,63 @@ pub struct ServiceStatusResult {
 #[serde(rename_all = "camelCase")]
 pub struct TrayResult {
     pub restored: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "dialog", content = "payload", rename_all = "camelCase")]
+pub enum DialogCommand {
+    OpenFile(DialogRequest),
+    OpenFiles(DialogRequest),
+    ChooseFolder(DialogRequest),
+    ChooseFolders(DialogRequest),
+    SaveFile(DialogRequest),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DialogRequest {
+    pub title: Option<String>,
+    pub filters: Vec<DialogFilter>,
+    pub default_directory: Option<DialogDefaultDirectory>,
+    pub default_name: Option<String>,
+    pub modality: Option<DialogModality>,
+    pub can_create_directories: Option<bool>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DialogFilter {
+    pub name: String,
+    pub extensions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DialogDefaultDirectory {
+    AppData { path: Option<String> },
+    Native { path: String },
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum DialogModality {
+    Window,
+    App,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "result", content = "payload", rename_all = "camelCase")]
+pub enum DialogResult {
+    Canceled,
+    Selected { paths: Vec<DialogSelectedPath> },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DialogSelectedPath {
+    pub path: String,
+    pub name: String,
+    pub kind: FileKind,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -370,8 +429,9 @@ pub fn ipc_types() -> Types {
 mod tests {
     use super::{
         CefariIpcCommand, CefariIpcError, CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest,
-        CefariIpcResponse, DeepLinkOpenEvent, NotificationCommand, OpenExternalUrlRequest,
-        WindowSetTitleRequest, ipc_types,
+        CefariIpcResponse, DeepLinkOpenEvent, DialogCommand, DialogDefaultDirectory, DialogFilter,
+        DialogModality, DialogRequest, DialogResult, DialogSelectedPath, FileKind,
+        NotificationCommand, OpenExternalUrlRequest, WindowSetTitleRequest, ipc_types,
     };
 
     #[test]
@@ -449,6 +509,66 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_dialog_commands() {
+        let dialog_request = DialogRequest {
+            title: Some("Choose Project".to_owned()),
+            filters: vec![DialogFilter {
+                name: "Images".to_owned(),
+                extensions: vec!["png".to_owned(), "jpg".to_owned()],
+            }],
+            default_directory: Some(DialogDefaultDirectory::AppData {
+                path: Some("exports".to_owned()),
+            }),
+            default_name: Some("report.png".to_owned()),
+            modality: Some(DialogModality::Window),
+            can_create_directories: Some(true),
+        };
+        let commands = [
+            DialogCommand::OpenFile(dialog_request.clone()),
+            DialogCommand::OpenFiles(dialog_request.clone()),
+            DialogCommand::ChooseFolder(dialog_request.clone()),
+            DialogCommand::ChooseFolders(dialog_request.clone()),
+            DialogCommand::SaveFile(dialog_request),
+        ];
+
+        for (index, command) in commands.into_iter().enumerate() {
+            let request = CefariIpcRequest {
+                id: format!("dialog-{index}"),
+                command: CefariIpcCommand::Dialog(command.clone()),
+            };
+            let json = serde_json::to_string(&request).expect("request should serialize");
+
+            assert_eq!(
+                serde_json::from_str::<CefariIpcRequest>(&json)
+                    .expect("request should deserialize"),
+                request
+            );
+            assert!(json.contains("dialog"));
+        }
+    }
+
+    #[test]
+    fn round_trips_dialog_results() {
+        let canceled = DialogResult::Canceled;
+        let selected = DialogResult::Selected {
+            paths: vec![DialogSelectedPath {
+                path: "/tmp/report.png".to_owned(),
+                name: "report.png".to_owned(),
+                kind: FileKind::File,
+            }],
+        };
+
+        for result in [canceled, selected] {
+            let json = serde_json::to_string(&result).expect("result should serialize");
+
+            assert_eq!(
+                serde_json::from_str::<DialogResult>(&json).expect("result should deserialize"),
+                result
+            );
+        }
+    }
+
+    #[test]
     fn exports_typescript_bindings() {
         let output = specta_typescript::Typescript::default()
             .export(&ipc_types(), specta_serde::Format)
@@ -457,6 +577,8 @@ mod tests {
         assert!(output.contains("export type CefariIpcRequest"));
         assert!(output.contains("windowSetTitle"));
         assert!(output.contains("unknownCommand"));
+        assert!(output.contains("openFiles"));
+        assert!(output.contains("chooseFolders"));
         assert!(output.contains("permissionState"));
         assert!(output.contains("export type CefariIpcEvent"));
     }

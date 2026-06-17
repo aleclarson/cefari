@@ -8,6 +8,10 @@ use cefari_core::{AppDataDirInfo, FileResult, FilesCommand, RuntimePaths};
 
 use self::paths::path_to_utf8;
 
+pub(crate) fn checked_app_data_relative_path(path: &str) -> Result<&str> {
+    paths::checked_path(path)
+}
+
 #[derive(Debug)]
 pub struct AppDataFs {
     pub(super) root: Dir,

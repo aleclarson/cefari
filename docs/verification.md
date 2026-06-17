@@ -21,8 +21,8 @@ Docs were checked against:
   `.github/actions/cefari-release/src/main.ts`
 - `crates/cefari-core/src/ipc.rs` and `crates/cefari-core/bindings/ipc.ts`
 - `crates/cefari-desktop/src/desktop_bridge.rs`, `desktop_ipc.rs`,
-  `desktop_menu.rs`, `desktop_tray.rs`, `desktop_single_instance.rs`, and
-  `desktop_notifications.rs`
+  `desktop_menu.rs`, `desktop_tray.rs`, `desktop_single_instance.rs`,
+  `desktop_notifications.rs`, and `desktop_dialogs.rs`
 - `npm/src/app/mod.ts`, namespace wrapper modules, and
   `npm/tests/app/cefari_app_test.ts`
 

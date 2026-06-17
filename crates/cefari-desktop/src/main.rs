@@ -3,6 +3,7 @@ use std::process::ExitCode;
 mod desktop_app;
 mod desktop_bridge;
 mod desktop_cef;
+mod desktop_dialogs;
 mod desktop_files;
 mod desktop_ipc;
 mod desktop_menu;

@@ -1,11 +1,13 @@
 use anyhow::{Context, Result};
 use cefari_core::{
-    FileResult, FilesCommand, RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult,
-    UpdateStateResult, WindowState,
+    DialogCommand, DialogResult, FileResult, FilesCommand, RuntimePaths, ServiceStatusResult,
+    TrayResult, UpdateCheckResult, UpdateStateResult, WindowState,
 };
 use tao::window::Window;
 
-use crate::{desktop_app, desktop_cef, desktop_files, desktop_ipc, external, runtime};
+use crate::{
+    desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, external, runtime,
+};
 
 pub(crate) struct DesktopShellContext<'a> {
     pub(crate) window: &'a mut Option<Window>,
@@ -103,6 +105,10 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     fn tray_restore_window(&mut self) -> Result<TrayResult> {
         self.window_focus()?;
         Ok(TrayResult { restored: true })
+    }
+
+    fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult> {
+        desktop_dialogs::dispatch(command, self.paths, self.window.as_ref())
     }
 
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {

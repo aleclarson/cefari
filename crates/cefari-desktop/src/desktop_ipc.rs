@@ -1,9 +1,9 @@
 use anyhow::Result;
 use cefari_core::{
     CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
-    CefariIpcResult, ExternalUrlResult, FileResult, FilesCommand, NotificationCommand,
-    ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult, UpdateCheckState,
-    UpdateStateKind, UpdateStateResult, WindowState,
+    CefariIpcResult, DialogCommand, DialogResult, ExternalUrlResult, FileResult, FilesCommand,
+    NotificationCommand, ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult,
+    UpdateCheckState, UpdateStateKind, UpdateStateResult, WindowState,
 };
 
 #[derive(Debug, Default)]
@@ -24,6 +24,7 @@ pub trait NativeShellContext {
     fn update_restart(&mut self) -> Result<()>;
     fn service_status(&mut self) -> Result<ServiceStatusResult>;
     fn tray_restore_window(&mut self) -> Result<TrayResult>;
+    fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult>;
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult>;
 }
 
@@ -110,6 +111,10 @@ fn dispatch_command(
             .map(CefariIpcResult::Tray)
             .map_err(|error| invalid_command(&error, "trayRestoreWindow")),
         CefariIpcCommand::Notification(command) => Err(unsupported_notification(command)),
+        CefariIpcCommand::Dialog(command) => context
+            .dialog(command)
+            .map(CefariIpcResult::Dialog)
+            .map_err(|error| invalid_command(&error, "dialog")),
         CefariIpcCommand::Files(command) => context
             .files(command)
             .map(CefariIpcResult::File)
@@ -197,9 +202,10 @@ mod tests {
     use anyhow::Result;
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
-        FileResult, FilesCommand, NotificationCommand, OpenExternalUrlRequest, ServiceStatusResult,
-        TrayResult, UpdateApplyRequest, UpdateApplyResult, UpdateCheckResult, UpdateStateKind,
-        UpdateStateResult, WindowSetTitleRequest, WindowState,
+        DialogCommand, DialogRequest, DialogResult, FileResult, FilesCommand, NotificationCommand,
+        OpenExternalUrlRequest, ServiceStatusResult, TrayResult, UpdateApplyRequest,
+        UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
+        WindowSetTitleRequest, WindowState,
     };
 
     use super::{DesktopIpcDispatcher, NativeShellContext};
@@ -308,6 +314,16 @@ mod tests {
             Ok(TrayResult { restored: true })
         }
 
+        fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult> {
+            match command {
+                DialogCommand::OpenFile(_) => {
+                    self.calls.push("dialog_open_file");
+                    Ok(DialogResult::Canceled)
+                }
+                _ => anyhow::bail!("unsupported test dialog command"),
+            }
+        }
+
         fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
             match command {
                 FilesCommand::AppDataDir => {
@@ -356,6 +372,14 @@ mod tests {
             CefariIpcCommand::UpdateRestart,
             CefariIpcCommand::ServiceStatus,
             CefariIpcCommand::TrayRestoreWindow,
+            CefariIpcCommand::Dialog(DialogCommand::OpenFile(DialogRequest {
+                title: None,
+                filters: Vec::new(),
+                default_directory: None,
+                default_name: None,
+                modality: None,
+                can_create_directories: None,
+            })),
             CefariIpcCommand::Files(FilesCommand::AppDataDir),
         ];
 
@@ -387,6 +411,7 @@ mod tests {
                 "update_restart",
                 "service_status",
                 "tray_restore_window",
+                "dialog_open_file",
                 "files_app_data_dir",
             ]
         );

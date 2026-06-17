@@ -215,6 +215,148 @@ Deno.test("normalizes fs text, bytes, and base64 encodings", async () => {
   ]);
 });
 
+Deno.test("wraps native dialog commands and cancellation", async () => {
+  const commands: CefariIpcCommand[] = [];
+  withBridge({
+    invoke(command) {
+      commands.push(command);
+      if (
+        command.command === "dialog" &&
+        command.payload.dialog === "chooseFolders"
+      ) {
+        return Promise.resolve(ok({
+          result: "dialog",
+          payload: { result: "canceled" },
+        }));
+      }
+      return Promise.resolve(responseFor(command));
+    },
+    on() {
+      return () => {};
+    },
+  });
+
+  const options = {
+    title: "Choose project asset",
+    filters: [{ name: "Images", extensions: ["png", "jpg"] }],
+    defaultDirectory: { kind: "appData" as const, path: "exports" },
+    defaultName: "report.png",
+    modality: "window" as const,
+    canCreateDirectories: true,
+  };
+
+  assertEquals(await cefari.dialogs.openFile(options), {
+    canceled: false,
+    value: {
+      path: "/tmp/report.png",
+      name: "report.png",
+      kind: "file",
+    },
+  });
+  assertEquals(await cefari.dialogs.openFiles(), {
+    canceled: false,
+    value: [
+      {
+        path: "/tmp/report.png",
+        name: "report.png",
+        kind: "file",
+      },
+    ],
+  });
+  assertEquals(await cefari.dialogs.chooseFolder(), {
+    canceled: false,
+    value: {
+      path: "/tmp/projects",
+      name: "projects",
+      kind: "directory",
+    },
+  });
+  assertEquals(await cefari.dialogs.chooseFolders(), {
+    canceled: true,
+  });
+  assertEquals(await cefari.dialogs.saveFile({ defaultName: "saved.txt" }), {
+    canceled: false,
+    value: {
+      path: "/tmp/saved.txt",
+      name: "saved.txt",
+      kind: "file",
+    },
+  });
+
+  assertEquals(commands, [
+    {
+      command: "dialog",
+      payload: {
+        dialog: "openFile",
+        payload: {
+          title: "Choose project asset",
+          filters: [{ name: "Images", extensions: ["png", "jpg"] }],
+          defaultDirectory: { kind: "appData", path: "exports" },
+          defaultName: "report.png",
+          modality: "window",
+          canCreateDirectories: true,
+        },
+      },
+    },
+    {
+      command: "dialog",
+      payload: {
+        dialog: "openFiles",
+        payload: {
+          title: null,
+          filters: [],
+          defaultDirectory: null,
+          defaultName: null,
+          modality: "window",
+          canCreateDirectories: null,
+        },
+      },
+    },
+    {
+      command: "dialog",
+      payload: {
+        dialog: "chooseFolder",
+        payload: {
+          title: null,
+          filters: [],
+          defaultDirectory: null,
+          defaultName: null,
+          modality: "window",
+          canCreateDirectories: null,
+        },
+      },
+    },
+    {
+      command: "dialog",
+      payload: {
+        dialog: "chooseFolders",
+        payload: {
+          title: null,
+          filters: [],
+          defaultDirectory: null,
+          defaultName: null,
+          modality: "window",
+          canCreateDirectories: null,
+        },
+      },
+    },
+    {
+      command: "dialog",
+      payload: {
+        dialog: "saveFile",
+        payload: {
+          title: null,
+          filters: [],
+          defaultDirectory: null,
+          defaultName: "saved.txt",
+          modality: "window",
+          canCreateDirectories: null,
+        },
+      },
+    },
+  ]);
+});
+
 Deno.test("filters typed events", () => {
   const handlers = new Set<(event: CefariIpcEvent) => void>();
   withBridge({
@@ -377,6 +519,60 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
           return ok({
             result: "notification",
             payload: { result: "sent", payload: { id: "n1" } },
+          });
+      }
+      break;
+    case "dialog":
+      switch (command.payload.dialog) {
+        case "openFile":
+        case "openFiles":
+          return ok({
+            result: "dialog",
+            payload: {
+              result: "selected",
+              payload: {
+                paths: [
+                  {
+                    path: "/tmp/report.png",
+                    name: "report.png",
+                    kind: "file",
+                  },
+                ],
+              },
+            },
+          });
+        case "chooseFolder":
+        case "chooseFolders":
+          return ok({
+            result: "dialog",
+            payload: {
+              result: "selected",
+              payload: {
+                paths: [
+                  {
+                    path: "/tmp/projects",
+                    name: "projects",
+                    kind: "directory",
+                  },
+                ],
+              },
+            },
+          });
+        case "saveFile":
+          return ok({
+            result: "dialog",
+            payload: {
+              result: "selected",
+              payload: {
+                paths: [
+                  {
+                    path: "/tmp/saved.txt",
+                    name: "saved.txt",
+                    kind: "file",
+                  },
+                ],
+              },
+            },
           });
       }
       break;

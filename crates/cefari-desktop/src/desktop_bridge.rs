@@ -421,8 +421,8 @@ mod tests {
     use anyhow::Result;
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
-        FileResult, FilesCommand, ServiceStatusResult, TrayResult, UpdateApplyResult,
-        UpdateCheckResult, UpdateStateKind, UpdateStateResult, WindowState,
+        DialogCommand, DialogResult, FileResult, FilesCommand, ServiceStatusResult, TrayResult,
+        UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult, WindowState,
     };
 
     use super::{
@@ -505,6 +505,10 @@ mod tests {
 
         fn tray_restore_window(&mut self) -> Result<TrayResult> {
             Ok(TrayResult { restored: true })
+        }
+
+        fn dialog(&mut self, _command: &DialogCommand) -> Result<DialogResult> {
+            Ok(DialogResult::Canceled)
         }
 
         fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {

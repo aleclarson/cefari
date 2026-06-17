@@ -4,7 +4,7 @@ export type AppDataDirInfo = {
 	displayPath: string,
 };
 
-export type CefariIpcCommand = { command: "appQuit" } | { command: "windowShow" } | { command: "windowFocus" } | { command: "windowClose" } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "notification"; payload: NotificationCommand } | { command: "files"; payload: FilesCommand };
+export type CefariIpcCommand = { command: "appQuit" } | { command: "windowShow" } | { command: "windowFocus" } | { command: "windowClose" } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand };
 
 export type CefariIpcError = { code: "invalidCommand"; details: {
 	message: string,
@@ -31,7 +31,7 @@ export type CefariIpcResponse = {
 	outcome: CefariIpcOutcome,
 };
 
-export type CefariIpcResult = { result: "empty" } | { result: "window"; payload: WindowState } | { result: "reloadUi" } | { result: "externalUrl"; payload: ExternalUrlResult } | { result: "updateState"; payload: UpdateStateResult } | { result: "updateCheck"; payload: UpdateCheckResult } | { result: "updateApply"; payload: UpdateApplyResult } | { result: "serviceStatus"; payload: ServiceStatusResult } | { result: "tray"; payload: TrayResult } | { result: "notification"; payload: NotificationResult } | { result: "file"; payload: FileResult };
+export type CefariIpcResult = { result: "empty" } | { result: "window"; payload: WindowState } | { result: "reloadUi" } | { result: "externalUrl"; payload: ExternalUrlResult } | { result: "updateState"; payload: UpdateStateResult } | { result: "updateCheck"; payload: UpdateCheckResult } | { result: "updateApply"; payload: UpdateApplyResult } | { result: "serviceStatus"; payload: ServiceStatusResult } | { result: "tray"; payload: TrayResult } | { result: "notification"; payload: NotificationResult } | { result: "dialog"; payload: DialogResult } | { result: "file"; payload: FileResult };
 
 export type CopyFileRequest = {
 	from: string,
@@ -40,6 +40,36 @@ export type CopyFileRequest = {
 
 export type DeepLinkOpenEvent = {
 	url: string,
+};
+
+export type DialogCommand = { dialog: "openFile"; payload: DialogRequest } | { dialog: "openFiles"; payload: DialogRequest } | { dialog: "chooseFolder"; payload: DialogRequest } | { dialog: "chooseFolders"; payload: DialogRequest } | { dialog: "saveFile"; payload: DialogRequest };
+
+export type DialogDefaultDirectory = { kind: "appData"; path: string | null } | { kind: "native"; path: string };
+
+export type DialogFilter = {
+	name: string,
+	extensions: string[],
+};
+
+export type DialogModality = "window" | "app";
+
+export type DialogRequest = {
+	title: string | null,
+	filters: DialogFilter[],
+	defaultDirectory: DialogDefaultDirectory | null,
+	defaultName: string | null,
+	modality: DialogModality | null,
+	canCreateDirectories: boolean | null,
+};
+
+export type DialogResult = { result: "canceled" } | { result: "selected"; payload: {
+	paths: DialogSelectedPath[],
+} };
+
+export type DialogSelectedPath = {
+	path: string,
+	name: string,
+	kind: FileKind,
 };
 
 export type DirEntry = {

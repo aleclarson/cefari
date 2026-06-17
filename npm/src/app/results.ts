@@ -2,6 +2,7 @@ import { unexpectedResultError } from "./errors.ts";
 import type {
   CefariIpcCommand,
   CefariIpcResult,
+  DialogResult,
   ExternalUrlResult,
   FileResult,
   NotificationResult,
@@ -106,6 +107,12 @@ export async function invokeNotification(
   command: CefariIpcCommand,
 ): Promise<NotificationResult> {
   return (await invokeResult(command, "notification")).payload;
+}
+
+export async function invokeDialog(
+  command: CefariIpcCommand,
+): Promise<DialogResult> {
+  return (await invokeResult(command, "dialog")).payload;
 }
 
 export async function invokeFile(command: CefariIpcCommand): Promise<FileResult> {
