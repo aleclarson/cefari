@@ -55,7 +55,15 @@ export interface TrayCapabilityInput extends TrayCapabilityOptions {
   type: "tray";
 }
 
-export type CefariCapability = TrayCapabilityInput;
+export interface DeepLinksCapabilityOptions {
+  schemes: string[];
+}
+
+export interface DeepLinksCapabilityInput extends DeepLinksCapabilityOptions {
+  type: "deepLinks";
+}
+
+export type CefariCapability = TrayCapabilityInput | DeepLinksCapabilityInput;
 
 export interface AppConfig extends AppConfigInput {}
 
@@ -105,6 +113,10 @@ export function defineConfig(config: CefariConfigExport): CefariConfigExport {
 
 export function tray(config: TrayCapabilityOptions): TrayCapabilityInput {
   return { type: "tray", ...config };
+}
+
+export function deepLinks(config: DeepLinksCapabilityOptions): DeepLinksCapabilityInput {
+  return { type: "deepLinks", ...config };
 }
 
 export async function loadCefariConfig(options: LoadCefariConfigOptions = {}): Promise<ResolvedCefariConfig> {
@@ -195,21 +207,61 @@ function normalizeCapabilities(value: unknown): CefariCapability[] {
   }
 
   let trayCount = 0;
+  const deepLinkSchemes = new Set<string>();
   return value.map((entry, index) => {
     const capability = asRecord(entry, `capabilities[${index}]`);
     const type = requiredString(capability.type, `capabilities[${index}].type`);
-    if (type !== "tray") {
-      throw new Error(`capabilities[${index}].type must be "tray"`);
+    if (type === "tray") {
+      trayCount += 1;
+      if (trayCount > 1) {
+        throw new Error("capabilities must not include more than one tray capability");
+      }
+      return {
+        type: "tray",
+        icon: relativePath(capability.icon, `capabilities[${index}].icon`),
+      };
     }
-    trayCount += 1;
-    if (trayCount > 1) {
-      throw new Error("capabilities must not include more than one tray capability");
+    if (type === "deepLinks") {
+      return {
+        type: "deepLinks",
+        schemes: normalizeDeepLinkSchemes(
+          capability.schemes,
+          `capabilities[${index}].schemes`,
+          deepLinkSchemes,
+        ),
+      };
     }
-    return {
-      type: "tray",
-      icon: relativePath(capability.icon, `capabilities[${index}].icon`),
-    };
+    throw new Error(`capabilities[${index}].type must be "tray" or "deepLinks"`);
   });
+}
+
+function normalizeDeepLinkSchemes(value: unknown, field: string, seen: Set<string>): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${field} must be a non-empty array`);
+  }
+
+  return value.map((scheme, index) => {
+    const normalized = deepLinkScheme(scheme, `${field}[${index}]`);
+    if (seen.has(normalized)) {
+      throw new Error(`${field}[${index}] duplicates deep link scheme "${normalized}"`);
+    }
+    seen.add(normalized);
+    return normalized;
+  });
+}
+
+function deepLinkScheme(value: unknown, field: string): string {
+  const scheme = requiredString(value, field);
+  if (scheme.includes("://")) {
+    throw new Error(`${field} must be a URL scheme without ://`);
+  }
+  if (!/^[a-z][a-z0-9+.-]*$/.test(scheme)) {
+    throw new Error(`${field} must be lowercase ASCII and match ^[a-z][a-z0-9+.-]*$`);
+  }
+  if (["http", "https", "file", "mailto", "cefari"].includes(scheme)) {
+    throw new Error(`${field} must not use reserved scheme "${scheme}"`);
+  }
+  return scheme;
 }
 
 function normalizeVite(value: unknown): ViteConfig {

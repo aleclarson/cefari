@@ -29,7 +29,7 @@ async function projectWithPackageBuild(): Promise<string> {
   );
   await writeFile(
     join(root, "cefari.config.ts"),
-    `import { defineConfig, tray } from "${configApi}";
+    `import { deepLinks, defineConfig, tray } from "${configApi}";
 
 export default defineConfig({
   app: {
@@ -40,6 +40,7 @@ export default defineConfig({
   },
   capabilities: [
     tray({ icon: "assets/tray.png" }),
+    deepLinks({ schemes: ["packageapp", "packageapp+dev"] }),
   ],
   daemon: {
     entry: "daemon/main.ts",
@@ -89,6 +90,8 @@ test("package writes metadata and manifest for build artifacts", async () => {
   assert.match(metadata, new RegExp(`formats = \\["${packageFormat}"\\]`));
   assert.match(metadata, /target = "frontend"/);
   assert.match(metadata, /target = "tray-icon\.png"/);
+  assert.match(metadata, /\[\[deep_link_protocols\]\]/);
+  assert.match(metadata, /schemes = \["packageapp", "packageapp\+dev"\]/);
   const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
   assert.equal(manifest.product_name, "Package App");
   assert.equal(manifest.tray_icon, "tray-icon.png");

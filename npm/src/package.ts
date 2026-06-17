@@ -193,6 +193,7 @@ async function writePackageMetadata(
   if (tray !== undefined) {
     ensureArtifact(resolve(config.root, tray.icon));
   }
+  const deepLinks = config.capabilities.filter((capability) => capability.type === "deepLinks");
   const metadata = [
     `name = ${tomlString(config.app.identifier)}`,
     `product_name = ${tomlString(config.package.productName)}`,
@@ -209,6 +210,7 @@ async function writePackageMetadata(
     ...resourceToml(join(buildDir, "daemon"), "daemon"),
     ...resourceToml(cefResources, "cef"),
     ...(tray === undefined ? [] : resourceToml(resolve(config.root, tray.icon), "tray-icon.png")),
+    ...deepLinks.flatMap((capability) => deepLinkProtocolToml(capability.schemes)),
     ...(icon === undefined ? [] : ["", `icons = [${tomlString(icon)}]`]),
     "",
   ].join("\n");
@@ -347,6 +349,10 @@ function platformExecutableName(stem: string): string {
 
 function resourceToml(src: string, target: string): string[] {
   return ["", "[[resources]]", `src = ${tomlString(src)}`, `target = ${tomlString(target)}`];
+}
+
+function deepLinkProtocolToml(schemes: string[]): string[] {
+  return ["", "[[deep_link_protocols]]", `schemes = [${schemes.map(tomlString).join(", ")}]`];
 }
 
 function tomlString(value: string): string {

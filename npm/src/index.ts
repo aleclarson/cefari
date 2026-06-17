@@ -39,6 +39,7 @@ export {
 } from "./dev.js";
 export {
   defineConfig,
+  deepLinks,
   loadCefariConfig,
   toSerializableProjectConfig,
   tray,
@@ -51,6 +52,8 @@ export {
   type ConfigMode,
   type DaemonConfigInput,
   type DaemonConfig,
+  type DeepLinksCapabilityInput,
+  type DeepLinksCapabilityOptions,
   type LoadCefariConfigOptions,
   type PackageConfigInput,
   type PackageConfig,

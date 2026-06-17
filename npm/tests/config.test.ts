@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
-import { loadCefariConfig, toSerializableProjectConfig, tray } from "../src/index.js";
+import { deepLinks, loadCefariConfig, toSerializableProjectConfig, tray } from "../src/index.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
@@ -118,6 +118,79 @@ export default defineConfig({
 
   assert.deepEqual(config.capabilities, [{ type: "tray", icon: "assets/tray.png" }]);
   assert.deepEqual(tray({ icon: "assets/tray.png" }), { type: "tray", icon: "assets/tray.png" });
+});
+
+test("supports deep links capability builder", async () => {
+  const root = await projectWithConfig(`import { deepLinks, defineConfig } from "__CEFARI_CONFIG_API__";
+
+export default defineConfig({
+  app: {
+    projectName: "links-app",
+    name: "Links App",
+    identifier: "dev.cefari.links",
+  },
+  capabilities: [
+    deepLinks({ schemes: ["myapp", "myapp+dev"] }),
+  ],
+  daemon: {
+    entry: "daemon/main.ts",
+  },
+  package: {
+    productName: "Links App",
+    version: "0.1.0",
+  },
+});
+`);
+
+  const config = await loadCefariConfig({ root });
+
+  assert.deepEqual(config.capabilities, [{ type: "deepLinks", schemes: ["myapp", "myapp+dev"] }]);
+  assert.deepEqual(deepLinks({ schemes: ["myapp"] }), { type: "deepLinks", schemes: ["myapp"] });
+});
+
+test("rejects invalid deep link schemes", async () => {
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`capabilities: [{ type: "deepLinks", schemes: [] }],`)),
+    }),
+    /capabilities\[0\]\.schemes must be a non-empty array/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`capabilities: [deepLinks({ schemes: ["MyApp"] })],`).replace(
+        'import { defineConfig }',
+        'import { deepLinks, defineConfig }',
+      )),
+    }),
+    /capabilities\[0\]\.schemes\[0\] must be lowercase ASCII/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`capabilities: [deepLinks({ schemes: ["myapp://open"] })],`).replace(
+        'import { defineConfig }',
+        'import { deepLinks, defineConfig }',
+      )),
+    }),
+    /capabilities\[0\]\.schemes\[0\] must be a URL scheme without :\/\//,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`capabilities: [deepLinks({ schemes: ["https"] })],`).replace(
+        'import { defineConfig }',
+        'import { deepLinks, defineConfig }',
+      )),
+    }),
+    /capabilities\[0\]\.schemes\[0\] must not use reserved scheme "https"/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`capabilities: [
+        deepLinks({ schemes: ["myapp"] }),
+        deepLinks({ schemes: ["myapp"] }),
+      ],`).replace('import { defineConfig }', 'import { deepLinks, defineConfig }')),
+    }),
+    /capabilities\[1\]\.schemes\[0\] duplicates deep link scheme "myapp"/,
+  );
 });
 
 test("rejects legacy frontend config", async () => {
