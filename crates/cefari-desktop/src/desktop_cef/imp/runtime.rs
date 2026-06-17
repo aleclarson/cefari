@@ -5,13 +5,14 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use cefari_core::CefariIpcEvent;
 use tao::window::Window;
 use tracing::{error, info};
 
 use cef::wrapper::message_router::{
     BrowserSideCallback, BrowserSideRouter, MessageRouterBrowserSide,
 };
-use cef::{ImplBrowser as _, ImplBrowserHost as _};
+use cef::{ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _};
 
 use crate::desktop_bridge::{BridgeOriginPolicy, NavigationPolicy};
 
@@ -303,6 +304,18 @@ impl CefRuntime {
         self.message_pump.set_scheduler(scheduler);
     }
 
+    pub fn emit_ipc_event(&self, event: &CefariIpcEvent) -> Result<()> {
+        let browser = self.state.active_browser()?;
+        let frame = browser
+            .main_frame()
+            .with_context(|| format!("CEF browser {} has no main frame", browser.identifier()))?;
+        let script = ipc_event_script(event)?;
+        let code = cef::CefString::from(script.as_str());
+        let script_url = cef::CefString::from("cefari://native/ipc-event");
+        frame.execute_java_script(Some(&code), Some(&script_url), 1);
+        Ok(())
+    }
+
     fn browser_host(&self) -> Result<cef::BrowserHost> {
         let browser = self.state.active_browser()?;
         browser
@@ -311,11 +324,49 @@ impl CefRuntime {
     }
 }
 
+fn ipc_event_script(event: &CefariIpcEvent) -> Result<String> {
+    let event_json = serde_json::to_string(event).context("failed to serialize IPC event")?;
+    let event_json_literal =
+        serde_json::to_string(&event_json).context("failed to serialize IPC event literal")?;
+    Ok(format!(
+        "(() => {{ const emit = window.__CEFARI_IPC_EVENT__; if (typeof emit === \"function\") emit(JSON.parse({event_json_literal})); }})();"
+    ))
+}
+
 impl Drop for CefRuntime {
     fn drop(&mut self) {
         if self.initialized {
             cef::shutdown();
             self.initialized = false;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use cefari_core::{
+        CefariIpcEvent, NotificationAction, NotificationEvent, NotificationResponseEvent,
+    };
+
+    use super::ipc_event_script;
+
+    #[test]
+    fn ipc_event_script_injects_json_as_data() {
+        let script = ipc_event_script(&CefariIpcEvent::Notification(NotificationEvent::Response(
+            NotificationResponseEvent {
+                id: "n1".to_owned(),
+                action: NotificationAction::Other("reply".to_owned()),
+                user_text: Some("hello ' \" </script>".to_owned()),
+                user_info: BTreeMap::from([("buildId".to_owned(), "123".to_owned())]),
+            },
+        )))
+        .expect("event script should serialize");
+
+        assert!(script.contains("window.__CEFARI_IPC_EVENT__"));
+        assert!(script.contains("JSON.parse"));
+        assert!(script.contains("\\\"notification\\\""));
+        assert!(!script.contains("hello ' \" </script>"));
     }
 }

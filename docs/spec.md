@@ -268,16 +268,15 @@ APIs.
 - Apps can subscribe to notification response events.
   - Response events include the notification id, action, optional reply text,
     and user info.
+  - Default notification clicks emit a response event and focus the main
+    window.
+  - Dismiss responses emit an event without focusing the main window.
 - Notification requests are validated.
   - Titles must be non-empty.
   - Optional text fields are trimmed.
   - Blank optional text fields are rejected.
-- Current notification IPC is not wired end to end in the desktop dispatcher.
-  - The full TypeScript API exists.
-  - The protocol defines permission, capability, category, delivery,
-    management, and response-event payloads.
-  - The desktop dispatcher currently reports notification commands as
-    unsupported.
+- The desktop dispatcher wires notification permission, capability, category,
+  delivery, delivered-notification management, and response-event payloads.
 
 ## App Data Filesystem
 

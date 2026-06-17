@@ -1,8 +1,9 @@
 use std::{
     collections::{BTreeMap, HashMap},
+    fmt,
     future::Future,
     path::{Component, Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use anyhow::{Context, Result, bail};
@@ -24,6 +25,7 @@ pub struct DesktopNotifier {
     app_name: String,
     paths: RuntimePaths,
     manager: Arc<dyn NotificationManager>,
+    registration: Mutex<NotificationRegistration>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -46,6 +48,16 @@ pub enum NotificationSendOutcome {
     PermissionDenied,
 }
 
+pub trait NotificationResponseSink: Send + Sync + fmt::Debug {
+    fn send_notification_response(&self, event: NotificationResponseEvent) -> Result<()>;
+}
+
+#[derive(Debug, Default)]
+struct NotificationRegistration {
+    sink: Option<Arc<dyn NotificationResponseSink>>,
+    registered: bool,
+}
+
 impl DesktopNotifier {
     pub fn from_app_config(config: &AppConfig, paths: &RuntimePaths) -> Result<Self> {
         let app_id = required_notification_field(&config.identifier, "app identifier")?;
@@ -57,6 +69,7 @@ impl DesktopNotifier {
             app_name,
             paths: paths.clone(),
             manager,
+            registration: Mutex::default(),
         })
     }
 
@@ -74,6 +87,7 @@ impl DesktopNotifier {
             app_name,
             paths,
             manager,
+            registration: Mutex::default(),
         })
     }
 
@@ -86,18 +100,25 @@ impl DesktopNotifier {
         platform_capabilities()
     }
 
+    pub fn set_response_sink(&self, sink: Arc<dyn NotificationResponseSink>) -> Result<()> {
+        let mut registration = self
+            .registration
+            .lock()
+            .map_err(|_| anyhow::anyhow!("notification response registration lock is poisoned"))?;
+        if registration.registered {
+            anyhow::bail!("notification response handler is already registered");
+        }
+        registration.sink = Some(sink);
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub fn register_categories(&self, categories: &[NotificationCategory]) -> Result<u32> {
         let converted = categories
             .iter()
             .map(notification_category_to_user_notify)
             .collect::<Result<Vec<_>>>()?;
-        self.manager
-            .register(
-                Box::new(|response| tracing::debug!(?response, "notification response")),
-                converted,
-            )
-            .context("failed to register desktop notification categories")?;
+        self.register_response_handler(converted)?;
         categories
             .len()
             .try_into()
@@ -138,6 +159,7 @@ impl DesktopNotifier {
             return Ok(NotificationSendOutcome::PermissionDenied);
         }
 
+        self.ensure_response_handler_registered()?;
         let handle = self
             .manager
             .send_notification(request.to_user_notify_builder(&self.app_name))
@@ -211,6 +233,50 @@ impl DesktopNotifier {
     #[allow(dead_code)]
     pub fn remove_all_delivered_blocking(&self) -> Result<u32> {
         block_on_notification(self.remove_all_delivered())
+    }
+
+    fn ensure_response_handler_registered(&self) -> Result<()> {
+        if self
+            .registration
+            .lock()
+            .map_err(|_| anyhow::anyhow!("notification response registration lock is poisoned"))?
+            .registered
+        {
+            return Ok(());
+        }
+
+        self.register_response_handler(Vec::new())
+    }
+
+    fn register_response_handler(&self, categories: Vec<UserNotificationCategory>) -> Result<()> {
+        let mut registration = self
+            .registration
+            .lock()
+            .map_err(|_| anyhow::anyhow!("notification response registration lock is poisoned"))?;
+        if registration.registered {
+            anyhow::bail!(
+                "notification response handler is already registered; register categories before sending notifications"
+            );
+        }
+
+        let sink = registration.sink.clone();
+        self.manager
+            .register(
+                Box::new(move |response| {
+                    let event = notification_response_event(&response);
+                    if let Some(sink) = sink.as_ref() {
+                        if let Err(error) = sink.send_notification_response(event) {
+                            tracing::error!(%error, "failed to enqueue notification response");
+                        }
+                    } else {
+                        tracing::debug!(?event, "notification response received without sink");
+                    }
+                }),
+                categories,
+            )
+            .context("failed to register desktop notification response handler")?;
+        registration.registered = true;
+        Ok(())
     }
 }
 
@@ -756,6 +822,31 @@ mod tests {
                     .await
                     .expect("all notifications should be removed"),
                 2
+            );
+        });
+    }
+
+    #[test]
+    fn send_registers_response_handler_before_delivery() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("tokio runtime should build");
+        let notifier = test_notifier();
+
+        runtime.block_on(async {
+            let outcome = notifier
+                .send(&notification_send_request())
+                .await
+                .expect("notification should send");
+            assert!(matches!(outcome, NotificationSendOutcome::Delivered { .. }));
+
+            let error = notifier
+                .register_categories(&[])
+                .expect_err("categories must be registered before first send");
+            assert!(
+                error
+                    .to_string()
+                    .contains("register categories before sending notifications")
             );
         });
     }

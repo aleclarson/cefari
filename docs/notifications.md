@@ -65,9 +65,23 @@ await cefari.notifications.send({
 Media fields use Cefari-controlled app-resource or app-data references. The
 frontend API does not expose arbitrary OS paths.
 
-The full protocol defines permission, capability, category, delivery,
-management, and response-event payloads. The current desktop IPC dispatcher
-still returns `unsupported` until notification dispatch is wired end to end.
+The desktop runtime dispatches permission, capability, category, delivery,
+management, and response-event payloads through the native IPC bridge.
+
+## Response Behavior
+
+Subscribe to notification responses from the frontend:
+
+```ts
+const unsubscribe = cefari.notifications.onResponse((event) => {
+  console.log(event.id, event.action, event.userText, event.userInfo);
+});
+```
+
+Default notification clicks emit a response event and focus the main window.
+Dismiss responses emit an event without focusing the main window. Action-button
+and inline-reply responses emit events with the selected action id and optional
+reply text.
 
 ## Permission Behavior
 

@@ -5,6 +5,7 @@ import {
   type CefariIpcCommand,
   type CefariIpcEvent,
   type CefariIpcResponse,
+  type NotificationResponseEvent,
 } from "../../src/app/mod.ts";
 
 Deno.test("reports unavailable outside the Cefari shell", async () => {
@@ -339,14 +340,20 @@ Deno.test("filters typed events", () => {
   });
 
   const focused: string[] = [];
-  const notifications: Array<[string, string | null, Record<string, string>]> =
-    [];
+  const notifications: Array<
+    [
+      string,
+      NotificationResponseEvent["action"],
+      string | null,
+      Record<string, string>,
+    ]
+  > = [];
 
   const unsubscribeFocus = cefari.window.onFocused((state) => {
     focused.push(state.title);
   });
   const unsubscribeNotification = cefari.notifications.onResponse((event) => {
-    notifications.push([event.id, event.userText, event.userInfo]);
+    notifications.push([event.id, event.action, event.userText, event.userInfo]);
   });
 
   for (const handler of handlers) {
@@ -369,7 +376,7 @@ Deno.test("filters typed events", () => {
   }
 
   assertEquals(focused, ["Dashboard"]);
-  assertEquals(notifications, [["n1", null, { buildId: "123" }]]);
+  assertEquals(notifications, [["n1", "default", null, { buildId: "123" }]]);
 
   unsubscribeFocus();
   unsubscribeNotification();

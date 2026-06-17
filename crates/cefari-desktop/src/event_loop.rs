@@ -6,8 +6,9 @@ use std::{
 
 use anyhow::{Context, Result};
 use cefari_core::{
-    CefariIpcCommand, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
-    OpenExternalUrlRequest, RuntimePaths,
+    CefariIpcCommand, CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
+    NotificationAction, NotificationEvent, NotificationResponseEvent, OpenExternalUrlRequest,
+    RuntimePaths,
 };
 use tao::{
     event::{Event, StartCause, WindowEvent},
@@ -18,7 +19,8 @@ use tracing::{debug, error, info};
 
 use crate::{
     desktop_app::RuntimeGuards, desktop_bridge, desktop_cef, desktop_ipc, desktop_menu,
-    desktop_tray, desktop_ui, external, runtime, shell_context::DesktopShellContext, window,
+    desktop_notifications, desktop_tray, desktop_ui, external, runtime,
+    shell_context::DesktopShellContext, window,
 };
 
 const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
@@ -33,6 +35,7 @@ pub(crate) enum UserEvent {
     SmokeExit,
     BridgeIpc(desktop_cef::CefBridgeIpcRequest),
     CefMessagePump(Instant),
+    NotificationResponse(NotificationResponseEvent),
 }
 
 pub(crate) fn run_native_shell(
@@ -64,6 +67,13 @@ pub(crate) fn run_native_shell(
         .set_message_pump_scheduler(Arc::new(TaoMessagePumpScheduler {
             event_proxy: event_loop.create_proxy(),
         }));
+    if let Some(notifier) = guards.desktop_notifier.as_ref() {
+        notifier
+            .set_response_sink(Arc::new(TaoNotificationResponseSender {
+                event_proxy: event_loop.create_proxy(),
+            }))
+            .context("failed to attach notification response handler")?;
+    }
     guards
         .cef_runtime
         .set_app_scheme_resource_dir(shell_ui.app_resource_dir().to_path_buf());
@@ -218,6 +228,21 @@ fn run_event_loop(
                 }
                 if context.should_exit {
                     *control_flow = ControlFlow::Exit;
+                }
+            }
+            Event::UserEvent(UserEvent::NotificationResponse(response)) => {
+                let focus_window = response.action == NotificationAction::Default;
+                let event = CefariIpcEvent::Notification(NotificationEvent::Response(response));
+                if let Err(error) = guards.cef_runtime.emit_ipc_event(&event) {
+                    error!(%error, "failed to emit notification response event");
+                }
+                if focus_window {
+                    if let Some(window) = window.as_ref() {
+                        window.set_visible(true);
+                        window.set_focus();
+                    } else {
+                        debug!("notification default response could not focus missing window");
+                    }
                 }
             }
             Event::WindowEvent {
@@ -471,6 +496,19 @@ impl desktop_cef::MessagePumpScheduler for TaoMessagePumpScheduler {
             .send_event(UserEvent::CefMessagePump(cef_message_pump_deadline(
                 delay_ms,
             )))
+            .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
+    }
+}
+
+#[derive(Debug)]
+struct TaoNotificationResponseSender {
+    event_proxy: tao::event_loop::EventLoopProxy<UserEvent>,
+}
+
+impl desktop_notifications::NotificationResponseSink for TaoNotificationResponseSender {
+    fn send_notification_response(&self, event: NotificationResponseEvent) -> Result<()> {
+        self.event_proxy
+            .send_event(UserEvent::NotificationResponse(event))
             .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
     }
 }
