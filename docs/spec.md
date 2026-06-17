@@ -348,15 +348,26 @@ APIs.
   - It does not request permission on startup.
 - Apps can check notification permission state through the TypeScript API.
 - Apps can request notification permission from user-visible flows.
-- Apps can send notifications with a title and optional body.
+- Apps can inspect native notification capability support.
+- Apps can register notification categories with actions.
+- Apps can send notifications with rich native fields.
+  - Requests include a title and optional body.
+  - Requests can include subtitle, image, icon, rounded icon, thread id,
+    category id, user info, and XDG category fields.
+  - Media references are Cefari-controlled app-resource or app-data
+    references, not arbitrary OS paths.
+- Apps can inspect and remove delivered notifications.
 - Apps can subscribe to notification response events.
+  - Response events include the notification id, action, optional reply text,
+    and user info.
 - Notification requests are validated.
   - Titles must be non-empty.
   - Optional text fields are trimmed.
   - Blank optional text fields are rejected.
 - Current notification IPC is not wired end to end in the desktop dispatcher.
-  - The TypeScript API exists.
-  - The protocol reserves permission and response events.
+  - The full TypeScript API exists.
+  - The protocol defines permission, capability, category, delivery,
+    management, and response-event payloads.
   - The desktop dispatcher currently reports notification commands as
     unsupported.
 

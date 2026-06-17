@@ -25,7 +25,17 @@ permission.
 ## Request Model
 
 Runtime notification requests must have a non-empty title. Optional body,
-subtitle, thread id, and category id values are trimmed and rejected when blank.
+subtitle, thread id, category id, action labels, reply labels, and media paths
+are trimmed and rejected when blank.
+
+The IPC contract mirrors `user-notify`'s practical feature set: subtitle,
+image, icon, rounded icon, thread id, category id, XDG category, user info,
+category registration, action buttons, inline replies, active notification
+listing, and delivered notification removal.
+
+Notification media crosses IPC as Cefari-owned app-resource or app-data
+references. `cefari-desktop` resolves those references before passing paths to
+`user-notify`.
 
 The wrapper checks notification permission before sending. If the OS reports
 that notifications are denied or undetermined, Cefari returns a permission
@@ -36,5 +46,6 @@ denied outcome instead of treating that state as a crash.
 `user-notify` is a `cefari-desktop` dependency only. Do not add it to
 `cefari-core` or `npm`.
 
-Notification actions, replies, and categories are not treated as a stable
-cross-platform Cefari contract yet.
+`cefari-core` owns only serializable IPC types. `npm` owns only typed frontend
+wrappers. Platform-specific notification behavior stays inside
+`cefari-desktop`.

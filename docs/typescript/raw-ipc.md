@@ -80,8 +80,9 @@ Reserved commands can be present in generated types before the desktop
 dispatcher supports them. At the moment:
 
 - `reloadUi` is typed and wrapped, but the dispatcher returns `unsupported`.
-- `notification` commands are typed and wrapped, but the dispatcher returns
-  `unsupported`.
+- `notification` commands expose the full typed permission, capability,
+  category, delivery, management, and response contract, but the current
+  desktop dispatcher returns `unsupported` until native dispatch is wired.
 
 `updateApply` applies the native update cached by `updateCheck`. It accepts an
 optional `updateId` returned by `updateCheck`; the desktop runtime rejects a

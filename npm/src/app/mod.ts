@@ -38,7 +38,9 @@ export { service } from "./service.ts";
 export type { TrayApi } from "./tray.ts";
 export { tray } from "./tray.ts";
 export {
+  type NotificationCategoriesRegistered,
   type NotificationPermission,
+  type NotificationRemoved,
   notifications,
   type NotificationsApi,
   type NotificationSent,

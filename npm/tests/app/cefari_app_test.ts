@@ -100,8 +100,51 @@ Deno.test("wraps typed namespace commands", async () => {
   assertEquals(await cefari.notifications.requestPermission(), {
     allowed: true,
   });
+  assertEquals(await cefari.notifications.capabilities(), notificationCapabilities());
+  assertEquals(
+    await cefari.notifications.registerCategories([
+      {
+        id: "message",
+        actions: [
+          { type: "action", id: "open", title: "Open" },
+          {
+            type: "textInput",
+            id: "reply",
+            title: "Reply",
+            inputButtonTitle: "Send",
+            inputPlaceholder: "Message",
+          },
+        ],
+      },
+    ]),
+    { count: 1 },
+  );
   assertEquals(await cefari.notifications.send({ title: "Done" }), {
     id: "n1",
+  });
+  assertEquals(
+    await cefari.notifications.send({
+      title: "Build complete",
+      body: "The package is ready.",
+      subtitle: "Release",
+      image: { source: "appResource", path: "images/build.png" },
+      icon: { source: "appData", path: "icons/build.png" },
+      iconRoundCrop: true,
+      threadId: "builds",
+      categoryId: "message",
+      userInfo: { buildId: "123" },
+      xdgCategory: "transferComplete",
+    }),
+    { id: "n1" },
+  );
+  assertEquals(await cefari.notifications.active(), [
+    { id: "n1", userInfo: { buildId: "123" } },
+  ]);
+  assertEquals(await cefari.notifications.removeDelivered(["n1"]), {
+    count: 1,
+  });
+  assertEquals(await cefari.notifications.removeAllDelivered(), {
+    count: 2,
   });
   assertEquals(await cefari.fs.readFile("state.json", "utf8"), "{}");
   await cefari.fs.writeFile("state.json", "{}");
@@ -190,10 +233,78 @@ Deno.test("wraps typed namespace commands", async () => {
     },
     {
       command: "notification",
+      payload: { notification: "capabilities" },
+    },
+    {
+      command: "notification",
+      payload: {
+        notification: "registerCategories",
+        payload: {
+          categories: [
+            {
+              id: "message",
+              actions: [
+                { type: "action", id: "open", title: "Open" },
+                {
+                  type: "textInput",
+                  id: "reply",
+                  title: "Reply",
+                  inputButtonTitle: "Send",
+                  inputPlaceholder: "Message",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      command: "notification",
       payload: {
         notification: "send",
-        payload: { title: "Done", body: null },
+        payload: {
+          title: "Done",
+          body: null,
+          subtitle: null,
+          image: null,
+          icon: null,
+          iconRoundCrop: false,
+          threadId: null,
+          categoryId: null,
+          userInfo: {},
+          xdgCategory: null,
+        },
       },
+    },
+    {
+      command: "notification",
+      payload: {
+        notification: "send",
+        payload: {
+          title: "Build complete",
+          body: "The package is ready.",
+          subtitle: "Release",
+          image: { source: "appResource", path: "images/build.png" },
+          icon: { source: "appData", path: "icons/build.png" },
+          iconRoundCrop: true,
+          threadId: "builds",
+          categoryId: "message",
+          userInfo: { buildId: "123" },
+          xdgCategory: "transferComplete",
+        },
+      },
+    },
+    {
+      command: "notification",
+      payload: { notification: "active" },
+    },
+    {
+      command: "notification",
+      payload: { notification: "removeDelivered", payload: { ids: ["n1"] } },
+    },
+    {
+      command: "notification",
+      payload: { notification: "removeAllDelivered" },
     },
     {
       command: "files",
@@ -445,7 +556,8 @@ Deno.test("filters typed events", () => {
   const deepLinks: string[] = [];
   const downloads: string[] = [];
   const filteredFocus: string[] = [];
-  const notifications: string[] = [];
+  const notifications: Array<[string, string | null, Record<string, string>]> =
+    [];
 
   const unsubscribeFocus = cefari.window.onFocused((state) => {
     focused.push(state.title);
@@ -461,7 +573,7 @@ Deno.test("filters typed events", () => {
     { windowId: "settings" },
   );
   const unsubscribeNotification = cefari.notifications.onResponse((event) => {
-    notifications.push(event.id);
+    notifications.push([event.id, event.userText, event.userInfo]);
   });
 
   for (const handler of handlers) {
@@ -488,7 +600,12 @@ Deno.test("filters typed events", () => {
       event: "notification",
       payload: {
         event: "response",
-        payload: { id: "n1", action: "default" },
+        payload: {
+          id: "n1",
+          action: "default",
+          userText: null,
+          userInfo: { buildId: "123" },
+        },
       },
     });
     handler({
@@ -514,7 +631,7 @@ Deno.test("filters typed events", () => {
   assertEquals(deepLinks, ["myapp://open/item?id=1"]);
   assertEquals(downloads, ["/tmp/file.txt"]);
   assertEquals(filteredFocus, ["settings"]);
-  assertEquals(notifications, ["n1"]);
+  assertEquals(notifications, [["n1", null, { buildId: "123" }]]);
 
   unsubscribeFocus();
   unsubscribeDeepLink();
@@ -690,10 +807,51 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
               payload: { allowed: true },
             },
           });
+        case "capabilities":
+          return ok({
+            result: "notification",
+            payload: {
+              result: "capabilities",
+              payload: notificationCapabilities(),
+            },
+          });
+        case "registerCategories":
+          return ok({
+            result: "notification",
+            payload: {
+              result: "categoriesRegistered",
+              payload: { count: command.payload.payload.categories.length },
+            },
+          });
         case "send":
           return ok({
             result: "notification",
             payload: { result: "sent", payload: { id: "n1" } },
+          });
+        case "active":
+          return ok({
+            result: "notification",
+            payload: {
+              result: "active",
+              payload: {
+                notifications: [
+                  { id: "n1", userInfo: { buildId: "123" } },
+                ],
+              },
+            },
+          });
+        case "removeDelivered":
+          return ok({
+            result: "notification",
+            payload: {
+              result: "removed",
+              payload: { count: command.payload.payload.ids.length },
+            },
+          });
+        case "removeAllDelivered":
+          return ok({
+            result: "notification",
+            payload: { result: "removed", payload: { count: 2 } },
           });
       }
       break;
@@ -828,6 +986,27 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
           });
       }
   }
+}
+
+function notificationCapabilities() {
+  return {
+    permissionState: true,
+    permissionPrompt: true,
+    subtitle: true,
+    image: true,
+    icon: true,
+    iconRoundCrop: true,
+    threadId: true,
+    categories: true,
+    actionButtons: true,
+    textInputActions: true,
+    userInfo: true,
+    xdgCategory: true,
+    activeNotifications: true,
+    removeDelivered: true,
+    responseEvents: true,
+    coldStartActivation: true,
+  };
 }
 
 function ok(
