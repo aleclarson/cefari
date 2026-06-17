@@ -77,10 +77,6 @@ export async function invokeExternalUrl(
   return (await invokeResult(command, "externalUrl")).payload;
 }
 
-export async function invokeReloadUi(command: CefariIpcCommand): Promise<void> {
-  await invokeResult(command, "reloadUi");
-}
-
 export async function invokeUpdateState(
   command: CefariIpcCommand,
 ): Promise<UpdateStateResult> {

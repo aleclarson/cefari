@@ -145,22 +145,16 @@ before opening it.
 await cefari.shell.openExternalUrl(new URL("https://example.com"));
 ```
 
-`reloadUi()` is a reserved wrapper over the `reloadUi` IPC command. The current
-desktop dispatcher returns `unsupported` because CEF UI reload is not wired yet.
+Use the browser's own reload API for frontend reloads:
 
 ```ts
-try {
-  await cefari.shell.reloadUi();
-} catch (error) {
-  console.error(error);
-}
+window.location.reload();
 ```
 
 Current methods:
 
 - `openLogs(): Promise<void>`
 - `tryOpenLogs(): Promise<CefariResult<void>>`
-- `reloadUi(): Promise<void>`
 - `openExternalUrl(url: string | URL): Promise<ExternalUrlResult>`
 
 ## Updates

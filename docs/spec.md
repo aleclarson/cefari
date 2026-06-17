@@ -247,9 +247,8 @@ APIs.
   - Deep links are delivered as typed frontend events.
   - The event payload includes the opened URL string.
   - Unconfigured custom schemes are ignored by the runtime.
-- Cefari reserves a UI reload command.
-  - The frontend wrapper exists.
-  - The current desktop dispatcher reports it as unsupported.
+- Apps can reload their frontend with the browser-native reload API.
+  - Use `window.location.reload()`.
 
 ## Native Dialogs
 

@@ -76,10 +76,11 @@ The generated command union currently includes:
 - `notification`
 - `files`
 
-Reserved commands can be present in generated types before the desktop
-dispatcher supports them. At the moment:
+Some generated commands are reserved for native shell integrations instead of
+the `cefari/app` namespace APIs. At the moment:
 
-- `reloadUi` is typed and wrapped, but the dispatcher returns `unsupported`.
+- `reloadUi` is used by native shell controls. App frontend code should use
+  `window.location.reload()` directly.
 - `notification` commands are typed, wrapped, and dispatched by the desktop
   runtime. Individual operations can still report `unsupported` when the native
   notification backend is unavailable or the OS does not support that operation.

@@ -200,9 +200,8 @@ APIs.
 - Apps can ask the OS to open external URLs.
   - URLs are validated by Rust before opening.
   - String URLs and `URL` objects are accepted by the TypeScript wrapper.
-- Cefari reserves a UI reload command.
-  - The frontend wrapper exists.
-  - The current desktop dispatcher reports it as unsupported.
+- Apps can reload their frontend with the browser-native reload API.
+  - Use `window.location.reload()`.
 
 ## Updates
 
