@@ -21,8 +21,10 @@ The initial command surface reserves typed payloads for:
 Update apply commands install the native update cached by the most recent
 successful update check. Frontend code does not pass update URLs, signatures, or
 installer paths through IPC. Notification commands expose the full typed
-contract before desktop dispatch is fully wired. They may return an
-`unsupported` error while the transport and dispatcher are being wired.
+permission, capability, category, delivery, management, and response-event
+contract through the desktop dispatcher. Individual notification operations may
+still return `unsupported` when the desktop backend is unavailable or an OS
+operation is not supported.
 
 File commands are rooted in Cefari's managed app-data directory. They support
 text and base64 reads/writes, directory listing, directory creation, removal,

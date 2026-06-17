@@ -104,6 +104,24 @@ button.addEventListener("click", async () => {
 
 ## Platform Notes
 
+| Capability | macOS | Windows | Linux/XDG |
+| --- | --- | --- | --- |
+| Permission state | Supported through User Notifications authorization state. | Treated as allowed by the backend. | Treated as allowed by the backend. |
+| Permission prompt | Supported from explicit user-visible flows. | No-op success. | No-op success. |
+| Delivery | Requires a real app bundle identifier. | Uses the configured AppUserModelID/app identifier. | Depends on the session notification daemon. |
+| Subtitle | Supported. | Supported. | Not advertised. |
+| Image media | Supported through Cefari app-resource/app-data paths. | Supported through Cefari app-resource/app-data paths. | Supported when the daemon supports image hints. |
+| Icon media | Not advertised separately. | Supported. | Supported when the daemon supports icon/image hints. |
+| Rounded icon | Not advertised. | Supported. | Not advertised. |
+| Thread/group id | Supported. | Not advertised. | Not advertised. |
+| XDG category | Not applicable. | Not applicable. | Supported. |
+| Categories/actions | Supported. | Category metadata is accepted; action support depends on toast behavior. | Category metadata is accepted; action support depends on the daemon. |
+| Inline replies | Supported. | Not advertised. | Not advertised. |
+| Response events | Supported while the app is running. | Supported while running and through activation URLs for packaged apps. | Supported when the daemon returns action/close callbacks. |
+| Active listing | Supported. | Supported. | Session-scoped. |
+| Delivered removal | Supported. | Supported. | Session-scoped. |
+| Cold-start activation | Requires packaged app activation behavior and manual validation. | Uses the registered Cefari notification protocol. | Not advertised. |
+
 - macOS requires a real app bundle identifier before native notifications can be
   delivered.
 - macOS permission prompts must happen from explicit user-visible flows.

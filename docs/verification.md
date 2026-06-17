@@ -22,7 +22,6 @@ Docs were checked against:
 - `crates/cefari-core/src/ipc.rs` and `crates/cefari-core/bindings/ipc.ts`
 - `crates/cefari-desktop/src/desktop_bridge.rs`, `desktop_ipc.rs`,
   `desktop_menu.rs`, `desktop_tray.rs`, `desktop_single_instance.rs`,
-  `desktop_menu.rs`, `desktop_tray.rs`, `desktop_single_instance.rs`,
   `desktop_notifications.rs`, `desktop_dialogs.rs`, `event_loop.rs`,
   `window.rs`, and `window_state.rs`
 - `npm/src/app/mod.ts`, namespace wrapper modules, and
@@ -48,6 +47,7 @@ deno task --cwd .github/actions/cefari-release check
 cp -R templates/vite-react-basic .ci/release-action-sample
 GITHUB_OUTPUT=/tmp/cefari-release-output.txt GITHUB_ACTION_PATH="$PWD/.github/actions/cefari-release" CEFARI_PROJECT_PATH=templates/vite-react-basic CEFARI_RELEASE_MODE=prerelease CEFARI_TARGETS=linux-x86_64 CEFARI_COMMAND=cefari CEFARI_INSTALL_CLI=false CEFARI_RELEASE_VERSION=0.0.0-ci CEFARI_RELEASE_TAG=release-action-ci-dry-run CEFARI_CREATE_GITHUB_RELEASE=false CEFARI_UPLOAD_ARTIFACTS=false CEFARI_DRY_RUN=true deno run -A --config .github/actions/cefari-release/deno.json .github/actions/cefari-release/src/main.ts
 cargo test -p cefari-core ipc::tests::generated_typescript_bindings_are_current
+cargo test -p cefari-core
 cargo test -p cefari-desktop
 pnpm --dir npm check
 pnpm --dir npm test
@@ -90,6 +90,72 @@ cargo test -p cefari-core
 cargo test -p cefari-desktop
 pnpm --dir npm test
 ```
+
+For the full notification dispatch sweep on 2026-06-17, the final automated
+checks were:
+
+```bash
+cargo test -p cefari-core
+cargo test -p cefari-desktop
+pnpm --dir npm check
+pnpm --dir npm test
+```
+
+The notification-specific automated coverage includes:
+
+- generated Rust/TypeScript IPC binding sync
+- TypeScript notification namespace command wrappers and response events
+- desktop IPC dispatch for permission, capabilities, category registration,
+  send, active listing, and delivered removal
+- adapter validation for rich request fields, media path boundaries,
+  category/action fields, response mapping, active listing, and removal
+- CEF event injection script serialization
+- packaged notification activation protocol metadata
+- Windows-style activation URL decoding into `notification.response`
+
+## Manual Notification Checks
+
+Some notification behavior is intentionally manual because it depends on OS
+services, signing credentials, or a live desktop session.
+
+macOS:
+
+- Build a packaged `.app` with a real `app.identifier`.
+- Sign and notarize the bundle before validating real notification delivery.
+- From a user-visible button, call `requestPermission()` and confirm the system
+  prompt and resulting permission state.
+- Send notifications with subtitle, image, thread id, category action, inline
+  reply, and user info.
+- Confirm default clicks emit `notification.response` and focus the main
+  window.
+- Confirm dismiss responses emit `notification.response` without focusing the
+  main window.
+- Confirm active listing and delivered removal affect Notification Center.
+
+Windows:
+
+- Package the app and inspect `cargo-packager.toml` for the generated
+  `cefari-notification-...` deep-link protocol.
+- Install the package so the AppUserModelID and protocol handler are registered.
+- Send toast notifications with title/body, subtitle, image/icon, rounded icon,
+  actions where supported, and user info.
+- Confirm in-process click/action responses reach
+  `cefari.notifications.onResponse`.
+- Trigger a toast activation while the app is closed and confirm the activation
+  URL decodes to the same `notification.response` shape.
+- Confirm active listing and delivered removal work for delivered toasts.
+
+Linux/XDG:
+
+- Run inside a desktop session with a notification daemon that supports actions.
+- Send title/body notifications plus image/icon and XDG category fields.
+- Confirm daemon-specific behavior for action callbacks, close callbacks, and
+  user info.
+- Confirm active listing and removal are session-scoped.
+
+Live CEF smoke can verify frontend event delivery without an OS prompt by
+injecting a synthetic `notification.response` event through the CEF event helper
+after the main frame has loaded.
 
 ## Release Action CI
 
