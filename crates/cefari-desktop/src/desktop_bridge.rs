@@ -54,6 +54,7 @@ pub const CEFARI_BRIDGE_SCRIPT: &str = r#"
 
   let nextId = 1;
   const listeners = new Set();
+  const pendingEvents = [];
 
   const unsupported = (id, command, reason) => ({
     id,
@@ -103,6 +104,7 @@ pub const CEFARI_BRIDGE_SCRIPT: &str = r#"
       },
       on(handler) {
         listeners.add(handler);
+        for (const event of pendingEvents.splice(0)) handler(event);
         return () => listeners.delete(handler);
       },
     }),
@@ -113,6 +115,10 @@ pub const CEFARI_BRIDGE_SCRIPT: &str = r#"
     enumerable: false,
     writable: false,
     value(event) {
+      if (listeners.size === 0) {
+        pendingEvents.push(event);
+        return;
+      }
       for (const listener of listeners) listener(event);
     },
   });

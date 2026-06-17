@@ -21,10 +21,25 @@ pub(crate) fn run() -> Result<()> {
     let paths = RuntimePaths::resolve(&AppIdentity::cefari())?;
     let log_guards = logging::init_logging(&paths)?;
 
-    let cef_runtime = desktop_cef::initialize(&paths)?;
-    let instance = desktop_single_instance::acquire_single_instance(&paths)?;
-
     let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
+    let instance = match desktop_single_instance::acquire_or_forward(
+        &paths,
+        runtime_operations.deep_link_schemes(),
+        std::env::args(),
+    )? {
+        desktop_single_instance::InstanceStartup::Primary {
+            instance,
+            startup_deep_links,
+        } => {
+            let cef_runtime = desktop_cef::initialize(&paths)?;
+            (instance, startup_deep_links, cef_runtime)
+        }
+        desktop_single_instance::InstanceStartup::Forwarded => {
+            info!("forwarded deep link arguments to existing Cefari instance");
+            return Ok(());
+        }
+    };
+    let (instance, startup_deep_links, cef_runtime) = instance;
     let background_smoke = event_loop::smoke_background_requested();
     let desktop_notifier = if background_smoke {
         None
@@ -57,7 +72,13 @@ pub(crate) fn run() -> Result<()> {
         ui_diagnostic = shell_ui.is_diagnostic(),
         "cefari desktop startup"
     );
-    event_loop::run_native_shell(guards, paths, runtime_operations, &shell_ui)
+    event_loop::run_native_shell(
+        guards,
+        paths,
+        runtime_operations,
+        &shell_ui,
+        startup_deep_links,
+    )
 }
 
 pub(crate) fn restart_current_executable() -> Result<()> {

@@ -18,7 +18,8 @@ use tracing::{debug, error, info};
 
 use crate::{
     desktop_app::RuntimeGuards, desktop_bridge, desktop_cef, desktop_ipc, desktop_menu,
-    desktop_tray, desktop_ui, external, runtime, shell_context::DesktopShellContext, window,
+    desktop_single_instance, desktop_tray, desktop_ui, external, runtime,
+    shell_context::DesktopShellContext, window,
 };
 
 const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
@@ -33,6 +34,7 @@ pub(crate) enum UserEvent {
     SmokeExit,
     BridgeIpc(desktop_cef::CefBridgeIpcRequest),
     CefMessagePump(Instant),
+    ForwardedDeepLink(String),
 }
 
 pub(crate) fn run_native_shell(
@@ -40,6 +42,7 @@ pub(crate) fn run_native_shell(
     paths: RuntimePaths,
     runtime_operations: runtime::RuntimeOperations,
     shell_ui: &desktop_ui::ShellUi,
+    startup_deep_links: Vec<String>,
 ) -> Result<()> {
     let background_smoke = smoke_background_requested();
     let devtools_enabled = dev_mode_requested();
@@ -67,6 +70,11 @@ pub(crate) fn run_native_shell(
     guards
         .cef_runtime
         .set_app_scheme_resource_dir(shell_ui.app_resource_dir().to_path_buf());
+    let deep_link_forwarder = desktop_single_instance::start_deep_link_forwarder(
+        &paths,
+        runtime_operations.deep_link_schemes(),
+        event_loop.create_proxy(),
+    )?;
 
     let window = window::create_main_window(&event_loop, background_smoke)?;
     window::apply_ui_diagnostic_state(&window, shell_ui);
@@ -76,12 +84,14 @@ pub(crate) fn run_native_shell(
         .context("failed to create CEF browser")?;
     let menu = desktop_menu::DesktopMenu::new(runtime_operations.app_config(), devtools_enabled)?;
     menu.install();
+    schedule_startup_deep_links(&event_loop, startup_deep_links);
 
     info!(window = ?window.id(), "cefari native shell started");
     run_event_loop(
         event_loop,
         window,
         guards,
+        deep_link_forwarder,
         menu,
         paths,
         runtime_operations,
@@ -93,6 +103,7 @@ fn run_event_loop(
     event_loop: EventLoop<UserEvent>,
     window: Window,
     guards: RuntimeGuards,
+    _deep_link_forwarder: desktop_single_instance::DeepLinkForwarder,
     menu: desktop_menu::DesktopMenu,
     paths: RuntimePaths,
     runtime_operations: runtime::RuntimeOperations,
@@ -133,6 +144,9 @@ fn run_event_loop(
                 if deadline <= Instant::now() {
                     pump_due_cef_message_loop(&guards.cef_runtime, &mut cef_message_pump_deadline);
                 }
+            }
+            Event::UserEvent(UserEvent::ForwardedDeepLink(url)) => {
+                deliver_deep_link_url(&url, &mut window, &guards.cef_runtime);
             }
             Event::UserEvent(UserEvent::Menu(menu_event)) => {
                 let menu_command = desktop_menu::command_for_event(&menu_event);
@@ -319,19 +333,7 @@ fn run_event_loop(
                             );
                         }
                         OpenedUrlAction::DeepLink => {
-                            if let Some(window) = window.as_ref() {
-                                window.set_visible(true);
-                                window.set_focus();
-                            }
-                            let event = CefariIpcEvent::DeepLinkOpened(DeepLinkOpenEvent {
-                                url: url.to_string(),
-                            });
-                            match guards.cef_runtime.emit_event(&event) {
-                                Ok(()) => info!(%url, "delivered opened deep link"),
-                                Err(error) => {
-                                    error!(%url, %error, "failed to deliver opened deep link");
-                                }
-                            }
+                            deliver_deep_link_url(url.as_str(), &mut window, &guards.cef_runtime);
                         }
                         OpenedUrlAction::External => {
                             if let Err(error) = external::open_external_url(url.as_str()) {
@@ -384,6 +386,40 @@ fn schedule_smoke_exit_if_requested(event_loop: &EventLoop<UserEvent>) {
         thread::sleep(delay);
         let _ = event_proxy.send_event(UserEvent::SmokeExit);
     });
+}
+
+fn schedule_startup_deep_links(event_loop: &EventLoop<UserEvent>, urls: Vec<String>) {
+    if urls.is_empty() {
+        return;
+    }
+
+    let event_proxy = event_loop.create_proxy();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(500));
+        for url in urls {
+            let _ = event_proxy.send_event(UserEvent::ForwardedDeepLink(url));
+        }
+    });
+}
+
+fn deliver_deep_link_url(
+    url: &str,
+    window: &mut Option<Window>,
+    cef_runtime: &desktop_cef::CefRuntime,
+) {
+    if let Some(window) = window.as_ref() {
+        window.set_visible(true);
+        window.set_focus();
+    }
+    let event = CefariIpcEvent::DeepLinkOpened(DeepLinkOpenEvent {
+        url: url.to_owned(),
+    });
+    match cef_runtime.emit_event(&event) {
+        Ok(()) => info!(url, "delivered opened deep link"),
+        Err(error) => {
+            error!(url, %error, "failed to deliver opened deep link");
+        }
+    }
 }
 
 fn smoke_exit_delay() -> Option<Duration> {
