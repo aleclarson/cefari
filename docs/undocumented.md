@@ -5,8 +5,4 @@ the supported feature inventory or another documentation page.
 
 ## Pending Placement
 
-- Multi-window window-state persistence is planned but not yet supported. The
-  current contract proposal lives in
-  [`docs/proposals/multi-window-support.md`](proposals/multi-window-support.md).
-  The IPC schema reserves persistence fields before those options are wired end
-  to end.
+- No pending user-facing behavior is currently tracked here.

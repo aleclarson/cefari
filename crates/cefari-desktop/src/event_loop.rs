@@ -18,7 +18,7 @@ use tracing::{debug, error, info};
 use crate::{
     desktop_app::RuntimeGuards, desktop_bridge, desktop_cef, desktop_ipc, desktop_menu,
     desktop_single_instance, desktop_tray, desktop_ui, external, runtime,
-    shell_context::DesktopShellContext, window,
+    shell_context::DesktopShellContext, window, window_state,
 };
 
 const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
@@ -76,7 +76,10 @@ pub(crate) fn run_native_shell(
         event_loop.create_proxy(),
     )?;
 
-    let window = window::create_main_window(&event_loop, background_smoke)?;
+    let mut window_state_store = window_state::WindowStateStore::load(&paths);
+    let main_geometry = window_state_store.geometry(window_state::MAIN_WINDOW_PERSIST_KEY);
+    let window = window::create_main_window(&event_loop, background_smoke, main_geometry)?;
+    window_state_store.stage_window(window_state::MAIN_WINDOW_PERSIST_KEY, &window);
     window::apply_ui_diagnostic_state(&window, shell_ui);
     guards
         .cef_runtime
@@ -98,6 +101,7 @@ pub(crate) fn run_native_shell(
         paths,
         runtime_operations,
         devtools_enabled,
+        window_state_store,
     )
 }
 
@@ -111,6 +115,7 @@ fn run_event_loop(
     paths: RuntimePaths,
     runtime_operations: runtime::RuntimeOperations,
     devtools_enabled: bool,
+    mut window_state_store: window_state::WindowStateStore,
 ) -> ! {
     #![allow(clippy::too_many_lines)]
 
@@ -145,6 +150,7 @@ fn run_event_loop(
                             paths: &paths,
                             cef_runtime: &mut guards.cef_runtime,
                             runtime_operations: &runtime_operations,
+                            window_state: &mut window_state_store,
                             source_window_id: None,
                             should_exit: false,
                         };
@@ -190,6 +196,7 @@ fn run_event_loop(
                         paths: &paths,
                         cef_runtime: &mut guards.cef_runtime,
                         runtime_operations: &runtime_operations,
+                        window_state: &mut window_state_store,
                         source_window_id: None,
                         should_exit: false,
                     };
@@ -217,6 +224,7 @@ fn run_event_loop(
                         paths: &paths,
                         cef_runtime: &mut guards.cef_runtime,
                         runtime_operations: &runtime_operations,
+                        window_state: &mut window_state_store,
                         source_window_id: None,
                         should_exit: false,
                     };
@@ -253,6 +261,7 @@ fn run_event_loop(
                     paths: &paths,
                     cef_runtime: &mut guards.cef_runtime,
                     runtime_operations: &runtime_operations,
+                    window_state: &mut window_state_store,
                     source_window_id: Some(source_window_id),
                     should_exit: false,
                 };
@@ -325,6 +334,7 @@ fn run_event_loop(
                     height = size.height,
                     "Tao window resized"
                 );
+                stage_window_state(&mut window_state_store, &window_manager, &window_id);
             }
             Event::WindowEvent {
                 event:
@@ -354,6 +364,7 @@ fn run_event_loop(
                     height = new_inner_size.height,
                     "Tao window scale factor changed"
                 );
+                stage_window_state(&mut window_state_store, &window_manager, &window_id);
             }
             Event::WindowEvent {
                 event: WindowEvent::Moved(position),
@@ -370,6 +381,7 @@ fn run_event_loop(
                     "notified CEF browser of Tao window move",
                 );
                 debug!(x = position.x, y = position.y, "Tao window moved");
+                stage_window_state(&mut window_state_store, &window_manager, &window_id);
             }
             Event::WindowEvent {
                 event: WindowEvent::Focused(focused),
@@ -409,6 +421,9 @@ fn run_event_loop(
                 pump_due_cef_message_loop(&guards.cef_runtime, &mut cef_message_pump_deadline);
             }
             Event::LoopDestroyed => {
+                if let Err(error) = window_state_store.flush() {
+                    error!(%error, "failed to persist pending window state during shutdown");
+                }
                 info!("cefari native shell stopped");
             }
             Event::Opened { urls } => {
@@ -449,7 +464,12 @@ fn run_event_loop(
             }
             _ => {}
         }
-        apply_cef_message_pump_control_flow(cef_message_pump_deadline.as_ref(), control_flow);
+        window_state_store.flush_if_due(Instant::now());
+        apply_event_loop_control_flow(
+            cef_message_pump_deadline,
+            window_state_store.flush_deadline(),
+            control_flow,
+        );
     });
 }
 
@@ -628,7 +648,25 @@ fn pump_due_cef_message_loop(
     }
 }
 
-fn apply_cef_message_pump_control_flow(deadline: Option<&Instant>, control_flow: &mut ControlFlow) {
+fn stage_window_state(
+    window_state_store: &mut window_state::WindowStateStore,
+    window_manager: &window::WindowManager,
+    window_id: &str,
+) {
+    let Some(persist_key) = window_manager.persist_key(window_id) else {
+        return;
+    };
+    match window_manager.window(window_id) {
+        Ok(window) => window_state_store.stage_window(&persist_key, window),
+        Err(error) => debug!(%error, %window_id, "skipped window state capture"),
+    }
+}
+
+fn apply_event_loop_control_flow(
+    cef_deadline: Option<Instant>,
+    persistence_deadline: Option<Instant>,
+    control_flow: &mut ControlFlow,
+) {
     if matches!(
         *control_flow,
         ControlFlow::Exit | ControlFlow::ExitWithCode(_)
@@ -636,11 +674,13 @@ fn apply_cef_message_pump_control_flow(deadline: Option<&Instant>, control_flow:
         return;
     }
 
+    let deadline = cef_deadline.into_iter().chain(persistence_deadline).min();
+
     if let Some(deadline) = deadline {
-        *control_flow = if *deadline <= Instant::now() {
+        *control_flow = if deadline <= Instant::now() {
             ControlFlow::Poll
         } else {
-            ControlFlow::WaitUntil(*deadline)
+            ControlFlow::WaitUntil(deadline)
         };
     }
 }
@@ -685,7 +725,7 @@ fn handle_ipc_response(response: &CefariIpcResponse) {
 #[cfg(test)]
 mod tests {
     use super::{
-        OpenedUrlAction, apply_cef_message_pump_control_flow, cef_message_pump_deadline,
+        OpenedUrlAction, apply_event_loop_control_flow, cef_message_pump_deadline,
         earliest_deadline, opened_url_action, smoke_create_window_command,
     };
     use std::time::{Duration, Instant};
@@ -703,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn cef_message_pump_control_flow_uses_earliest_deadline_without_overriding_exit() {
+    fn event_loop_control_flow_uses_earliest_deadline_without_overriding_exit() {
         let now = Instant::now();
         let later = now + Duration::from_secs(5);
         let earlier = now + Duration::from_secs(1);
@@ -711,11 +751,15 @@ mod tests {
         assert_eq!(earliest_deadline(Some(later), earlier), earlier);
 
         let mut wait = ControlFlow::Wait;
-        apply_cef_message_pump_control_flow(Some(&later), &mut wait);
+        apply_event_loop_control_flow(Some(later), None, &mut wait);
         assert_eq!(wait, ControlFlow::WaitUntil(later));
 
+        let mut wait = ControlFlow::Wait;
+        apply_event_loop_control_flow(Some(later), Some(earlier), &mut wait);
+        assert_eq!(wait, ControlFlow::WaitUntil(earlier));
+
         let mut exit = ControlFlow::Exit;
-        apply_cef_message_pump_control_flow(Some(&later), &mut exit);
+        apply_event_loop_control_flow(Some(later), Some(earlier), &mut exit);
         assert_eq!(exit, ControlFlow::Exit);
     }
 

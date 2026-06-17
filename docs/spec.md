@@ -207,6 +207,14 @@ APIs.
   - Apps can assign a parent window when creating a secondary window.
   - Modal windows require a valid parent window.
   - Closing a parent closes its child windows.
+- Cefari persists native window geometry.
+  - The `main` window geometry persists by default.
+  - Secondary window geometry persists only when the app supplies `persistKey`.
+  - Cefari persists size, position where supported, maximized state, and
+    fullscreen state.
+  - Cefari does not persist secondary window existence, routes, or parent
+    relationships.
+  - Invalid persisted geometry is ignored without blocking app startup.
 - Secondary windows load trusted app frontend content.
   - Development windows resolve routes against the configured Vite dev URL.
   - Packaged windows load `cefari://app/index.html` and carry the route in URL

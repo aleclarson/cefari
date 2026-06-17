@@ -15,7 +15,7 @@ use tao::{
 };
 use tracing::error;
 
-use crate::{desktop_ui, event_loop::UserEvent};
+use crate::{desktop_ui, event_loop::UserEvent, window_state};
 
 const MAIN_WINDOW_TITLE: &str = "Cefari";
 const MAIN_WINDOW_WIDTH: f64 = 1200.0;
@@ -35,6 +35,7 @@ struct WindowRecord {
     route: Option<String>,
     modal: bool,
     parent_id: Option<String>,
+    persist_key: Option<String>,
 }
 
 pub(crate) struct WindowManager {
@@ -55,6 +56,7 @@ impl WindowManager {
             route: None,
             modal: false,
             parent_id: None,
+            persist_key: Some(window_state::MAIN_WINDOW_PERSIST_KEY.to_owned()),
         };
         let mut tao_windows = HashMap::new();
         tao_windows.insert(tao_id, MAIN_WINDOW_ID.to_owned());
@@ -95,10 +97,12 @@ impl WindowManager {
         &mut self,
         event_loop: &EventLoopWindowTarget<UserEvent>,
         request: &WindowCreateRequest,
+        persisted_geometry: Option<&window_state::WindowGeometry>,
     ) -> Result<WindowState> {
         let id = self.resolve_create_id(request.id.as_deref())?;
         let modal = request.modal.unwrap_or(false);
         let parent_id = request.parent_id.clone();
+        let persist_key = window_state::persist_key_from_request(request.persist_key.as_deref());
         validate_parent_options(&id, parent_id.as_deref(), modal, |id| {
             self.record(id).is_some()
         })?;
@@ -108,7 +112,7 @@ impl WindowManager {
             .unwrap_or_else(default_secondary_window_title);
         let route = request.route.clone();
         let parent_window = parent_id.as_deref().and_then(|id| self.record(id));
-        let window = secondary_window_builder(request, &title, parent_window)
+        let window = secondary_window_builder(request, &title, parent_window, persisted_geometry)
             .build(event_loop)
             .with_context(|| format!("failed to create Cefari window {id}"))?;
         let tao_id = window.id();
@@ -120,6 +124,7 @@ impl WindowManager {
             route,
             modal,
             parent_id: parent_id.clone(),
+            persist_key,
         };
         let state = record.state();
         self.secondary.insert(id.clone(), record);
@@ -189,6 +194,11 @@ impl WindowManager {
         record.window.set_title(title);
         title.clone_into(&mut record.title);
         Ok(record.state())
+    }
+
+    pub(crate) fn persist_key(&self, id: &str) -> Option<String> {
+        self.record(id)
+            .and_then(|record| record.persist_key.clone())
     }
 
     fn record(&self, id: &str) -> Option<&WindowRecord> {
@@ -317,17 +327,22 @@ pub(crate) fn apply_ui_diagnostic_state(window: &Window, shell_ui: &desktop_ui::
 pub(crate) fn create_main_window(
     event_loop: &EventLoop<UserEvent>,
     background_smoke: bool,
+    persisted_geometry: Option<&window_state::WindowGeometry>,
 ) -> Result<Window> {
-    main_window_builder(background_smoke)
+    main_window_builder(background_smoke, persisted_geometry)
         .build(event_loop)
         .context("failed to create Cefari main window")
 }
 
-fn main_window_builder(background_smoke: bool) -> WindowBuilder {
-    let builder = WindowBuilder::new()
+fn main_window_builder(
+    background_smoke: bool,
+    persisted_geometry: Option<&window_state::WindowGeometry>,
+) -> WindowBuilder {
+    let mut builder = WindowBuilder::new()
         .with_title(MAIN_WINDOW_TITLE)
         .with_inner_size(LogicalSize::new(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT))
         .with_min_inner_size(LogicalSize::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT));
+    builder = window_state::apply_geometry_to_builder(builder, persisted_geometry);
 
     if background_smoke {
         return builder.with_visible(false).with_focused(false);
@@ -340,6 +355,7 @@ fn secondary_window_builder(
     request: &WindowCreateRequest,
     title: &str,
     parent: Option<&WindowRecord>,
+    persisted_geometry: Option<&window_state::WindowGeometry>,
 ) -> WindowBuilder {
     let mut builder = WindowBuilder::new()
         .with_title(title)
@@ -374,6 +390,7 @@ fn secondary_window_builder(
     if let Some(always_on_top) = request.always_on_top {
         builder = builder.with_always_on_top(always_on_top);
     }
+    builder = window_state::apply_geometry_to_builder(builder, persisted_geometry);
 
     apply_native_parent(builder, parent)
 }
@@ -505,9 +522,11 @@ fn validate_window_id(id: &str) -> Result<()> {
 mod tests {
     use super::{
         MAIN_WINDOW_HEIGHT, MAIN_WINDOW_ID, MAIN_WINDOW_TITLE, MAIN_WINDOW_WIDTH,
-        MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, main_window_builder, validate_parent_options,
-        window_url,
+        MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, main_window_builder, secondary_window_builder,
+        validate_parent_options, window_url,
     };
+    use crate::window_state::WindowGeometry;
+    use tao::dpi::PhysicalSize;
 
     #[test]
     fn main_window_spec_is_large_enough_for_desktop_shell() {
@@ -521,8 +540,8 @@ mod tests {
 
     #[test]
     fn smoke_background_window_starts_hidden_and_unfocused() {
-        let normal = main_window_builder(false);
-        let background = main_window_builder(true);
+        let normal = main_window_builder(false, None);
+        let background = main_window_builder(true, None);
 
         assert!(normal.window.visible);
         assert!(normal.window.focused);
@@ -564,5 +583,46 @@ mod tests {
         assert!(validate_parent_options("child", Some("missing"), true, |_| false).is_err());
         assert!(validate_parent_options("child", None, true, |_| false).is_err());
         assert!(validate_parent_options("child", Some("child"), false, |_| true).is_err());
+    }
+
+    #[test]
+    fn persisted_secondary_geometry_overrides_initial_size() {
+        let request = cefari_core::WindowCreateRequest {
+            id: Some("settings".to_owned()),
+            route: None,
+            title: None,
+            width: Some(500),
+            height: Some(400),
+            min_width: None,
+            min_height: None,
+            max_width: None,
+            max_height: None,
+            x: None,
+            y: None,
+            visible: None,
+            focused: None,
+            resizable: None,
+            decorations: None,
+            always_on_top: None,
+            parent_id: None,
+            modal: None,
+            persist_key: Some("settings".to_owned()),
+        };
+        let geometry = WindowGeometry {
+            width: 900,
+            height: 700,
+            x: Some(20),
+            y: Some(30),
+            maximized: true,
+            fullscreen: false,
+        };
+
+        let spec = secondary_window_builder(&request, "Settings", None, Some(&geometry));
+
+        assert_eq!(
+            spec.window.inner_size,
+            Some(PhysicalSize::new(900, 700).into())
+        );
+        assert!(spec.window.maximized);
     }
 }

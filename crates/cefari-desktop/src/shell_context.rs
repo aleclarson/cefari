@@ -10,7 +10,7 @@ use tracing::debug;
 
 use crate::{
     desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, external, runtime,
-    window,
+    window, window_state,
 };
 use crate::{desktop_ui, event_loop::UserEvent};
 
@@ -21,6 +21,7 @@ pub(crate) struct DesktopShellContext<'a> {
     pub(crate) paths: &'a RuntimePaths,
     pub(crate) cef_runtime: &'a mut desktop_cef::CefRuntime,
     pub(crate) runtime_operations: &'a runtime::RuntimeOperations,
+    pub(crate) window_state: &'a mut window_state::WindowStateStore,
     pub(crate) source_window_id: Option<String>,
     pub(crate) should_exit: bool,
 }
@@ -47,9 +48,13 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn window_create(&mut self, request: &WindowCreateRequest) -> Result<WindowState> {
-        let state = self
-            .window_manager
-            .create_secondary(self.event_loop, request)?;
+        let persist_key = window_state::persist_key_from_request(request.persist_key.as_deref());
+        let persisted_geometry = persist_key
+            .as_deref()
+            .and_then(|persist_key| self.window_state.geometry(persist_key));
+        let state =
+            self.window_manager
+                .create_secondary(self.event_loop, request, persisted_geometry)?;
         let url = window::window_url(&self.shell_ui.url(), &state.id, state.route.as_deref())?;
         if let Err(error) = self.cef_runtime.create_browser_for_window(
             &state.id,
@@ -58,6 +63,10 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
         ) {
             let _ = self.window_manager.remove_window(&state.id);
             return Err(error);
+        }
+        if let Some(persist_key) = self.window_manager.persist_key(&state.id) {
+            let window = self.window_manager.window(&state.id)?;
+            self.window_state.stage_window(&persist_key, window);
         }
         self.emit_event(&CefariIpcEvent::WindowCreated(state_event(&state)));
         Ok(state)

@@ -18,6 +18,7 @@ mod logging;
 mod runtime;
 mod shell_context;
 mod window;
+mod window_state;
 
 fn main() -> ExitCode {
     match desktop_app::run() {
