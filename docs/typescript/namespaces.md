@@ -309,16 +309,42 @@ but the current desktop dispatcher returns `unsupported` until notification IPC
 is wired end to end.
 
 ```ts
+const capabilities = await cefari.notifications.capabilities();
 const permission = await cefari.notifications.permissionState();
 
 if (permission.allowed) {
   const sent = await cefari.notifications.send({
     title: "Build complete",
     body: "The package is ready.",
+    subtitle: "Release",
+    image: { source: "appResource", path: "images/build.png" },
+    icon: { source: "appData", path: "icons/build.png" },
+    userInfo: { buildId: "123" },
   });
 
   console.log(sent.id);
 }
+```
+
+Register native categories and actions before sending notifications that use
+them:
+
+```ts
+await cefari.notifications.registerCategories([
+  {
+    id: "message",
+    actions: [
+      { type: "action", id: "open", title: "Open" },
+      {
+        type: "textInput",
+        id: "reply",
+        title: "Reply",
+        inputButtonTitle: "Send",
+        inputPlaceholder: "Message",
+      },
+    ],
+  },
+]);
 ```
 
 Prompt for permission only from an explicit user-visible action:
@@ -334,7 +360,7 @@ Handle notification responses:
 
 ```ts
 const unsubscribe = cefari.notifications.onResponse((event) => {
-  console.log(event.id, event.action);
+  console.log(event.id, event.action, event.userText, event.userInfo);
 });
 ```
 
@@ -342,5 +368,10 @@ Current methods:
 
 - `permissionState(): Promise<NotificationPermission>`
 - `requestPermission(): Promise<NotificationPermission>`
+- `capabilities(): Promise<NotificationCapabilities>`
+- `registerCategories(categories): Promise<NotificationCategoriesRegistered>`
 - `send(input): Promise<NotificationSent>`
+- `active(): Promise<ActiveNotification[]>`
+- `removeDelivered(ids): Promise<NotificationRemoved>`
+- `removeAllDelivered(): Promise<NotificationRemoved>`
 - `onResponse(handler): Unsubscribe`
