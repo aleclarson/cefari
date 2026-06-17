@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    collections::{HashMap, VecDeque},
     path::PathBuf,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -12,6 +13,7 @@ use cef::ImplBrowser as _;
 use cef::wrapper::stream_resource_handler::StreamResourceHandler;
 
 use crate::desktop_ui::diagnose_app_scheme_resource;
+use crate::window::MAIN_WINDOW_ID;
 
 use super::{BridgeIpcSender, CefBridgeIpcRequest, MessagePumpScheduler};
 
@@ -32,10 +34,52 @@ impl SharedBrowserState {
             .context("CEF main browser is not available")
     }
 
+    pub(super) fn browsers(&self) -> Vec<cef::Browser> {
+        self.0.borrow().browsers.values().cloned().collect()
+    }
+
+    pub(super) fn expect_next_browser_for_window(&self, window_id: &str) {
+        self.0
+            .borrow_mut()
+            .pending_window_ids
+            .push_back(window_id.to_owned());
+    }
+
+    pub(super) fn cancel_next_browser_for_window(&self, window_id: &str) {
+        let mut state = self.0.borrow_mut();
+        if state
+            .pending_window_ids
+            .front()
+            .is_some_and(|pending| pending == window_id)
+        {
+            state.pending_window_ids.pop_front();
+        }
+    }
+
+    pub(super) fn window_id_for_browser(&self, browser_identifier: i32) -> Option<String> {
+        self.0
+            .borrow()
+            .browser_windows
+            .window_id(browser_identifier)
+            .map(ToOwned::to_owned)
+    }
+
     pub(super) fn browser_created(&self, browser: &cef::Browser) {
         let identifier = browser.identifier();
         let is_popup = browser.is_popup() != 0;
         let mut state = self.0.borrow_mut();
+
+        if !is_popup {
+            let window_id = state
+                .pending_window_ids
+                .pop_front()
+                .unwrap_or_else(|| MAIN_WINDOW_ID.to_owned());
+            state
+                .browser_windows
+                .register(identifier, window_id.clone());
+            state.browsers.insert(identifier, browser.clone());
+            debug!(identifier, window_id, "CEF browser mapped to Cefari window");
+        }
 
         if state.main_browser.is_none() && !is_popup {
             state.main_browser = Some(browser.clone());
@@ -64,12 +108,38 @@ impl SharedBrowserState {
         } else {
             debug!(identifier, "CEF non-main browser closing");
         }
+        state.browsers.remove(&identifier);
+        state.browser_windows.unregister(identifier);
     }
 }
 
 #[derive(Default)]
 struct BrowserState {
     main_browser: Option<cef::Browser>,
+    browsers: HashMap<i32, cef::Browser>,
+    browser_windows: BrowserWindowRegistry,
+    pending_window_ids: VecDeque<String>,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct BrowserWindowRegistry {
+    browser_windows: HashMap<i32, String>,
+}
+
+impl BrowserWindowRegistry {
+    fn register(&mut self, browser_identifier: i32, window_id: String) {
+        self.browser_windows.insert(browser_identifier, window_id);
+    }
+
+    fn unregister(&mut self, browser_identifier: i32) {
+        self.browser_windows.remove(&browser_identifier);
+    }
+
+    fn window_id(&self, browser_identifier: i32) -> Option<&str> {
+        self.browser_windows
+            .get(&browser_identifier)
+            .map(String::as_str)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -169,4 +239,26 @@ impl SharedAppSchemeState {
 #[derive(Default)]
 struct AppSchemeState {
     resource_dir: Option<PathBuf>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BrowserWindowRegistry;
+
+    #[test]
+    fn browser_window_registry_tracks_browser_ownership() {
+        let mut registry = BrowserWindowRegistry::default();
+
+        registry.register(7, "main".to_owned());
+        registry.register(9, "settings".to_owned());
+
+        assert_eq!(registry.window_id(7), Some("main"));
+        assert_eq!(registry.window_id(9), Some("settings"));
+        assert_eq!(registry.window_id(11), None);
+
+        registry.unregister(7);
+
+        assert_eq!(registry.window_id(7), None);
+        assert_eq!(registry.window_id(9), Some("settings"));
+    }
 }

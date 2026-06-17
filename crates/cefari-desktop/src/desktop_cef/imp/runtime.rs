@@ -15,7 +15,7 @@ use cef::wrapper::message_router::{
 use cef::{ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _};
 
 use crate::desktop_bridge::{BridgeOriginPolicy, NavigationPolicy};
-use crate::{desktop_downloads::SharedDownloadState, external};
+use crate::{desktop_downloads::SharedDownloadState, external, window::MAIN_WINDOW_ID};
 
 use super::state::{
     SharedAppSchemeState, SharedBridgeIpcState, SharedBrowserState, SharedMessagePumpState,
@@ -46,6 +46,7 @@ pub struct CefRuntime {
 pub type CefBridgeIpcCallback = Arc<Mutex<dyn BrowserSideCallback>>;
 
 pub struct CefBridgeIpcRequest {
+    pub browser_identifier: Option<i32>,
     pub origin: String,
     pub request_json: String,
     pub callback: CefBridgeIpcCallback,
@@ -55,6 +56,7 @@ impl std::fmt::Debug for CefBridgeIpcRequest {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("CefBridgeIpcRequest")
+            .field("browser_identifier", &self.browser_identifier)
             .field("origin", &self.origin)
             .field("request_json", &self.request_json)
             .finish_non_exhaustive()
@@ -200,6 +202,15 @@ impl CefRuntime {
     }
 
     pub fn create_browser(&mut self, window: &Window, url: &str) -> Result<()> {
+        self.create_browser_for_window(MAIN_WINDOW_ID, window, url)
+    }
+
+    pub fn create_browser_for_window(
+        &mut self,
+        window_id: &str,
+        window: &Window,
+        url: &str,
+    ) -> Result<()> {
         if !self.initialized {
             anyhow::bail!("CEF is not initialized");
         }
@@ -209,6 +220,7 @@ impl CefRuntime {
         let window_info = cef::WindowInfo::default().set_as_child(handle, &bounds);
         let settings = cef::BrowserSettings::default();
         let url = cef::CefString::from(url);
+        self.state.expect_next_browser_for_window(window_id);
         let created = cef::browser_host_create_browser(
             Some(&window_info),
             Some(&mut self.client),
@@ -219,8 +231,10 @@ impl CefRuntime {
         );
 
         if created != 1 {
+            self.state.cancel_next_browser_for_window(window_id);
             error!(
                 created,
+                window_id,
                 url = %url.to_string(),
                 width = bounds.width,
                 height = bounds.height,
@@ -229,7 +243,7 @@ impl CefRuntime {
             anyhow::bail!("CEF browser creation returned {created}");
         }
 
-        info!("CEF browser created");
+        info!(window_id, "CEF browser created");
         Ok(())
     }
 
@@ -241,6 +255,10 @@ impl CefRuntime {
         self.state
             .active_browser()
             .map(|browser| browser.identifier())
+    }
+
+    pub fn window_id_for_browser(&self, browser_identifier: Option<i32>) -> Option<String> {
+        browser_identifier.and_then(|identifier| self.state.window_id_for_browser(identifier))
     }
 
     pub fn reload_browser(&self) -> Result<()> {
@@ -304,20 +322,17 @@ impl CefRuntime {
     }
 
     pub fn emit_event(&self, event: &CefariIpcEvent) -> Result<()> {
-        let browser = self.state.active_browser()?;
-        let frame = browser.main_frame().with_context(|| {
-            format!(
-                "CEF browser {} has no main frame for event delivery",
-                browser.identifier()
-            )
-        })?;
-        let event_json = serde_json::to_string(event)?;
-        let code = cefari_event_script(&event_json);
-        frame.execute_java_script(
-            Some(&cef::CefString::from(code.as_str())),
-            Some(&cef::CefString::from("cefari://bridge/events")),
-            1,
-        );
+        let event_json = serde_json::to_string(event).context("failed to serialize IPC event")?;
+        let script = bridge_event_script(&event_json);
+        let code = cef::CefString::from(script.as_str());
+        let script_url = cef::CefString::from("cefari://bridge/event.js");
+
+        for browser in self.state.browsers() {
+            if let Some(frame) = browser.main_frame() {
+                frame.execute_java_script(Some(&code), Some(&script_url), 1);
+            }
+        }
+
         Ok(())
     }
 
@@ -347,10 +362,8 @@ impl CefRuntime {
     }
 }
 
-fn cefari_event_script(event_json: &str) -> String {
-    format!(
-        "if (typeof window.__CEFARI_IPC_EVENT__ === 'function') window.__CEFARI_IPC_EVENT__({event_json});"
-    )
+fn bridge_event_script(event_json: &str) -> String {
+    format!("window.__CEFARI_IPC_EVENT__?.({event_json});")
 }
 
 impl Drop for CefRuntime {
@@ -366,19 +379,29 @@ impl Drop for CefRuntime {
 mod tests {
     use cefari_core::{CefariIpcEvent, DeepLinkOpenEvent};
 
-    use super::cefari_event_script;
+    use super::bridge_event_script;
 
     #[test]
-    fn cefari_event_script_passes_serialized_event_to_bridge_hook() {
+    fn bridge_event_script_passes_serialized_event_to_bridge_hook() {
         let event = CefariIpcEvent::DeepLinkOpened(DeepLinkOpenEvent {
             url: "myapp://open/item?id=1".to_owned(),
         });
         let event_json = serde_json::to_string(&event).expect("event should serialize");
 
-        let script = cefari_event_script(&event_json);
+        let script = bridge_event_script(&event_json);
 
         assert!(script.contains("window.__CEFARI_IPC_EVENT__"));
         assert!(script.contains(r#""event":"deepLinkOpened""#));
         assert!(script.contains(r#""url":"myapp://open/item?id=1""#));
+    }
+
+    #[test]
+    fn bridge_event_script_dispatches_json_payload() {
+        let script = bridge_event_script(r#"{"event":"windowClosed"}"#);
+
+        assert_eq!(
+            script,
+            r#"window.__CEFARI_IPC_EVENT__?.({"event":"windowClosed"});"#
+        );
     }
 }

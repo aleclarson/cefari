@@ -1,9 +1,10 @@
 use anyhow::Result;
 use cefari_core::{
-    DialogCommand, DialogResult, DownloadCommand, DownloadResult, FileResult, FilesCommand,
-    RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult,
-    WindowState,
+    CefariIpcEvent, DialogCommand, DialogResult, DownloadCommand, DownloadResult, FileResult,
+    FilesCommand, RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult,
+    UpdateStateResult, WindowState,
 };
+use tracing::debug;
 
 use crate::{
     desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, external, runtime,
@@ -26,15 +27,21 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn window_show(&mut self) -> Result<WindowState> {
-        self.window_manager.show_main()
+        let state = self.window_manager.show_main()?;
+        self.emit_event(&CefariIpcEvent::WindowShown(state.clone()));
+        Ok(state)
     }
 
     fn window_focus(&mut self) -> Result<WindowState> {
-        self.window_manager.focus_main()
+        let state = self.window_manager.focus_main()?;
+        self.emit_event(&CefariIpcEvent::WindowFocused(state.clone()));
+        Ok(state)
     }
 
     fn window_close(&mut self) -> Result<WindowState> {
-        Ok(self.window_manager.close_main())
+        let state = self.window_manager.close_main();
+        self.emit_event(&CefariIpcEvent::WindowClosed);
+        Ok(state)
     }
 
     fn window_set_title(&mut self, title: &str) -> Result<WindowState> {
@@ -102,5 +109,13 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
 
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
         desktop_files::AppDataFs::open(self.paths)?.dispatch(command)
+    }
+}
+
+impl DesktopShellContext<'_> {
+    fn emit_event(&self, event: &CefariIpcEvent) {
+        if let Err(error) = self.cef_runtime.emit_event(event) {
+            debug!(%error, ?event, "failed to emit Cefari IPC event");
+        }
     }
 }

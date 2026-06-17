@@ -204,6 +204,15 @@ fn run_event_loop(
                 *control_flow = ControlFlow::Exit;
             }
             Event::UserEvent(UserEvent::BridgeIpc(request)) => {
+                let source_window_id = guards
+                    .cef_runtime
+                    .window_id_for_browser(request.browser_identifier)
+                    .unwrap_or_else(|| window::MAIN_WINDOW_ID.to_owned());
+                debug!(
+                    source_window_id,
+                    browser_identifier = ?request.browser_identifier,
+                    "handling Cefari bridge IPC request"
+                );
                 let mut context = DesktopShellContext {
                     window_manager: &mut window_manager,
                     paths: &paths,
@@ -233,6 +242,10 @@ fn run_event_loop(
                 if let Err(error) = guards.cef_runtime.close_browser(false) {
                     debug!(%error, "CEF browser close skipped or failed");
                 }
+                log_cef_lifecycle_result(
+                    guards.cef_runtime.emit_event(&CefariIpcEvent::WindowClosed),
+                    "emitted Cefari window closed event",
+                );
                 window_manager.close_main();
             }
             Event::WindowEvent {
