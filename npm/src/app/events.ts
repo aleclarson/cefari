@@ -1,6 +1,11 @@
 import type {
   CefariIpcEvent,
   DeepLinkOpenEvent,
+  DownloadCanceledEvent,
+  DownloadCompletedEvent,
+  DownloadFailedEvent,
+  DownloadProgressEvent,
+  DownloadStartedEvent,
   NotificationResponseEvent,
   ServiceStatusResult,
   UpdateStateResult,
@@ -16,6 +21,11 @@ export type CefariEventMap = {
   trayRestoreWindow: undefined;
   updateStateChanged: UpdateStateResult;
   serviceStatusChanged: ServiceStatusResult;
+  "download.started": DownloadStartedEvent;
+  "download.progress": DownloadProgressEvent;
+  "download.completed": DownloadCompletedEvent;
+  "download.canceled": DownloadCanceledEvent;
+  "download.failed": DownloadFailedEvent;
   "notification.response": NotificationResponseEvent;
 };
 
@@ -67,6 +77,26 @@ function eventPayload(
     case "serviceStatusChanged":
       return event.event === "serviceStatusChanged"
         ? { matched: true, value: event.payload }
+        : { matched: false };
+    case "download.started":
+      return event.event === "download" && event.payload.event === "started"
+        ? { matched: true, value: event.payload.payload }
+        : { matched: false };
+    case "download.progress":
+      return event.event === "download" && event.payload.event === "progress"
+        ? { matched: true, value: event.payload.payload }
+        : { matched: false };
+    case "download.completed":
+      return event.event === "download" && event.payload.event === "completed"
+        ? { matched: true, value: event.payload.payload }
+        : { matched: false };
+    case "download.canceled":
+      return event.event === "download" && event.payload.event === "canceled"
+        ? { matched: true, value: event.payload.payload }
+        : { matched: false };
+    case "download.failed":
+      return event.event === "download" && event.payload.event === "failed"
+        ? { matched: true, value: event.payload.payload }
         : { matched: false };
     case "notification.response":
       return event.event === "notification" &&

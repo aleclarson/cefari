@@ -130,6 +130,14 @@ The fixture reloads once and then sets the native window title to
 the process exits. A nonzero process exit status, missing CEF resources, missing
 GUI availability, or a watchdog timeout fails the smoke.
 
+CEF download behavior requires a local GUI check because it uses the OS save
+dialog. To verify it manually, run a Cefari app with a link to an HTTP or HTTPS
+download response, click it, choose a destination in the save dialog, and
+confirm that `download.started`, `download.progress`, and `download.completed`
+events reach the frontend. Repeat with the save dialog canceled and with a
+`file:` or `blob:` download URL; those cases should not write a file and should
+surface a canceled or denied outcome.
+
 The docs intentionally avoid listing dependency versions, exhaustive internal
 module details, or CI behavior that is not present in the current repository
 files.

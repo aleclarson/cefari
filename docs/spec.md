@@ -249,6 +249,23 @@ APIs.
   - Cefari supports macOS, Linux, and Windows native dialogs.
   - Some option details depend on the operating system dialog backend.
 
+## Downloads
+
+> This section describes browser-initiated download behavior.
+
+- Cefari handles CEF downloads in the native runtime.
+  - Downloads use the OS save dialog before writing files.
+  - HTTP and HTTPS downloads are supported.
+  - Unsupported schemes are denied by the runtime.
+- Apps can observe download lifecycle events.
+  - A download-started event is available.
+  - A download-progress event is available.
+  - Download-completed, download-canceled, and download-failed events are
+    available.
+- Apps can control downloads through the TypeScript API.
+  - Active downloads can be canceled by ID.
+  - Completed downloads can be revealed through the OS shell.
+
 ## Updates
 
 > This section describes update checks, apply flows, and update events.

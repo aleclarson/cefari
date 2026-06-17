@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use cefari_core::{
-    DialogCommand, DialogResult, FileResult, FilesCommand, RuntimePaths, ServiceStatusResult,
-    TrayResult, UpdateCheckResult, UpdateStateResult, WindowState,
+    DialogCommand, DialogResult, DownloadCommand, DownloadResult, FileResult, FilesCommand,
+    RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult,
+    WindowState,
 };
 use tao::window::Window;
 
@@ -109,6 +110,13 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
 
     fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult> {
         desktop_dialogs::dispatch(command, self.paths, self.window.as_ref())
+    }
+
+    fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult> {
+        match command {
+            DownloadCommand::Cancel(request) => self.cef_runtime.cancel_download(&request.id),
+            DownloadCommand::Reveal(request) => self.cef_runtime.reveal_download(&request.id),
+        }
     }
 
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {

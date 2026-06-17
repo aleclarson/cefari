@@ -302,6 +302,26 @@ Current methods:
 - `restoreWindow(): Promise<TrayResult>`
 - `onRestoreWindow(handler): Unsubscribe`
 
+## Downloads
+
+Use `cefari.downloads` to control browser-initiated downloads that the native
+runtime has already started:
+
+```ts
+const unsubscribe = cefari.on("download.completed", async (download) => {
+  await cefari.downloads.reveal(download.id);
+});
+```
+
+CEF downloads are native-runtime owned. The runtime validates the download URL,
+shows the OS save dialog, emits lifecycle events, and writes only after the user
+chooses a destination.
+
+Current methods:
+
+- `cancel(id: string): Promise<DownloadResult>`
+- `reveal(id: string): Promise<DownloadResult>`
+
 ## Notifications
 
 Notification commands are typed in the protocol and wrapped by `cefari/app`,

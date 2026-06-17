@@ -67,6 +67,14 @@ Deno.test("wraps typed namespace commands", async () => {
   await cefari.updates.applyAndRestart();
   assertEquals(await cefari.service.status(), { status: "running" });
   assertEquals(await cefari.tray.restoreWindow(), { restored: true });
+  assertEquals(await cefari.downloads.cancel("cef-1"), {
+    result: "canceled",
+    payload: { id: "cef-1" },
+  });
+  assertEquals(await cefari.downloads.reveal("cef-1"), {
+    result: "revealed",
+    payload: { id: "cef-1" },
+  });
   assertEquals(await cefari.notifications.permissionState(), { allowed: true });
   assertEquals(await cefari.notifications.requestPermission(), {
     allowed: true,
@@ -108,6 +116,14 @@ Deno.test("wraps typed namespace commands", async () => {
     { command: "updateRestart" },
     { command: "serviceStatus" },
     { command: "trayRestoreWindow" },
+    {
+      command: "download",
+      payload: { download: "cancel", payload: { id: "cef-1" } },
+    },
+    {
+      command: "download",
+      payload: { download: "reveal", payload: { id: "cef-1" } },
+    },
     {
       command: "notification",
       payload: { notification: "permissionState" },
@@ -371,6 +387,7 @@ Deno.test("filters typed events", () => {
 
   const focused: string[] = [];
   const deepLinks: string[] = [];
+  const downloads: string[] = [];
   const notifications: string[] = [];
 
   const unsubscribeFocus = cefari.window.onFocused((state) => {
@@ -378,6 +395,9 @@ Deno.test("filters typed events", () => {
   });
   const unsubscribeDeepLink = cefari.on("deepLinkOpened", (event) => {
     deepLinks.push(event.url);
+  });
+  const unsubscribeDownload = cefari.on("download.completed", (event) => {
+    downloads.push(event.destinationPath);
   });
   const unsubscribeNotification = cefari.notifications.onResponse((event) => {
     notifications.push(event.id);
@@ -399,14 +419,29 @@ Deno.test("filters typed events", () => {
       event: "deepLinkOpened",
       payload: { url: "myapp://open/item?id=1" },
     });
+    handler({
+      event: "download",
+      payload: {
+        event: "completed",
+        payload: {
+          id: "cef-1",
+          url: "https://example.test/file.txt",
+          destinationPath: "/tmp/file.txt",
+          receivedBytes: 10,
+          totalBytes: 10,
+        },
+      },
+    });
   }
 
   assertEquals(focused, ["Dashboard"]);
   assertEquals(deepLinks, ["myapp://open/item?id=1"]);
+  assertEquals(downloads, ["/tmp/file.txt"]);
   assertEquals(notifications, ["n1"]);
 
   unsubscribeFocus();
   unsubscribeDeepLink();
+  unsubscribeDownload();
   unsubscribeNotification();
   assertEquals(handlers.size, 0);
 });
@@ -500,6 +535,26 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
       });
     case "trayRestoreWindow":
       return ok({ result: "tray", payload: { restored: true } });
+    case "download":
+      switch (command.payload.download) {
+        case "cancel":
+          return ok({
+            result: "download",
+            payload: {
+              result: "canceled",
+              payload: { id: command.payload.payload.id },
+            },
+          });
+        case "reveal":
+          return ok({
+            result: "download",
+            payload: {
+              result: "revealed",
+              payload: { id: command.payload.payload.id },
+            },
+          });
+      }
+      break;
     case "notification":
       switch (command.payload.notification) {
         case "permissionState":

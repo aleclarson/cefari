@@ -26,6 +26,11 @@ Available event names:
 - `trayRestoreWindow`
 - `updateStateChanged`
 - `serviceStatusChanged`
+- `download.started`
+- `download.progress`
+- `download.completed`
+- `download.canceled`
+- `download.failed`
 - `notification.response`
 
 Subscribe to deep links when the app config registers URL schemes:

@@ -208,7 +208,6 @@ pub enum NavigationSurface {
     SubFrame,
     Popup,
     OpenUrlFromTab,
-    Download,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -243,7 +242,6 @@ impl NavigationPolicy {
     pub fn decide(&self, surface: NavigationSurface, url: &str) -> NavigationPolicyDecision {
         match surface {
             NavigationSurface::SubFrame => NavigationPolicyDecision::allow("subframe navigation"),
-            NavigationSurface::Download => NavigationPolicyDecision::deny("downloads are disabled"),
             NavigationSurface::MainFrame => self.decide_main_frame(url),
             NavigationSurface::Popup | NavigationSurface::OpenUrlFromTab => {
                 Self::decide_external_surface(url)
@@ -421,8 +419,9 @@ mod tests {
     use anyhow::Result;
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
-        DialogCommand, DialogResult, FileResult, FilesCommand, ServiceStatusResult, TrayResult,
-        UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult, WindowState,
+        DialogCommand, DialogResult, DownloadCommand, DownloadIdResult, DownloadResult, FileResult,
+        FilesCommand, ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult,
+        UpdateStateKind, UpdateStateResult, WindowState,
     };
 
     use super::{
@@ -509,6 +508,15 @@ mod tests {
 
         fn dialog(&mut self, _command: &DialogCommand) -> Result<DialogResult> {
             Ok(DialogResult::Canceled)
+        }
+
+        fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult> {
+            let id = match command {
+                DownloadCommand::Cancel(request) | DownloadCommand::Reveal(request) => {
+                    request.id.clone()
+                }
+            };
+            Ok(DownloadResult::Canceled(DownloadIdResult { id }))
         }
 
         fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
@@ -648,15 +656,6 @@ mod tests {
         let decision = policy.decide(NavigationSurface::Popup, "mailto:hello@example.test");
 
         assert_eq!(decision.decision, NavigationDecision::OpenExternally);
-    }
-
-    #[test]
-    fn navigation_policy_denies_downloads() {
-        let policy = NavigationPolicy::new(BridgeOriginPolicy::for_dev_port(5173));
-
-        let decision = policy.decide(NavigationSurface::Download, "https://example.test/file.zip");
-
-        assert_eq!(decision.decision, NavigationDecision::Deny);
     }
 
     #[test]

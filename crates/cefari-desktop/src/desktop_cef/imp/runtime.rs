@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use cefari_core::CefariIpcEvent;
+use cefari_core::{CefariIpcEvent, DownloadResult};
 use tao::window::Window;
 use tracing::{error, info};
 
@@ -15,6 +15,7 @@ use cef::wrapper::message_router::{
 use cef::{ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _};
 
 use crate::desktop_bridge::{BridgeOriginPolicy, NavigationPolicy};
+use crate::{desktop_downloads::SharedDownloadState, external};
 
 use super::state::{
     SharedAppSchemeState, SharedBridgeIpcState, SharedBrowserState, SharedMessagePumpState,
@@ -38,6 +39,7 @@ pub struct CefRuntime {
     client: cef::Client,
     bridge_ipc: SharedBridgeIpcState,
     app_scheme: SharedAppSchemeState,
+    downloads: SharedDownloadState,
     message_pump: SharedMessagePumpState,
 }
 
@@ -163,6 +165,7 @@ impl CefRuntime {
         let state = SharedBrowserState::default();
         let bridge_ipc = SharedBridgeIpcState::default();
         let app_scheme = SharedAppSchemeState::default();
+        let downloads = SharedDownloadState::default();
         let bridge_origin_policy = BridgeOriginPolicy::from_environment();
         let navigation_policy = NavigationPolicy::new(bridge_origin_policy.clone());
         let browser_router = <BrowserSideRouter as MessageRouterBrowserSide>::new(router_config);
@@ -187,9 +190,11 @@ impl CefRuntime {
                 navigation_policy,
                 browser_router,
                 app_scheme.clone(),
+                downloads.clone(),
             ),
             bridge_ipc,
             app_scheme,
+            downloads,
             message_pump,
         })
     }
@@ -286,6 +291,18 @@ impl CefRuntime {
         Ok(())
     }
 
+    pub fn cancel_download(&self, id: &str) -> Result<DownloadResult> {
+        self.downloads.cancel(id)
+    }
+
+    pub fn reveal_download(&self, id: &str) -> Result<DownloadResult> {
+        let path = self.downloads.reveal_path(id)?;
+        external::open_external_file(&path)?;
+        Ok(DownloadResult::Revealed(cefari_core::DownloadIdResult {
+            id: id.to_owned(),
+        }))
+    }
+
     pub fn emit_event(&self, event: &CefariIpcEvent) -> Result<()> {
         let browser = self.state.active_browser()?;
         let frame = browser.main_frame().with_context(|| {
@@ -336,6 +353,15 @@ fn cefari_event_script(event_json: &str) -> String {
     )
 }
 
+impl Drop for CefRuntime {
+    fn drop(&mut self) {
+        if self.initialized {
+            cef::shutdown();
+            self.initialized = false;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use cefari_core::{CefariIpcEvent, DeepLinkOpenEvent};
@@ -354,14 +380,5 @@ mod tests {
         assert!(script.contains("window.__CEFARI_IPC_EVENT__"));
         assert!(script.contains(r#""event":"deepLinkOpened""#));
         assert!(script.contains(r#""url":"myapp://open/item?id=1""#));
-    }
-}
-
-impl Drop for CefRuntime {
-    fn drop(&mut self) {
-        if self.initialized {
-            cef::shutdown();
-            self.initialized = false;
-        }
     }
 }

@@ -17,6 +17,7 @@ mod imp {
     use std::{fs, path::PathBuf, sync::Arc};
 
     use anyhow::{Context, Result};
+    use cefari_core::CefariIpcEvent;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use tao::dpi::PhysicalSize;
     use tao::window::Window;
@@ -28,13 +29,13 @@ mod imp {
         MessageRouterRendererSide, MessageRouterRendererSideHandlerCallbacks, RendererSideRouter,
     };
     use cef::{
-        App, BrowserProcessHandler, Client, DownloadHandler, ImplApp, ImplBrowser as _,
-        ImplBrowserProcessHandler, ImplClient, ImplCommandLine as _, ImplDownloadHandler,
-        ImplFrame as _, ImplLifeSpanHandler, ImplLoadHandler, ImplRenderHandler,
-        ImplRenderProcessHandler, ImplRequestHandler, ImplResourceRequestHandler,
-        ImplSchemeRegistrar as _, LifeSpanHandler, LoadHandler, RenderHandler,
-        RenderProcessHandler, RequestHandler, ResourceRequestHandler, SchemeOptions, WrapApp,
-        WrapBrowserProcessHandler, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
+        App, BrowserProcessHandler, Client, DownloadHandler, ImplApp, ImplBeforeDownloadCallback,
+        ImplBrowser as _, ImplBrowserProcessHandler, ImplClient, ImplCommandLine as _,
+        ImplDownloadHandler, ImplDownloadItem as _, ImplFrame as _, ImplLifeSpanHandler,
+        ImplLoadHandler, ImplRenderHandler, ImplRenderProcessHandler, ImplRequestHandler,
+        ImplResourceRequestHandler, ImplSchemeRegistrar as _, LifeSpanHandler, LoadHandler,
+        RenderHandler, RenderProcessHandler, RequestHandler, ResourceRequestHandler, SchemeOptions,
+        WrapApp, WrapBrowserProcessHandler, WrapClient, WrapDownloadHandler, WrapLifeSpanHandler,
         WrapLoadHandler, WrapRenderHandler, WrapRenderProcessHandler, WrapRequestHandler,
         WrapResourceRequestHandler, wrap_app, wrap_browser_process_handler, wrap_client,
         wrap_download_handler, wrap_life_span_handler, wrap_load_handler, wrap_render_handler,
@@ -42,6 +43,9 @@ mod imp {
     };
 
     use crate::desktop_bridge::{BridgeOriginPolicy, NavigationPolicy, NavigationSurface};
+    use crate::desktop_downloads::{
+        DownloadDecision, DownloadPolicy, DownloadSnapshot, SharedDownloadState,
+    };
     use crate::desktop_ui::CEFARI_APP_SCHEME;
 
     use super::paths::CefRuntimePathConfig;
@@ -417,10 +421,11 @@ mod imp {
             navigation_policy: NavigationPolicy,
             browser_router: Arc<BrowserSideRouter>,
             app_scheme: SharedAppSchemeState,
+            downloads: SharedDownloadState,
         ) -> cef::Client {
             Self::new(
                 browser_router.clone(),
-                CefariDownloadHandler::new(navigation_policy.clone()),
+                CefariDownloadHandler::new(downloads),
                 CefariLifeSpanHandler::new(
                     state,
                     browser_router.clone(),
@@ -440,7 +445,7 @@ mod imp {
 
     wrap_download_handler! {
         struct CefariDownloadHandler {
-            navigation_policy: NavigationPolicy,
+            downloads: SharedDownloadState,
         }
 
         impl DownloadHandler {
@@ -451,32 +456,131 @@ mod imp {
                 request_method: Option<&cef::CefString>,
             ) -> ::std::os::raw::c_int {
                 let url = optional_cef_string(url);
-                let decision = self
-                    .navigation_policy
-                    .decide(NavigationSurface::Download, &url);
-                warn!(
-                    url,
-                    request_method = %optional_cef_string(request_method),
-                    reason = decision.reason,
-                    "denied CEF download"
-                );
-                0
+                match DownloadPolicy::decide(&url) {
+                    DownloadDecision::Allow => {
+                        debug!(
+                            url,
+                            request_method = %optional_cef_string(request_method),
+                            "allowed CEF download"
+                        );
+                        1
+                    }
+                    DownloadDecision::Deny(reason) => {
+                        warn!(
+                            url,
+                            request_method = %optional_cef_string(request_method),
+                            reason,
+                            "denied CEF download"
+                        );
+                        0
+                    }
+                }
             }
 
             fn on_before_download(
                 &self,
-                _browser: Option<&mut cef::Browser>,
-                _download_item: Option<&mut cef::DownloadItem>,
+                browser: Option<&mut cef::Browser>,
+                download_item: Option<&mut cef::DownloadItem>,
                 suggested_name: Option<&cef::CefString>,
-                _callback: Option<&mut cef::BeforeDownloadCallback>,
+                callback: Option<&mut cef::BeforeDownloadCallback>,
             ) -> ::std::os::raw::c_int {
-                warn!(
-                    suggested_name = %optional_cef_string(suggested_name),
-                    "denied CEF download before start"
-                );
-                1
+                let Some(download_item) = download_item else {
+                    warn!("denied CEF download before start because download item is missing");
+                    return 0;
+                };
+                let snapshot = download_snapshot(download_item, suggested_name);
+                match DownloadPolicy::decide(&snapshot.url) {
+                    DownloadDecision::Allow => {
+                        emit_browser_event(browser.as_deref(), &self.downloads.start(&snapshot));
+                        if let Some(callback) = callback {
+                            callback.cont(None, 1);
+                            return 1;
+                        }
+                        warn!("denied CEF download before start because callback is missing");
+                        0
+                    }
+                    DownloadDecision::Deny(reason) => {
+                        warn!(url = %snapshot.url, reason, "denied CEF download before start");
+                        0
+                    }
+                }
+            }
+
+            fn on_download_updated(
+                &self,
+                browser: Option<&mut cef::Browser>,
+                download_item: Option<&mut cef::DownloadItem>,
+                callback: Option<&mut cef::DownloadItemCallback>,
+            ) {
+                let Some(download_item) = download_item else {
+                    warn!("ignored CEF download update because download item is missing");
+                    return;
+                };
+                let snapshot = download_snapshot(download_item, None);
+                let callback = callback.cloned();
+                if let Some(event) = self.downloads.update(&snapshot, callback) {
+                    emit_browser_event(browser.as_deref(), &event);
+                }
             }
         }
+    }
+
+    fn download_snapshot(
+        download_item: &cef::DownloadItem,
+        suggested_name: Option<&cef::CefString>,
+    ) -> DownloadSnapshot {
+        let id = format!("cef-{}", download_item.id());
+        let suggested_name = optional_cef_string(suggested_name);
+        let item_suggested_name = cef_userfree_string(&download_item.suggested_file_name());
+        let full_path = cef_userfree_string(&download_item.full_path());
+        let total_bytes = download_item.total_bytes();
+        let percent_complete = download_item.percent_complete();
+        DownloadSnapshot {
+            id,
+            url: cef_userfree_string(&download_item.url()),
+            suggested_name: if suggested_name.is_empty() {
+                item_suggested_name
+            } else {
+                suggested_name
+            },
+            destination_path: (!full_path.is_empty()).then_some(full_path),
+            received_bytes: download_item.received_bytes(),
+            total_bytes: (total_bytes > 0).then_some(total_bytes),
+            percent_complete: (percent_complete >= 0).then_some(percent_complete),
+            is_complete: download_item.is_complete() != 0,
+            is_canceled: download_item.is_canceled() != 0,
+            is_interrupted: download_item.is_interrupted() != 0,
+            interrupt_reason: format!("{:?}", download_item.interrupt_reason()),
+        }
+    }
+
+    fn emit_browser_event(browser: Option<&cef::Browser>, event: &CefariIpcEvent) {
+        let Some(browser) = browser else {
+            warn!(
+                ?event,
+                "failed to emit Cefari event because CEF browser is missing"
+            );
+            return;
+        };
+        let Some(frame) = browser.main_frame() else {
+            warn!(
+                ?event,
+                "failed to emit Cefari event because CEF main frame is missing"
+            );
+            return;
+        };
+        let Ok(event_json) = serde_json::to_string(event) else {
+            warn!(
+                ?event,
+                "failed to serialize Cefari event for browser delivery"
+            );
+            return;
+        };
+        let code =
+            format!("if (window.__CEFARI_IPC_EVENT__) window.__CEFARI_IPC_EVENT__({event_json});");
+        let code = cef::CefString::from(code.as_str());
+        let script_url = cef::CefString::from("cefari://bridge/event.js");
+        frame.execute_java_script(Some(&code), Some(&script_url), 1);
     }
 
     wrap_life_span_handler! {

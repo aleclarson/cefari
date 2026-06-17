@@ -4,7 +4,7 @@ export type AppDataDirInfo = {
 	displayPath: string,
 };
 
-export type CefariIpcCommand = { command: "appQuit" } | { command: "windowShow" } | { command: "windowFocus" } | { command: "windowClose" } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand };
+export type CefariIpcCommand = { command: "appQuit" } | { command: "windowShow" } | { command: "windowFocus" } | { command: "windowClose" } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "download"; payload: DownloadCommand } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand };
 
 export type CefariIpcError = { code: "invalidCommand"; details: {
 	message: string,
@@ -17,7 +17,7 @@ export type CefariIpcError = { code: "invalidCommand"; details: {
 	reason: string,
 } };
 
-export type CefariIpcEvent = { event: "windowShown"; payload: WindowState } | { event: "windowFocused"; payload: WindowState } | { event: "windowClosed" } | { event: "deepLinkOpened"; payload: DeepLinkOpenEvent } | { event: "trayRestoreWindow" } | { event: "updateStateChanged"; payload: UpdateStateResult } | { event: "serviceStatusChanged"; payload: ServiceStatusResult } | { event: "notification"; payload: NotificationEvent };
+export type CefariIpcEvent = { event: "windowShown"; payload: WindowState } | { event: "windowFocused"; payload: WindowState } | { event: "windowClosed" } | { event: "deepLinkOpened"; payload: DeepLinkOpenEvent } | { event: "trayRestoreWindow" } | { event: "updateStateChanged"; payload: UpdateStateResult } | { event: "serviceStatusChanged"; payload: ServiceStatusResult } | { event: "download"; payload: DownloadEvent } | { event: "notification"; payload: NotificationEvent };
 
 export type CefariIpcOutcome = { status: "ok"; payload: CefariIpcResult } | { status: "err"; payload: CefariIpcError };
 
@@ -31,7 +31,7 @@ export type CefariIpcResponse = {
 	outcome: CefariIpcOutcome,
 };
 
-export type CefariIpcResult = { result: "empty" } | { result: "window"; payload: WindowState } | { result: "reloadUi" } | { result: "externalUrl"; payload: ExternalUrlResult } | { result: "updateState"; payload: UpdateStateResult } | { result: "updateCheck"; payload: UpdateCheckResult } | { result: "updateApply"; payload: UpdateApplyResult } | { result: "serviceStatus"; payload: ServiceStatusResult } | { result: "tray"; payload: TrayResult } | { result: "notification"; payload: NotificationResult } | { result: "dialog"; payload: DialogResult } | { result: "file"; payload: FileResult };
+export type CefariIpcResult = { result: "empty" } | { result: "window"; payload: WindowState } | { result: "reloadUi" } | { result: "externalUrl"; payload: ExternalUrlResult } | { result: "updateState"; payload: UpdateStateResult } | { result: "updateCheck"; payload: UpdateCheckResult } | { result: "updateApply"; payload: UpdateApplyResult } | { result: "serviceStatus"; payload: ServiceStatusResult } | { result: "tray"; payload: TrayResult } | { result: "download"; payload: DownloadResult } | { result: "notification"; payload: NotificationResult } | { result: "dialog"; payload: DialogResult } | { result: "file"; payload: FileResult };
 
 export type CopyFileRequest = {
 	from: string,
@@ -76,6 +76,53 @@ export type DirEntry = {
 	name: string,
 	path: string,
 	kind: FileKind,
+};
+
+export type DownloadCanceledEvent = {
+	id: string,
+	reason: string,
+};
+
+export type DownloadCommand = { download: "cancel"; payload: DownloadIdRequest } | { download: "reveal"; payload: DownloadIdRequest };
+
+export type DownloadCompletedEvent = {
+	id: string,
+	url: string,
+	destinationPath: string,
+	receivedBytes: number | null,
+	totalBytes: number | null,
+};
+
+export type DownloadEvent = { event: "started"; payload: DownloadStartedEvent } | { event: "progress"; payload: DownloadProgressEvent } | { event: "completed"; payload: DownloadCompletedEvent } | { event: "canceled"; payload: DownloadCanceledEvent } | { event: "failed"; payload: DownloadFailedEvent };
+
+export type DownloadFailedEvent = {
+	id: string,
+	reason: string,
+};
+
+export type DownloadIdRequest = {
+	id: string,
+};
+
+export type DownloadIdResult = {
+	id: string,
+};
+
+export type DownloadProgressEvent = {
+	id: string,
+	receivedBytes: number | null,
+	totalBytes: number | null,
+	percentComplete: number | null,
+};
+
+export type DownloadResult = { result: "canceled"; payload: DownloadIdResult } | { result: "revealed"; payload: DownloadIdResult };
+
+export type DownloadStartedEvent = {
+	id: string,
+	url: string,
+	suggestedName: string,
+	destinationPath: string | null,
+	totalBytes: number | null,
 };
 
 export type ExternalUrlResult = {

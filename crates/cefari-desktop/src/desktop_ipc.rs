@@ -1,9 +1,10 @@
 use anyhow::Result;
 use cefari_core::{
     CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
-    CefariIpcResult, DialogCommand, DialogResult, ExternalUrlResult, FileResult, FilesCommand,
-    NotificationCommand, ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult,
-    UpdateCheckState, UpdateStateKind, UpdateStateResult, WindowState,
+    CefariIpcResult, DialogCommand, DialogResult, DownloadCommand, DownloadResult,
+    ExternalUrlResult, FileResult, FilesCommand, NotificationCommand, ServiceStatusResult,
+    TrayResult, UpdateApplyResult, UpdateCheckResult, UpdateCheckState, UpdateStateKind,
+    UpdateStateResult, WindowState,
 };
 
 #[derive(Debug, Default)]
@@ -24,6 +25,7 @@ pub trait NativeShellContext {
     fn update_restart(&mut self) -> Result<()>;
     fn service_status(&mut self) -> Result<ServiceStatusResult>;
     fn tray_restore_window(&mut self) -> Result<TrayResult>;
+    fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult>;
     fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult>;
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult>;
 }
@@ -110,6 +112,10 @@ fn dispatch_command(
             .tray_restore_window()
             .map(CefariIpcResult::Tray)
             .map_err(|error| invalid_command(&error, "trayRestoreWindow")),
+        CefariIpcCommand::Download(command) => context
+            .download(command)
+            .map(CefariIpcResult::Download)
+            .map_err(|error| invalid_command(&error, "download")),
         CefariIpcCommand::Notification(command) => Err(unsupported_notification(command)),
         CefariIpcCommand::Dialog(command) => context
             .dialog(command)
@@ -202,7 +208,8 @@ mod tests {
     use anyhow::Result;
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
-        DialogCommand, DialogRequest, DialogResult, FileResult, FilesCommand, NotificationCommand,
+        DialogCommand, DialogRequest, DialogResult, DownloadCommand, DownloadIdRequest,
+        DownloadIdResult, DownloadResult, FileResult, FilesCommand, NotificationCommand,
         OpenExternalUrlRequest, ServiceStatusResult, TrayResult, UpdateApplyRequest,
         UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
         WindowSetTitleRequest, WindowState,
@@ -324,6 +331,23 @@ mod tests {
             }
         }
 
+        fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult> {
+            match command {
+                DownloadCommand::Cancel(request) => {
+                    self.calls.push("download_cancel");
+                    Ok(DownloadResult::Canceled(DownloadIdResult {
+                        id: request.id.clone(),
+                    }))
+                }
+                DownloadCommand::Reveal(request) => {
+                    self.calls.push("download_reveal");
+                    Ok(DownloadResult::Revealed(DownloadIdResult {
+                        id: request.id.clone(),
+                    }))
+                }
+            }
+        }
+
         fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
             match command {
                 FilesCommand::AppDataDir => {
@@ -372,6 +396,9 @@ mod tests {
             CefariIpcCommand::UpdateRestart,
             CefariIpcCommand::ServiceStatus,
             CefariIpcCommand::TrayRestoreWindow,
+            CefariIpcCommand::Download(DownloadCommand::Cancel(DownloadIdRequest {
+                id: "cef-1".to_owned(),
+            })),
             CefariIpcCommand::Dialog(DialogCommand::OpenFile(DialogRequest {
                 title: None,
                 filters: Vec::new(),
@@ -411,6 +438,7 @@ mod tests {
                 "update_restart",
                 "service_status",
                 "tray_restore_window",
+                "download_cancel",
                 "dialog_open_file",
                 "files_app_data_dir",
             ]

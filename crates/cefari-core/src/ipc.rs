@@ -39,6 +39,7 @@ pub enum CefariIpcCommand {
     UpdateRestart,
     ServiceStatus,
     TrayRestoreWindow,
+    Download(DownloadCommand),
     Notification(NotificationCommand),
     Dialog(DialogCommand),
     Files(FilesCommand),
@@ -56,12 +57,13 @@ pub enum CefariIpcResult {
     UpdateApply(UpdateApplyResult),
     ServiceStatus(ServiceStatusResult),
     Tray(TrayResult),
+    Download(DownloadResult),
     Notification(NotificationResult),
     Dialog(DialogResult),
     File(FileResult),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "event", content = "payload", rename_all = "camelCase")]
 pub enum CefariIpcEvent {
     WindowShown(WindowState),
@@ -71,6 +73,7 @@ pub enum CefariIpcEvent {
     TrayRestoreWindow,
     UpdateStateChanged(UpdateStateResult),
     ServiceStatusChanged(ServiceStatusResult),
+    Download(DownloadEvent),
     Notification(NotificationEvent),
 }
 
@@ -156,6 +159,85 @@ pub struct ServiceStatusResult {
 #[serde(rename_all = "camelCase")]
 pub struct TrayResult {
     pub restored: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "download", content = "payload", rename_all = "camelCase")]
+pub enum DownloadCommand {
+    Cancel(DownloadIdRequest),
+    Reveal(DownloadIdRequest),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadIdRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "result", content = "payload", rename_all = "camelCase")]
+pub enum DownloadResult {
+    Canceled(DownloadIdResult),
+    Revealed(DownloadIdResult),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadIdResult {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "event", content = "payload", rename_all = "camelCase")]
+pub enum DownloadEvent {
+    Started(DownloadStartedEvent),
+    Progress(DownloadProgressEvent),
+    Completed(DownloadCompletedEvent),
+    Canceled(DownloadCanceledEvent),
+    Failed(DownloadFailedEvent),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadStartedEvent {
+    pub id: String,
+    pub url: String,
+    pub suggested_name: String,
+    pub destination_path: Option<String>,
+    pub total_bytes: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadProgressEvent {
+    pub id: String,
+    pub received_bytes: f64,
+    pub total_bytes: Option<f64>,
+    pub percent_complete: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadCompletedEvent {
+    pub id: String,
+    pub url: String,
+    pub destination_path: String,
+    pub received_bytes: f64,
+    pub total_bytes: Option<f64>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadCanceledEvent {
+    pub id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadFailedEvent {
+    pub id: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -430,8 +512,9 @@ mod tests {
     use super::{
         CefariIpcCommand, CefariIpcError, CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest,
         CefariIpcResponse, DeepLinkOpenEvent, DialogCommand, DialogDefaultDirectory, DialogFilter,
-        DialogModality, DialogRequest, DialogResult, DialogSelectedPath, FileKind,
-        NotificationCommand, OpenExternalUrlRequest, WindowSetTitleRequest, ipc_types,
+        DialogModality, DialogRequest, DialogResult, DialogSelectedPath, DownloadCommand,
+        DownloadCompletedEvent, DownloadEvent, DownloadIdRequest, FileKind, NotificationCommand,
+        OpenExternalUrlRequest, WindowSetTitleRequest, ipc_types,
     };
 
     #[test]
@@ -548,6 +631,25 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_download_commands() {
+        let request = CefariIpcRequest {
+            id: "download-cancel".to_owned(),
+            command: CefariIpcCommand::Download(DownloadCommand::Cancel(DownloadIdRequest {
+                id: "cef-1".to_owned(),
+            })),
+        };
+
+        let json = serde_json::to_string(&request).expect("request should serialize");
+
+        assert_eq!(
+            serde_json::from_str::<CefariIpcRequest>(&json).expect("request should deserialize"),
+            request
+        );
+        assert!(json.contains("download"));
+        assert!(json.contains("cancel"));
+    }
+
+    #[test]
     fn round_trips_dialog_results() {
         let canceled = DialogResult::Canceled;
         let selected = DialogResult::Selected {
@@ -577,6 +679,7 @@ mod tests {
         assert!(output.contains("export type CefariIpcRequest"));
         assert!(output.contains("windowSetTitle"));
         assert!(output.contains("unknownCommand"));
+        assert!(output.contains("download"));
         assert!(output.contains("openFiles"));
         assert!(output.contains("chooseFolders"));
         assert!(output.contains("permissionState"));
@@ -595,7 +698,13 @@ mod tests {
 
     #[test]
     fn event_types_round_trip() {
-        let event = CefariIpcEvent::WindowClosed;
+        let event = CefariIpcEvent::Download(DownloadEvent::Completed(DownloadCompletedEvent {
+            id: "cef-1".to_owned(),
+            url: "https://example.test/file.txt".to_owned(),
+            destination_path: "/tmp/file.txt".to_owned(),
+            received_bytes: 10.0,
+            total_bytes: Some(10.0),
+        }));
         let json = serde_json::to_string(&event).expect("event should serialize");
 
         assert_eq!(

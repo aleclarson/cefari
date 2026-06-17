@@ -3,6 +3,7 @@ import type {
   CefariIpcCommand,
   CefariIpcResult,
   DialogResult,
+  DownloadResult,
   ExternalUrlResult,
   FileResult,
   NotificationResult,
@@ -113,6 +114,12 @@ export async function invokeDialog(
   command: CefariIpcCommand,
 ): Promise<DialogResult> {
   return (await invokeResult(command, "dialog")).payload;
+}
+
+export async function invokeDownload(
+  command: CefariIpcCommand,
+): Promise<DownloadResult> {
+  return (await invokeResult(command, "download")).payload;
 }
 
 export async function invokeFile(command: CefariIpcCommand): Promise<FileResult> {
