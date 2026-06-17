@@ -421,7 +421,8 @@ mod tests {
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
         DialogCommand, DialogResult, DownloadCommand, DownloadIdResult, DownloadResult, FileResult,
         FilesCommand, ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult,
-        UpdateStateKind, UpdateStateResult, WindowState,
+        UpdateStateKind, UpdateStateResult, WindowCreateRequest, WindowKind, WindowListResult,
+        WindowSetTitleRequest, WindowState, WindowTargetRequest,
     };
 
     use super::{
@@ -441,19 +442,33 @@ mod tests {
             Ok(())
         }
 
-        fn window_show(&mut self) -> Result<WindowState> {
+        fn window_current(&mut self) -> Result<WindowState> {
             Ok(window_state())
         }
 
-        fn window_focus(&mut self) -> Result<WindowState> {
+        fn window_list(&mut self) -> Result<WindowListResult> {
+            Ok(WindowListResult {
+                windows: vec![window_state()],
+            })
+        }
+
+        fn window_create(&mut self, _request: &WindowCreateRequest) -> Result<WindowState> {
             Ok(window_state())
         }
 
-        fn window_close(&mut self) -> Result<WindowState> {
+        fn window_show(&mut self, _request: &WindowTargetRequest) -> Result<WindowState> {
             Ok(window_state())
         }
 
-        fn window_set_title(&mut self, _title: &str) -> Result<WindowState> {
+        fn window_focus(&mut self, _request: &WindowTargetRequest) -> Result<WindowState> {
+            Ok(window_state())
+        }
+
+        fn window_close(&mut self, _request: &WindowTargetRequest) -> Result<WindowState> {
+            Ok(window_state())
+        }
+
+        fn window_set_title(&mut self, _request: &WindowSetTitleRequest) -> Result<WindowState> {
             Ok(window_state())
         }
 
@@ -532,9 +547,14 @@ mod tests {
 
     fn window_state() -> WindowState {
         WindowState {
+            id: "main".to_owned(),
+            kind: WindowKind::Main,
             visible: true,
             focused: true,
             title: "Cefari".to_owned(),
+            modal: false,
+            parent_id: None,
+            route: None,
         }
     }
 

@@ -243,7 +243,11 @@ fn run_event_loop(
                     debug!(%error, "CEF browser close skipped or failed");
                 }
                 log_cef_lifecycle_result(
-                    guards.cef_runtime.emit_event(&CefariIpcEvent::WindowClosed),
+                    guards.cef_runtime.emit_event(&CefariIpcEvent::WindowClosed(
+                        cefari_core::WindowIdEvent {
+                            window_id: window::MAIN_WINDOW_ID.to_owned(),
+                        },
+                    )),
                     "emitted Cefari window closed event",
                 );
                 window_manager.close_main();

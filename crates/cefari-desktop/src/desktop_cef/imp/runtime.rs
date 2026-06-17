@@ -397,11 +397,12 @@ mod tests {
 
     #[test]
     fn bridge_event_script_dispatches_json_payload() {
-        let script = bridge_event_script(r#"{"event":"windowClosed"}"#);
+        let script =
+            bridge_event_script(r#"{"event":"windowClosed","payload":{"windowId":"main"}}"#);
 
         assert_eq!(
             script,
-            r#"window.__CEFARI_IPC_EVENT__?.({"event":"windowClosed"});"#
+            r#"window.__CEFARI_IPC_EVENT__?.({"event":"windowClosed","payload":{"windowId":"main"}});"#
         );
     }
 }

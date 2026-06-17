@@ -5,6 +5,8 @@ import {
   type CefariIpcCommand,
   type CefariIpcEvent,
   type CefariIpcResponse,
+  type WindowKind,
+  type WindowState,
 } from "../../src/app/mod.ts";
 
 Deno.test("reports unavailable outside the Cefari shell", async () => {
@@ -36,15 +38,25 @@ Deno.test("wraps typed namespace commands", async () => {
     },
   });
 
+  assertEquals(await cefari.window.current(), mainWindowState("Focused"));
+  assertEquals(await cefari.window.list(), [mainWindowState("Focused")]);
+  assertEquals(
+    await cefari.window.create({
+      id: "settings",
+      route: "/settings",
+      title: "Settings",
+      width: 720,
+      height: 560,
+    }),
+    mainWindowState("Settings", "settings", "secondary", "/settings"),
+  );
   assertEquals(await cefari.window.focus(), {
-    visible: true,
+    ...mainWindowState("Focused"),
     focused: true,
-    title: "Focused",
   });
   assertEquals(await cefari.window.setTitle("Dashboard"), {
-    visible: true,
+    ...mainWindowState("Dashboard"),
     focused: true,
-    title: "Dashboard",
   });
   assertEquals(
     await cefari.shell.openExternalUrl(new URL("https://example.com")),
@@ -102,8 +114,37 @@ Deno.test("wraps typed namespace commands", async () => {
   );
 
   assertEquals(commands, [
-    { command: "windowFocus" },
-    { command: "windowSetTitle", payload: { title: "Dashboard" } },
+    { command: "windowCurrent" },
+    { command: "windowList" },
+    {
+      command: "windowCreate",
+      payload: {
+        id: "settings",
+        route: "/settings",
+        title: "Settings",
+        width: 720,
+        height: 560,
+        minWidth: null,
+        minHeight: null,
+        maxWidth: null,
+        maxHeight: null,
+        x: null,
+        y: null,
+        visible: null,
+        focused: null,
+        resizable: null,
+        decorations: null,
+        alwaysOnTop: null,
+        parentId: null,
+        modal: null,
+        persistKey: null,
+      },
+    },
+    { command: "windowFocus", payload: { target: null } },
+    {
+      command: "windowSetTitle",
+      payload: { target: null, title: "Dashboard" },
+    },
     {
       command: "openExternalUrl",
       payload: { url: "https://example.com/" },
@@ -406,7 +447,10 @@ Deno.test("filters typed events", () => {
   for (const handler of handlers) {
     handler({
       event: "windowFocused",
-      payload: { visible: true, focused: true, title: "Dashboard" },
+      payload: {
+        windowId: "main",
+        state: mainWindowState("Dashboard"),
+      },
     });
     handler({
       event: "notification",
@@ -482,20 +526,62 @@ function withBridge(bridge: CefariBridge | undefined) {
   }
 }
 
+function mainWindowState(
+  title: string,
+  id = "main",
+  kind: WindowKind = "main",
+  route: string | null = null,
+): WindowState {
+  return {
+    id,
+    kind,
+    visible: true,
+    focused: true,
+    title,
+    modal: false,
+    parentId: null,
+    route,
+  };
+}
+
 function responseFor(command: CefariIpcCommand): CefariIpcResponse {
   switch (command.command) {
     case "appQuit":
     case "openLogs":
       return ok({ result: "empty" });
+    case "windowCurrent":
+      return ok({
+        result: "window",
+        payload: mainWindowState("Focused"),
+      });
+    case "windowList":
+      return ok({
+        result: "windowList",
+        payload: { windows: [mainWindowState("Focused")] },
+      });
+    case "windowCreate":
+      return ok({
+        result: "window",
+        payload: mainWindowState(
+          command.payload.title ?? "Focused",
+          command.payload.id ?? "secondary",
+          "secondary",
+          command.payload.route,
+        ),
+      });
     case "windowClose":
       return ok({
         result: "window",
-        payload: { visible: false, focused: false, title: "Focused" },
+        payload: {
+          ...mainWindowState("Focused"),
+          visible: false,
+          focused: false,
+        },
       });
     case "windowSetTitle":
       return ok({
         result: "window",
-        payload: { visible: true, focused: true, title: command.payload.title },
+        payload: mainWindowState(command.payload.title),
       });
     case "reloadUi":
       return ok({ result: "reloadUi" });
@@ -503,7 +589,7 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
     case "windowFocus":
       return ok({
         result: "window",
-        payload: { visible: true, focused: true, title: "Focused" },
+        payload: mainWindowState("Focused"),
       });
     case "openExternalUrl":
       return ok({

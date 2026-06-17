@@ -12,6 +12,7 @@ import type {
   UpdateApplyResult,
   UpdateCheckResult,
   UpdateStateResult,
+  WindowListResult,
   WindowState,
 } from "./ipc.ts";
 import { invoke, tryInvoke } from "./transport.ts";
@@ -62,6 +63,12 @@ export async function invokeWindow(
   command: CefariIpcCommand,
 ): Promise<WindowState> {
   return (await invokeResult(command, "window")).payload;
+}
+
+export async function invokeWindowList(
+  command: CefariIpcCommand,
+): Promise<WindowListResult> {
+  return (await invokeResult(command, "windowList")).payload;
 }
 
 export async function invokeExternalUrl(
@@ -122,6 +129,8 @@ export async function invokeDownload(
   return (await invokeResult(command, "download")).payload;
 }
 
-export async function invokeFile(command: CefariIpcCommand): Promise<FileResult> {
+export async function invokeFile(
+  command: CefariIpcCommand,
+): Promise<FileResult> {
   return (await invokeResult(command, "file")).payload;
 }

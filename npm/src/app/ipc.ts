@@ -4,7 +4,7 @@ export type AppDataDirInfo = {
 	displayPath: string,
 };
 
-export type CefariIpcCommand = { command: "appQuit" } | { command: "windowShow" } | { command: "windowFocus" } | { command: "windowClose" } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "download"; payload: DownloadCommand } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand };
+export type CefariIpcCommand = { command: "appQuit" } | { command: "windowCurrent" } | { command: "windowList" } | { command: "windowCreate"; payload: WindowCreateRequest } | { command: "windowShow"; payload: WindowTargetRequest } | { command: "windowFocus"; payload: WindowTargetRequest } | { command: "windowClose"; payload: WindowTargetRequest } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "download"; payload: DownloadCommand } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand };
 
 export type CefariIpcError = { code: "invalidCommand"; details: {
 	message: string,
@@ -17,7 +17,7 @@ export type CefariIpcError = { code: "invalidCommand"; details: {
 	reason: string,
 } };
 
-export type CefariIpcEvent = { event: "windowShown"; payload: WindowState } | { event: "windowFocused"; payload: WindowState } | { event: "windowClosed" } | { event: "deepLinkOpened"; payload: DeepLinkOpenEvent } | { event: "trayRestoreWindow" } | { event: "updateStateChanged"; payload: UpdateStateResult } | { event: "serviceStatusChanged"; payload: ServiceStatusResult } | { event: "download"; payload: DownloadEvent } | { event: "notification"; payload: NotificationEvent };
+export type CefariIpcEvent = { event: "windowCreated"; payload: WindowStateEvent } | { event: "windowShown"; payload: WindowStateEvent } | { event: "windowFocused"; payload: WindowStateEvent } | { event: "windowBlurred"; payload: WindowStateEvent } | { event: "windowCloseRequested"; payload: WindowStateEvent } | { event: "windowClosed"; payload: WindowIdEvent } | { event: "windowMoved"; payload: WindowStateEvent } | { event: "windowResized"; payload: WindowStateEvent } | { event: "windowTitleChanged"; payload: WindowStateEvent } | { event: "deepLinkOpened"; payload: DeepLinkOpenEvent } | { event: "trayRestoreWindow" } | { event: "updateStateChanged"; payload: UpdateStateResult } | { event: "serviceStatusChanged"; payload: ServiceStatusResult } | { event: "download"; payload: DownloadEvent } | { event: "notification"; payload: NotificationEvent };
 
 export type CefariIpcOutcome = { status: "ok"; payload: CefariIpcResult } | { status: "err"; payload: CefariIpcError };
 
@@ -31,7 +31,7 @@ export type CefariIpcResponse = {
 	outcome: CefariIpcOutcome,
 };
 
-export type CefariIpcResult = { result: "empty" } | { result: "window"; payload: WindowState } | { result: "reloadUi" } | { result: "externalUrl"; payload: ExternalUrlResult } | { result: "updateState"; payload: UpdateStateResult } | { result: "updateCheck"; payload: UpdateCheckResult } | { result: "updateApply"; payload: UpdateApplyResult } | { result: "serviceStatus"; payload: ServiceStatusResult } | { result: "tray"; payload: TrayResult } | { result: "download"; payload: DownloadResult } | { result: "notification"; payload: NotificationResult } | { result: "dialog"; payload: DialogResult } | { result: "file"; payload: FileResult };
+export type CefariIpcResult = { result: "empty" } | { result: "window"; payload: WindowState } | { result: "windowList"; payload: WindowListResult } | { result: "reloadUi" } | { result: "externalUrl"; payload: ExternalUrlResult } | { result: "updateState"; payload: UpdateStateResult } | { result: "updateCheck"; payload: UpdateCheckResult } | { result: "updateApply"; payload: UpdateApplyResult } | { result: "serviceStatus"; payload: ServiceStatusResult } | { result: "tray"; payload: TrayResult } | { result: "download"; payload: DownloadResult } | { result: "notification"; payload: NotificationResult } | { result: "dialog"; payload: DialogResult } | { result: "file"; payload: FileResult };
 
 export type CopyFileRequest = {
 	from: string,
@@ -261,12 +261,63 @@ export type UpdateStateResult = {
 	state: UpdateStateKind,
 };
 
+export type WindowCreateRequest = {
+	id: string | null,
+	route: string | null,
+	title: string | null,
+	width: number | null,
+	height: number | null,
+	minWidth: number | null,
+	minHeight: number | null,
+	maxWidth: number | null,
+	maxHeight: number | null,
+	x: number | null,
+	y: number | null,
+	visible: boolean | null,
+	focused: boolean | null,
+	resizable: boolean | null,
+	decorations: boolean | null,
+	alwaysOnTop: boolean | null,
+	parentId: string | null,
+	modal: boolean | null,
+	persistKey: string | null,
+};
+
+export type WindowIdEvent = {
+	windowId: string,
+};
+
+export type WindowKind = "main" | "secondary";
+
+export type WindowListResult = {
+	windows: WindowState[],
+};
+
 export type WindowSetTitleRequest = {
+	target: WindowTarget | null,
 	title: string,
 };
 
 export type WindowState = {
+	id: string,
+	kind: WindowKind,
 	visible: boolean,
 	focused: boolean,
 	title: string,
+	modal: boolean,
+	parentId: string | null,
+	route: string | null,
+};
+
+export type WindowStateEvent = {
+	windowId: string,
+	state: WindowState,
+};
+
+export type WindowTarget = {
+	id: string | null,
+};
+
+export type WindowTargetRequest = {
+	target: WindowTarget | null,
 };

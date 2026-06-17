@@ -14,14 +14,18 @@ export { downloads, type DownloadsApi } from "./downloads.ts";
 export { files, type FilesApi, type JsonValue } from "./files.ts";
 export {
   CefariDirent,
+  CefariStats,
   type FileData,
   type FileEncoding,
-  fs,
   type FileSystemApi,
-  CefariStats,
+  fs,
 } from "./fs.ts";
 export { app } from "./app.ts";
-export type { WindowApi } from "./window.ts";
+export type {
+  WindowApi,
+  WindowCreateOptions,
+  WindowTargetInput,
+} from "./window.ts";
 export { windowControls as window } from "./window.ts";
 export type { ShellApi } from "./shell.ts";
 export { shell } from "./shell.ts";
@@ -45,7 +49,7 @@ import { downloads, type DownloadsApi } from "./downloads.ts";
 import { type CefariEventMap, on } from "./events.ts";
 import type { CefariResult } from "./errors.ts";
 import { files, type FilesApi } from "./files.ts";
-import { fs, type FileSystemApi } from "./fs.ts";
+import { type FileSystemApi, fs } from "./fs.ts";
 import type {
   CefariIpcCommand,
   CefariIpcEvent,

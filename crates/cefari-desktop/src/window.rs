@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use cefari_core::WindowState;
+use cefari_core::{WindowKind, WindowState};
 use tao::{
     dpi::LogicalSize,
     event_loop::EventLoop,
@@ -63,9 +63,14 @@ impl WindowManager {
 
     pub(crate) fn main_state(&self) -> WindowState {
         WindowState {
+            id: MAIN_WINDOW_ID.to_owned(),
+            kind: WindowKind::Main,
             visible: self.main.as_ref().is_some_and(Window::is_visible),
             focused: self.main.as_ref().is_some_and(Window::is_focused),
             title: self.main_title.clone(),
+            modal: false,
+            parent_id: None,
+            route: None,
         }
     }
 }

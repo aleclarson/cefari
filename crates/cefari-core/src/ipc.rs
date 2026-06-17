@@ -26,9 +26,12 @@ pub enum CefariIpcOutcome {
 #[serde(tag = "command", content = "payload", rename_all = "camelCase")]
 pub enum CefariIpcCommand {
     AppQuit,
-    WindowShow,
-    WindowFocus,
-    WindowClose,
+    WindowCurrent,
+    WindowList,
+    WindowCreate(WindowCreateRequest),
+    WindowShow(WindowTargetRequest),
+    WindowFocus(WindowTargetRequest),
+    WindowClose(WindowTargetRequest),
     WindowSetTitle(WindowSetTitleRequest),
     OpenLogs,
     ReloadUi,
@@ -50,6 +53,7 @@ pub enum CefariIpcCommand {
 pub enum CefariIpcResult {
     Empty,
     Window(WindowState),
+    WindowList(WindowListResult),
     ReloadUi,
     ExternalUrl(ExternalUrlResult),
     UpdateState(UpdateStateResult),
@@ -66,9 +70,15 @@ pub enum CefariIpcResult {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "event", content = "payload", rename_all = "camelCase")]
 pub enum CefariIpcEvent {
-    WindowShown(WindowState),
-    WindowFocused(WindowState),
-    WindowClosed,
+    WindowCreated(WindowStateEvent),
+    WindowShown(WindowStateEvent),
+    WindowFocused(WindowStateEvent),
+    WindowBlurred(WindowStateEvent),
+    WindowCloseRequested(WindowStateEvent),
+    WindowClosed(WindowIdEvent),
+    WindowMoved(WindowStateEvent),
+    WindowResized(WindowStateEvent),
+    WindowTitleChanged(WindowStateEvent),
     DeepLinkOpened(DeepLinkOpenEvent),
     TrayRestoreWindow,
     UpdateStateChanged(UpdateStateResult),
@@ -79,16 +89,84 @@ pub enum CefariIpcEvent {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
+pub struct WindowTargetRequest {
+    pub target: Option<WindowTarget>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowTarget {
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowCreateRequest {
+    pub id: Option<String>,
+    pub route: Option<String>,
+    pub title: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub min_width: Option<u32>,
+    pub min_height: Option<u32>,
+    pub max_width: Option<u32>,
+    pub max_height: Option<u32>,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub visible: Option<bool>,
+    pub focused: Option<bool>,
+    pub resizable: Option<bool>,
+    pub decorations: Option<bool>,
+    pub always_on_top: Option<bool>,
+    pub parent_id: Option<String>,
+    pub modal: Option<bool>,
+    pub persist_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub struct WindowSetTitleRequest {
+    pub target: Option<WindowTarget>,
     pub title: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
+pub struct WindowListResult {
+    pub windows: Vec<WindowState>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowStateEvent {
+    pub window_id: String,
+    pub state: WindowState,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowIdEvent {
+    pub window_id: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub struct WindowState {
+    pub id: String,
+    pub kind: WindowKind,
     pub visible: bool,
     pub focused: bool,
     pub title: String,
+    pub modal: bool,
+    pub parent_id: Option<String>,
+    pub route: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum WindowKind {
+    Main,
+    Secondary,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -514,7 +592,7 @@ mod tests {
         CefariIpcResponse, DeepLinkOpenEvent, DialogCommand, DialogDefaultDirectory, DialogFilter,
         DialogModality, DialogRequest, DialogResult, DialogSelectedPath, DownloadCommand,
         DownloadCompletedEvent, DownloadEvent, DownloadIdRequest, FileKind, NotificationCommand,
-        OpenExternalUrlRequest, WindowSetTitleRequest, ipc_types,
+        OpenExternalUrlRequest, WindowIdEvent, WindowSetTitleRequest, ipc_types,
     };
 
     #[test]
@@ -522,6 +600,7 @@ mod tests {
         let request = CefariIpcRequest {
             id: "request-1".to_owned(),
             command: CefariIpcCommand::WindowSetTitle(WindowSetTitleRequest {
+                target: None,
                 title: "Dashboard".to_owned(),
             }),
         };
@@ -530,7 +609,7 @@ mod tests {
 
         assert_eq!(
             json,
-            r#"{"id":"request-1","command":{"command":"windowSetTitle","payload":{"title":"Dashboard"}}}"#
+            r#"{"id":"request-1","command":{"command":"windowSetTitle","payload":{"target":null,"title":"Dashboard"}}}"#
         );
         assert_eq!(
             serde_json::from_str::<CefariIpcRequest>(&json).expect("request should deserialize"),
@@ -698,19 +777,27 @@ mod tests {
 
     #[test]
     fn event_types_round_trip() {
-        let event = CefariIpcEvent::Download(DownloadEvent::Completed(DownloadCompletedEvent {
-            id: "cef-1".to_owned(),
-            url: "https://example.test/file.txt".to_owned(),
-            destination_path: "/tmp/file.txt".to_owned(),
-            received_bytes: 10.0,
-            total_bytes: Some(10.0),
-        }));
-        let json = serde_json::to_string(&event).expect("event should serialize");
+        let events = [
+            CefariIpcEvent::Download(DownloadEvent::Completed(DownloadCompletedEvent {
+                id: "cef-1".to_owned(),
+                url: "https://example.test/file.txt".to_owned(),
+                destination_path: "/tmp/file.txt".to_owned(),
+                received_bytes: 10.0,
+                total_bytes: Some(10.0),
+            })),
+            CefariIpcEvent::WindowClosed(WindowIdEvent {
+                window_id: "main".to_owned(),
+            }),
+        ];
 
-        assert_eq!(
-            serde_json::from_str::<CefariIpcEvent>(&json).expect("event should deserialize"),
-            event
-        );
+        for event in events {
+            let json = serde_json::to_string(&event).expect("event should serialize");
+
+            assert_eq!(
+                serde_json::from_str::<CefariIpcEvent>(&json).expect("event should deserialize"),
+                event
+            );
+        }
     }
 
     #[test]

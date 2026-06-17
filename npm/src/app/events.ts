@@ -9,14 +9,21 @@ import type {
   NotificationResponseEvent,
   ServiceStatusResult,
   UpdateStateResult,
-  WindowState,
+  WindowIdEvent,
+  WindowStateEvent,
 } from "./ipc.ts";
 import { onAnyEvent, type Unsubscribe } from "./transport.ts";
 
 export type CefariEventMap = {
-  windowShown: WindowState;
-  windowFocused: WindowState;
-  windowClosed: undefined;
+  windowCreated: WindowStateEvent;
+  windowShown: WindowStateEvent;
+  windowFocused: WindowStateEvent;
+  windowBlurred: WindowStateEvent;
+  windowCloseRequested: WindowStateEvent;
+  windowClosed: WindowIdEvent;
+  windowMoved: WindowStateEvent;
+  windowResized: WindowStateEvent;
+  windowTitleChanged: WindowStateEvent;
   deepLinkOpened: DeepLinkOpenEvent;
   trayRestoreWindow: undefined;
   updateStateChanged: UpdateStateResult;
@@ -50,6 +57,10 @@ function eventPayload(
   event: CefariIpcEvent,
 ): { matched: true; value: unknown } | { matched: false } {
   switch (name) {
+    case "windowCreated":
+      return event.event === "windowCreated"
+        ? { matched: true, value: event.payload }
+        : { matched: false };
     case "windowShown":
       return event.event === "windowShown"
         ? { matched: true, value: event.payload }
@@ -58,9 +69,29 @@ function eventPayload(
       return event.event === "windowFocused"
         ? { matched: true, value: event.payload }
         : { matched: false };
+    case "windowBlurred":
+      return event.event === "windowBlurred"
+        ? { matched: true, value: event.payload }
+        : { matched: false };
+    case "windowCloseRequested":
+      return event.event === "windowCloseRequested"
+        ? { matched: true, value: event.payload }
+        : { matched: false };
     case "windowClosed":
       return event.event === "windowClosed"
-        ? { matched: true, value: undefined }
+        ? { matched: true, value: event.payload }
+        : { matched: false };
+    case "windowMoved":
+      return event.event === "windowMoved"
+        ? { matched: true, value: event.payload }
+        : { matched: false };
+    case "windowResized":
+      return event.event === "windowResized"
+        ? { matched: true, value: event.payload }
+        : { matched: false };
+    case "windowTitleChanged":
+      return event.event === "windowTitleChanged"
+        ? { matched: true, value: event.payload }
         : { matched: false };
     case "deepLinkOpened":
       return event.event === "deepLinkOpened"

@@ -4,7 +4,8 @@ use cefari_core::{
     CefariIpcResult, DialogCommand, DialogResult, DownloadCommand, DownloadResult,
     ExternalUrlResult, FileResult, FilesCommand, NotificationCommand, ServiceStatusResult,
     TrayResult, UpdateApplyResult, UpdateCheckResult, UpdateCheckState, UpdateStateKind,
-    UpdateStateResult, WindowState,
+    UpdateStateResult, WindowCreateRequest, WindowListResult, WindowSetTitleRequest, WindowState,
+    WindowTargetRequest,
 };
 
 #[derive(Debug, Default)]
@@ -12,10 +13,13 @@ pub struct DesktopIpcDispatcher;
 
 pub trait NativeShellContext {
     fn quit_app(&mut self) -> Result<()>;
-    fn window_show(&mut self) -> Result<WindowState>;
-    fn window_focus(&mut self) -> Result<WindowState>;
-    fn window_close(&mut self) -> Result<WindowState>;
-    fn window_set_title(&mut self, title: &str) -> Result<WindowState>;
+    fn window_current(&mut self) -> Result<WindowState>;
+    fn window_list(&mut self) -> Result<WindowListResult>;
+    fn window_create(&mut self, request: &WindowCreateRequest) -> Result<WindowState>;
+    fn window_show(&mut self, request: &WindowTargetRequest) -> Result<WindowState>;
+    fn window_focus(&mut self, request: &WindowTargetRequest) -> Result<WindowState>;
+    fn window_close(&mut self, request: &WindowTargetRequest) -> Result<WindowState>;
+    fn window_set_title(&mut self, request: &WindowSetTitleRequest) -> Result<WindowState>;
     fn open_logs(&mut self) -> Result<()>;
     fn reload_ui(&mut self) -> Result<()>;
     fn open_external_url(&mut self, url: &str) -> Result<()>;
@@ -56,20 +60,32 @@ fn dispatch_command(
             .quit_app()
             .map(|()| CefariIpcResult::Empty)
             .map_err(|error| invalid_command(&error, "appQuit")),
-        CefariIpcCommand::WindowShow => context
-            .window_show()
+        CefariIpcCommand::WindowCurrent => context
+            .window_current()
+            .map(CefariIpcResult::Window)
+            .map_err(|error| invalid_command(&error, "windowCurrent")),
+        CefariIpcCommand::WindowList => context
+            .window_list()
+            .map(CefariIpcResult::WindowList)
+            .map_err(|error| invalid_command(&error, "windowList")),
+        CefariIpcCommand::WindowCreate(request) => context
+            .window_create(request)
+            .map(CefariIpcResult::Window)
+            .map_err(|error| unsupported_command(&error, "windowCreate")),
+        CefariIpcCommand::WindowShow(request) => context
+            .window_show(request)
             .map(CefariIpcResult::Window)
             .map_err(|error| invalid_command(&error, "windowShow")),
-        CefariIpcCommand::WindowFocus => context
-            .window_focus()
+        CefariIpcCommand::WindowFocus(request) => context
+            .window_focus(request)
             .map(CefariIpcResult::Window)
             .map_err(|error| invalid_command(&error, "windowFocus")),
-        CefariIpcCommand::WindowClose => context
-            .window_close()
+        CefariIpcCommand::WindowClose(request) => context
+            .window_close(request)
             .map(CefariIpcResult::Window)
             .map_err(|error| invalid_command(&error, "windowClose")),
         CefariIpcCommand::WindowSetTitle(request) => context
-            .window_set_title(&request.title)
+            .window_set_title(request)
             .map(CefariIpcResult::Window)
             .map_err(|error| invalid_command(&error, "windowSetTitle")),
         CefariIpcCommand::OpenLogs => context
@@ -212,7 +228,8 @@ mod tests {
         DownloadIdResult, DownloadResult, FileResult, FilesCommand, NotificationCommand,
         OpenExternalUrlRequest, ServiceStatusResult, TrayResult, UpdateApplyRequest,
         UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
-        WindowSetTitleRequest, WindowState,
+        WindowCreateRequest, WindowKind, WindowListResult, WindowSetTitleRequest, WindowState,
+        WindowTargetRequest,
     };
 
     use super::{DesktopIpcDispatcher, NativeShellContext};
@@ -240,24 +257,41 @@ mod tests {
             Ok(())
         }
 
-        fn window_show(&mut self) -> Result<WindowState> {
+        fn window_current(&mut self) -> Result<WindowState> {
+            self.calls.push("window_current");
+            Ok(self.window_state(true, true))
+        }
+
+        fn window_list(&mut self) -> Result<WindowListResult> {
+            self.calls.push("window_list");
+            Ok(WindowListResult {
+                windows: vec![self.window_state(true, true)],
+            })
+        }
+
+        fn window_create(&mut self, _request: &WindowCreateRequest) -> Result<WindowState> {
+            self.calls.push("window_create");
+            Ok(self.window_state(true, true))
+        }
+
+        fn window_show(&mut self, _request: &WindowTargetRequest) -> Result<WindowState> {
             self.calls.push("window_show");
             Ok(self.window_state(true, false))
         }
 
-        fn window_focus(&mut self) -> Result<WindowState> {
+        fn window_focus(&mut self, _request: &WindowTargetRequest) -> Result<WindowState> {
             self.calls.push("window_focus");
             Ok(self.window_state(true, true))
         }
 
-        fn window_close(&mut self) -> Result<WindowState> {
+        fn window_close(&mut self, _request: &WindowTargetRequest) -> Result<WindowState> {
             self.calls.push("window_close");
             Ok(self.window_state(false, false))
         }
 
-        fn window_set_title(&mut self, title: &str) -> Result<WindowState> {
+        fn window_set_title(&mut self, request: &WindowSetTitleRequest) -> Result<WindowState> {
             self.calls.push("window_set_title");
-            self.window_title = title.to_owned();
+            self.window_title = request.title.clone();
             Ok(self.window_state(true, true))
         }
 
@@ -365,9 +399,14 @@ mod tests {
     impl FakeShellContext {
         fn window_state(&self, visible: bool, focused: bool) -> WindowState {
             WindowState {
+                id: "main".to_owned(),
+                kind: WindowKind::Main,
                 visible,
                 focused,
                 title: self.window_title.clone(),
+                modal: false,
+                parent_id: None,
+                route: None,
             }
         }
     }
@@ -377,10 +416,34 @@ mod tests {
         let mut context = FakeShellContext::default();
         let commands = [
             CefariIpcCommand::AppQuit,
-            CefariIpcCommand::WindowShow,
-            CefariIpcCommand::WindowFocus,
-            CefariIpcCommand::WindowClose,
+            CefariIpcCommand::WindowCurrent,
+            CefariIpcCommand::WindowList,
+            CefariIpcCommand::WindowCreate(WindowCreateRequest {
+                id: Some("settings".to_owned()),
+                route: Some("/settings".to_owned()),
+                title: Some("Settings".to_owned()),
+                width: Some(720),
+                height: Some(560),
+                min_width: None,
+                min_height: None,
+                max_width: None,
+                max_height: None,
+                x: None,
+                y: None,
+                visible: None,
+                focused: None,
+                resizable: None,
+                decorations: None,
+                always_on_top: None,
+                parent_id: None,
+                modal: None,
+                persist_key: None,
+            }),
+            CefariIpcCommand::WindowShow(WindowTargetRequest { target: None }),
+            CefariIpcCommand::WindowFocus(WindowTargetRequest { target: None }),
+            CefariIpcCommand::WindowClose(WindowTargetRequest { target: None }),
             CefariIpcCommand::WindowSetTitle(WindowSetTitleRequest {
+                target: None,
                 title: "New Title".to_owned(),
             }),
             CefariIpcCommand::OpenLogs,
@@ -425,6 +488,9 @@ mod tests {
             context.calls,
             [
                 "quit",
+                "window_current",
+                "window_list",
+                "window_create",
                 "window_show",
                 "window_focus",
                 "window_close",

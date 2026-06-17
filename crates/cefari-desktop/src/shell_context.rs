@@ -2,7 +2,8 @@ use anyhow::Result;
 use cefari_core::{
     CefariIpcEvent, DialogCommand, DialogResult, DownloadCommand, DownloadResult, FileResult,
     FilesCommand, RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult,
-    UpdateStateResult, WindowState,
+    UpdateStateResult, WindowCreateRequest, WindowIdEvent, WindowListResult, WindowSetTitleRequest,
+    WindowState, WindowStateEvent, WindowTargetRequest,
 };
 use tracing::debug;
 
@@ -26,26 +27,50 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
         Ok(())
     }
 
-    fn window_show(&mut self) -> Result<WindowState> {
+    fn window_current(&mut self) -> Result<WindowState> {
+        Ok(self.window_manager.main_state())
+    }
+
+    fn window_list(&mut self) -> Result<WindowListResult> {
+        Ok(WindowListResult {
+            windows: vec![self.window_manager.main_state()],
+        })
+    }
+
+    fn window_create(&mut self, _request: &WindowCreateRequest) -> Result<WindowState> {
+        anyhow::bail!("creating secondary windows is not available yet")
+    }
+
+    fn window_show(&mut self, request: &WindowTargetRequest) -> Result<WindowState> {
+        ensure_main_target(request)?;
         let state = self.window_manager.show_main()?;
-        self.emit_event(&CefariIpcEvent::WindowShown(state.clone()));
+        self.emit_event(&CefariIpcEvent::WindowShown(state_event(&state)));
         Ok(state)
     }
 
-    fn window_focus(&mut self) -> Result<WindowState> {
+    fn window_focus(&mut self, request: &WindowTargetRequest) -> Result<WindowState> {
+        ensure_main_target(request)?;
         let state = self.window_manager.focus_main()?;
-        self.emit_event(&CefariIpcEvent::WindowFocused(state.clone()));
+        self.emit_event(&CefariIpcEvent::WindowFocused(state_event(&state)));
         Ok(state)
     }
 
-    fn window_close(&mut self) -> Result<WindowState> {
+    fn window_close(&mut self, request: &WindowTargetRequest) -> Result<WindowState> {
+        ensure_main_target(request)?;
         let state = self.window_manager.close_main();
-        self.emit_event(&CefariIpcEvent::WindowClosed);
+        self.emit_event(&CefariIpcEvent::WindowClosed(WindowIdEvent {
+            window_id: state.id.clone(),
+        }));
         Ok(state)
     }
 
-    fn window_set_title(&mut self, title: &str) -> Result<WindowState> {
-        self.window_manager.set_main_title(title)
+    fn window_set_title(&mut self, request: &WindowSetTitleRequest) -> Result<WindowState> {
+        ensure_main_target(&WindowTargetRequest {
+            target: request.target.clone(),
+        })?;
+        let state = self.window_manager.set_main_title(&request.title)?;
+        self.emit_event(&CefariIpcEvent::WindowTitleChanged(state_event(&state)));
+        Ok(state)
     }
 
     fn open_logs(&mut self) -> Result<()> {
@@ -92,7 +117,7 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     }
 
     fn tray_restore_window(&mut self) -> Result<TrayResult> {
-        self.window_focus()?;
+        self.window_focus(&WindowTargetRequest { target: None })?;
         Ok(TrayResult { restored: true })
     }
 
@@ -109,6 +134,28 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
 
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
         desktop_files::AppDataFs::open(self.paths)?.dispatch(command)
+    }
+}
+
+fn state_event(state: &WindowState) -> WindowStateEvent {
+    WindowStateEvent {
+        window_id: state.id.clone(),
+        state: state.clone(),
+    }
+}
+
+fn ensure_main_target(request: &WindowTargetRequest) -> Result<()> {
+    let Some(target) = &request.target else {
+        return Ok(());
+    };
+    let Some(id) = target.id.as_deref() else {
+        return Ok(());
+    };
+
+    if id == window::MAIN_WINDOW_ID {
+        Ok(())
+    } else {
+        anyhow::bail!("window {id} is not available")
     }
 }
 
