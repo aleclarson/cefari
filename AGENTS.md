@@ -16,7 +16,12 @@ concerns block a cleaner design during pre-alpha development.
 
 ## Documentation
 
-When adding user-facing behavior, document it in `docs/spec.md`.
+When adding or changing user-facing behavior, update the feature inventory.
+
+- If the behavior is a supported product feature, document it in `docs/spec.md`.
+- If the behavior exists but its product status or final documentation home is
+  unclear, list it in `docs/undocumented.md`.
+- Before editing `docs/spec.md`, read `.agents/rules/spec-doc.md`.
 
 ## Skills
 
