@@ -661,6 +661,7 @@ dependencies = [
  "serde_json",
  "single-instance",
  "tao",
+ "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",

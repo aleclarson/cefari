@@ -336,6 +336,10 @@ pub enum NotificationMediaReference {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum NotificationXdgCategory {
+    Call,
+    CallEnded,
+    CallIncoming,
+    CallUnanswered,
     Device,
     DeviceAdded,
     DeviceError,
@@ -372,7 +376,11 @@ pub struct NotificationCategory {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum NotificationCategoryAction {
     Action {
         id: String,
@@ -423,15 +431,29 @@ pub struct ActiveNotification {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "result", content = "payload", rename_all = "camelCase")]
 pub enum NotificationResult {
-    PermissionState { allowed: bool },
-    PermissionRequested { allowed: bool },
+    PermissionState {
+        allowed: bool,
+    },
+    PermissionRequested {
+        allowed: bool,
+    },
     Capabilities(NotificationCapabilities),
-    CategoriesRegistered { count: u32 },
-    Sent { id: String },
-    Active { notifications: Vec<ActiveNotification> },
-    Removed { count: u32 },
+    CategoriesRegistered {
+        count: u32,
+    },
+    Sent {
+        id: String,
+    },
+    Active {
+        notifications: Vec<ActiveNotification>,
+    },
+    Removed {
+        count: u32,
+    },
     PermissionDenied,
-    Unsupported { reason: String },
+    Unsupported {
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]

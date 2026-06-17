@@ -31,6 +31,7 @@ pub(crate) fn run() -> Result<()> {
     } else {
         Some(desktop_notifications::DesktopNotifier::from_app_config(
             runtime_operations.app_config(),
+            &paths,
         )?)
     };
     let notifications_app_id = desktop_notifier.as_ref().map_or_else(

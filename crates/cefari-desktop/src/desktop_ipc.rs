@@ -186,7 +186,22 @@ fn unsupported_notification(command: &NotificationCommand) -> CefariIpcError {
             NotificationCommand::RequestPermission => {
                 "notification permission prompts are not exposed through IPC yet"
             }
+            NotificationCommand::Capabilities => {
+                "notification capabilities are not exposed through IPC yet"
+            }
+            NotificationCommand::RegisterCategories(_) => {
+                "notification category registration is not exposed through IPC yet"
+            }
             NotificationCommand::Send(_) => "notification sending is not exposed through IPC yet",
+            NotificationCommand::Active => {
+                "active notification listing is not exposed through IPC yet"
+            }
+            NotificationCommand::RemoveDelivered(_) => {
+                "notification removal is not exposed through IPC yet"
+            }
+            NotificationCommand::RemoveAllDelivered => {
+                "notification removal is not exposed through IPC yet"
+            }
         }
         .to_owned(),
     }
