@@ -44,6 +44,7 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = "0.3.23"
 tray-icon = "0.24.0"
+tokio = "1.52.3"
 user-notify = "0.4.2"
 xshell = "0.3.0-pre.2"
 

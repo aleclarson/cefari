@@ -268,7 +268,7 @@ export type NotificationSendRequest = {
 	xdgCategory: NotificationXdgCategory | null,
 };
 
-export type NotificationXdgCategory = "device" | "deviceAdded" | "deviceError" | "deviceRemoved" | "email" | "emailArrived" | "emailBounced" | "im" | "imError" | "imReceived" | "network" | "networkConnected" | "networkDisconnected" | "networkError" | "presence" | "presenceOffline" | "presenceOnline" | "transfer" | "transferComplete" | "transferError";
+export type NotificationXdgCategory = "call" | "callEnded" | "callIncoming" | "callUnanswered" | "device" | "deviceAdded" | "deviceError" | "deviceRemoved" | "email" | "emailArrived" | "emailBounced" | "im" | "imError" | "imReceived" | "network" | "networkConnected" | "networkDisconnected" | "networkError" | "presence" | "presenceOffline" | "presenceOnline" | "transfer" | "transferComplete" | "transferError";
 
 export type OpenExternalUrlRequest = {
 	url: string,
