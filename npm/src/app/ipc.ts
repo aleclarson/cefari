@@ -17,7 +17,7 @@ export type CefariIpcError = { code: "invalidCommand"; details: {
 	reason: string,
 } };
 
-export type CefariIpcEvent = { event: "windowShown"; payload: WindowState } | { event: "windowFocused"; payload: WindowState } | { event: "windowClosed" } | { event: "trayRestoreWindow" } | { event: "updateStateChanged"; payload: UpdateStateResult } | { event: "serviceStatusChanged"; payload: ServiceStatusResult } | { event: "notification"; payload: NotificationEvent };
+export type CefariIpcEvent = { event: "windowShown"; payload: WindowState } | { event: "windowFocused"; payload: WindowState } | { event: "windowClosed" } | { event: "deepLinkOpened"; payload: DeepLinkOpenEvent } | { event: "trayRestoreWindow" } | { event: "updateStateChanged"; payload: UpdateStateResult } | { event: "serviceStatusChanged"; payload: ServiceStatusResult } | { event: "notification"; payload: NotificationEvent };
 
 export type CefariIpcOutcome = { status: "ok"; payload: CefariIpcResult } | { status: "err"; payload: CefariIpcError };
 
@@ -36,6 +36,10 @@ export type CefariIpcResult = { result: "empty" } | { result: "window"; payload:
 export type CopyFileRequest = {
 	from: string,
 	to: string,
+};
+
+export type DeepLinkOpenEvent = {
+	url: string,
 };
 
 export type DirEntry = {

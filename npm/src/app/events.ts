@@ -1,5 +1,6 @@
 import type {
   CefariIpcEvent,
+  DeepLinkOpenEvent,
   NotificationResponseEvent,
   ServiceStatusResult,
   UpdateStateResult,
@@ -11,6 +12,7 @@ export type CefariEventMap = {
   windowShown: WindowState;
   windowFocused: WindowState;
   windowClosed: undefined;
+  deepLinkOpened: DeepLinkOpenEvent;
   trayRestoreWindow: undefined;
   updateStateChanged: UpdateStateResult;
   serviceStatusChanged: ServiceStatusResult;
@@ -49,6 +51,10 @@ function eventPayload(
     case "windowClosed":
       return event.event === "windowClosed"
         ? { matched: true, value: undefined }
+        : { matched: false };
+    case "deepLinkOpened":
+      return event.event === "deepLinkOpened"
+        ? { matched: true, value: event.payload }
         : { matched: false };
     case "trayRestoreWindow":
       return event.event === "trayRestoreWindow"

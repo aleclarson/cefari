@@ -228,10 +228,14 @@ Deno.test("filters typed events", () => {
   });
 
   const focused: string[] = [];
+  const deepLinks: string[] = [];
   const notifications: string[] = [];
 
   const unsubscribeFocus = cefari.window.onFocused((state) => {
     focused.push(state.title);
+  });
+  const unsubscribeDeepLink = cefari.on("deepLinkOpened", (event) => {
+    deepLinks.push(event.url);
   });
   const unsubscribeNotification = cefari.notifications.onResponse((event) => {
     notifications.push(event.id);
@@ -249,12 +253,18 @@ Deno.test("filters typed events", () => {
         payload: { id: "n1", action: "default" },
       },
     });
+    handler({
+      event: "deepLinkOpened",
+      payload: { url: "myapp://open/item?id=1" },
+    });
   }
 
   assertEquals(focused, ["Dashboard"]);
+  assertEquals(deepLinks, ["myapp://open/item?id=1"]);
   assertEquals(notifications, ["n1"]);
 
   unsubscribeFocus();
+  unsubscribeDeepLink();
   unsubscribeNotification();
   assertEquals(handlers.size, 0);
 });

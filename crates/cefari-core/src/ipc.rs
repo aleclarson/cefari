@@ -65,6 +65,7 @@ pub enum CefariIpcEvent {
     WindowShown(WindowState),
     WindowFocused(WindowState),
     WindowClosed,
+    DeepLinkOpened(DeepLinkOpenEvent),
     TrayRestoreWindow,
     UpdateStateChanged(UpdateStateResult),
     ServiceStatusChanged(ServiceStatusResult),
@@ -94,6 +95,12 @@ pub struct OpenExternalUrlRequest {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalUrlResult {
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DeepLinkOpenEvent {
     pub url: String,
 }
 
@@ -363,8 +370,8 @@ pub fn ipc_types() -> Types {
 mod tests {
     use super::{
         CefariIpcCommand, CefariIpcError, CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest,
-        CefariIpcResponse, NotificationCommand, OpenExternalUrlRequest, WindowSetTitleRequest,
-        ipc_types,
+        CefariIpcResponse, DeepLinkOpenEvent, NotificationCommand, OpenExternalUrlRequest,
+        WindowSetTitleRequest, ipc_types,
     };
 
     #[test]
@@ -469,6 +476,24 @@ mod tests {
         let event = CefariIpcEvent::WindowClosed;
         let json = serde_json::to_string(&event).expect("event should serialize");
 
+        assert_eq!(
+            serde_json::from_str::<CefariIpcEvent>(&json).expect("event should deserialize"),
+            event
+        );
+    }
+
+    #[test]
+    fn serializes_deep_link_opened_events() {
+        let event = CefariIpcEvent::DeepLinkOpened(DeepLinkOpenEvent {
+            url: "myapp://open/item?id=1".to_owned(),
+        });
+
+        let json = serde_json::to_string(&event).expect("event should serialize");
+
+        assert_eq!(
+            json,
+            r#"{"event":"deepLinkOpened","payload":{"url":"myapp://open/item?id=1"}}"#
+        );
         assert_eq!(
             serde_json::from_str::<CefariIpcEvent>(&json).expect("event should deserialize"),
             event
