@@ -14,6 +14,10 @@ paths, and reshape implementation details when doing so improves the product or
 the codebase. Keep changes scoped to the task, but do not let compatibility
 concerns block a cleaner design during pre-alpha development.
 
+## Documentation
+
+When adding user-facing behavior, document it in `docs/spec.md`.
+
 ## Skills
 
 When implementing or changing the TypeScript Cefari CLI, use the repo-local
