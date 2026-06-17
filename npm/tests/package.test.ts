@@ -91,8 +91,12 @@ test("package writes metadata and manifest for build artifacts", async () => {
   const metadata = await readFile(join(root, "dist/package/cargo-packager.toml"), "utf8");
   const packageFormat = process.platform === "darwin" ? "dmg" : process.platform === "win32" ? "nsis" : "deb";
   assert.match(metadata, /name = "dev\.cefari\.package"/);
+  assert.match(metadata, /identifier = "dev\.cefari\.package"/);
   assert.match(metadata, /version = "1\.2\.3"/);
   assert.match(metadata, new RegExp(`formats = \\["${packageFormat}"\\]`));
+  assert.match(metadata, /\[\[deep_link_protocols\]\]/);
+  assert.match(metadata, /schemes = \["cefari-notification-dev-cefari-package"\]/);
+  assert.match(metadata, /name = "dev\.cefari\.package\.notification"/);
   assert.match(metadata, /target = "frontend"/);
   assert.match(metadata, /target = "config"/);
   assert.match(metadata, /target = "tray-icon\.png"/);
@@ -100,6 +104,8 @@ test("package writes metadata and manifest for build artifacts", async () => {
   assert.match(metadata, /schemes = \["packageapp", "packageapp\+dev"\]/);
   const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
   assert.equal(manifest.product_name, "Package App");
+  assert.equal(manifest.identifier, "dev.cefari.package");
+  assert.equal(manifest.notification_protocol, "cefari-notification-dev-cefari-package");
   assert.equal(manifest.tray_icon, "tray-icon.png");
   assert.match(manifest.config_file, /build\/config\/cefari\.json/);
   assert.match(manifest.daemon_executable, /package-app-daemon/);

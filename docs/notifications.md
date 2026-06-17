@@ -83,6 +83,10 @@ Dismiss responses emit an event without focusing the main window. Action-button
 and inline-reply responses emit events with the selected action id and optional
 reply text.
 
+Packaged apps register a Cefari notification activation protocol derived from
+the app identifier. Windows toast activation links use that protocol and decode
+to the same `notification.response` payload shape as in-process callbacks.
+
 ## Permission Behavior
 
 Cefari checks OS notification permission before sending. If the OS reports that
@@ -103,11 +107,14 @@ button.addEventListener("click", async () => {
 - macOS requires a real app bundle identifier before native notifications can be
   delivered.
 - macOS permission prompts must happen from explicit user-visible flows.
+- macOS notification behavior should be verified from a signed and notarized
+  `.app` bundle using the configured bundle identifier.
 - macOS is the strongest target for permission state, permission prompts,
   categories, action buttons, inline replies, thread grouping, and user info.
-- Windows toast setup uses the configured app identifier.
+- Windows toast setup uses the configured app identifier and the packaged
+  Cefari notification activation protocol.
 - Windows supports rich toast fields and response events while running; full
-  cold-start activation requires package/protocol activation wiring.
+  cold-start activation uses the registered protocol handler.
 - Linux and other XDG desktop targets depend on the notification service
   available in the user's desktop session.
 - Linux/XDG supports title, body, image/icon fields, XDG categories, and

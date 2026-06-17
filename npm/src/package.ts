@@ -195,6 +195,7 @@ async function writePackageMetadata(
     ensureArtifact(resolve(config.root, tray.icon));
   }
   const deepLinks = config.capabilities.filter((capability) => capability.type === "deepLinks");
+  const notificationScheme = notificationProtocol(config.app.identifier);
   const metadata = [
     `name = ${tomlString(config.app.identifier)}`,
     `product_name = ${tomlString(config.package.productName)}`,
@@ -202,6 +203,10 @@ async function writePackageMetadata(
     `identifier = ${tomlString(config.app.identifier)}`,
     `formats = [${tomlString(defaultPackageFormat())}]`,
     `binaries_dir = ${tomlString(join(buildDir, "desktop"))}`,
+    "",
+    "[[deep_link_protocols]]",
+    `schemes = [${tomlString(notificationScheme)}]`,
+    `name = ${tomlString(`${config.app.identifier}.notification`)}`,
     "",
     "[[binaries]]",
     `path = ${tomlString(desktopExecutableName(config))}`,
@@ -228,6 +233,7 @@ async function writePackageManifest(
   const manifest = {
     product_name: config.package.productName,
     identifier: config.app.identifier,
+    notification_protocol: notificationProtocol(config.app.identifier),
     tray_icon: config.capabilities.some((capability) => capability.type === "tray") ? "tray-icon.png" : null,
     desktop_binary: desktopExecutableName(config),
     frontend_dir: normalizePath(join(buildDir, "frontend")),
@@ -258,6 +264,11 @@ function runCargoPackager(packageDir: string, deps: PackageDependencies): void {
   if (command.status !== 0) {
     throw new Error(`cargo-packager failed with status ${command.status}`);
   }
+}
+
+function notificationProtocol(identifier: string): string {
+  const slug = identifier.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `cefari-notification-${slug || "app"}`;
 }
 
 function runCommand(command: string, args: string[], deps: PackageDependencies, description: string): void {

@@ -294,30 +294,11 @@ fn run_event_loop(
                 }
             }
             Event::UserEvent(UserEvent::NotificationResponse(response)) => {
-                let focus_window = response.action == NotificationAction::Default;
-                let event = CefariIpcEvent::Notification(NotificationEvent::Response(response));
-                if let Err(error) = guards.cef_runtime.emit_ipc_event(&event) {
-                    error!(%error, "failed to emit notification response event");
-                }
-                if focus_window {
-                    match window_manager.show_window(window::MAIN_WINDOW_ID) {
-                        Ok(_) => {
-                            if let Err(error) = window_manager.focus_window(window::MAIN_WINDOW_ID)
-                            {
-                                debug!(%error, "failed to focus main window for notification response");
-                            }
-                            if let Err(error) = guards
-                                .cef_runtime
-                                .focus_browser_for_window(window::MAIN_WINDOW_ID, true)
-                            {
-                                debug!(%error, "failed to focus CEF browser for notification response");
-                            }
-                        }
-                        Err(error) => {
-                            debug!(%error, "notification default response could not show main window");
-                        }
-                    }
-                }
+                handle_notification_response(
+                    &guards.cef_runtime,
+                    &mut window_manager,
+                    response,
+                );
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -467,6 +448,24 @@ fn run_event_loop(
             }
             Event::Opened { urls } => {
                 for url in urls {
+                    if let Some(notifier) = guards.desktop_notifier.as_ref() {
+                        match notifier.activation_response_event(url.as_str()) {
+                            Ok(Some(response)) => {
+                                handle_notification_response(
+                                    &guards.cef_runtime,
+                                    &mut window_manager,
+                                    response,
+                                );
+                                continue;
+                            }
+                            Ok(None) => {}
+                            Err(error) => {
+                                error!(%url, %error, "failed to decode notification activation URL");
+                                continue;
+                            }
+                        }
+                    }
+
                     match opened_url_action(url.scheme(), runtime_operations.deep_link_schemes()) {
                         OpenedUrlAction::File => {
                             url.to_file_path().map_or_else(
@@ -577,6 +576,35 @@ fn deliver_deep_link_url(
         Ok(()) => info!(url, "delivered opened deep link"),
         Err(error) => {
             error!(url, %error, "failed to deliver opened deep link");
+        }
+    }
+}
+
+fn handle_notification_response(
+    cef_runtime: &desktop_cef::CefRuntime,
+    window_manager: &mut window::WindowManager,
+    response: NotificationResponseEvent,
+) {
+    let focus_window = response.action == NotificationAction::Default;
+    let event = CefariIpcEvent::Notification(NotificationEvent::Response(response));
+    if let Err(error) = cef_runtime.emit_ipc_event(&event) {
+        error!(%error, "failed to emit notification response event");
+    }
+    if focus_window {
+        match window_manager.show_window(window::MAIN_WINDOW_ID) {
+            Ok(_) => {
+                if let Err(error) = window_manager.focus_window(window::MAIN_WINDOW_ID) {
+                    debug!(%error, "failed to focus main window for notification response");
+                }
+                if let Err(error) =
+                    cef_runtime.focus_browser_for_window(window::MAIN_WINDOW_ID, true)
+                {
+                    debug!(%error, "failed to focus CEF browser for notification response");
+                }
+            }
+            Err(error) => {
+                debug!(%error, "notification default response could not show main window");
+            }
         }
     }
 }

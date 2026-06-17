@@ -62,6 +62,15 @@ Live smoke coverage can verify the native-to-frontend bridge without showing an
 OS notification by injecting a synthetic `notification.response` IPC event
 through the CEF event helper after the main frame has loaded.
 
+On Windows, Cefari passes a notification protocol derived from the app
+identifier into `user-notify`. Packaged apps register the same protocol through
+`cargo-packager` deep-link metadata, and activation URLs received through Tao's
+opened-event path decode to the same response event shape as live callbacks.
+
+On macOS, reliable real notification behavior requires a packaged `.app` with a
+real bundle identifier. Signing and notarization are the supported release path
+for validating permission prompts and delivery outside development.
+
 ## Dependency Boundary
 
 `user-notify` is a `cefari-desktop` dependency only. Do not add it to

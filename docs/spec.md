@@ -95,6 +95,8 @@ APIs.
   - It writes package metadata under `dist/package/`.
   - It writes a `cargo-packager` configuration.
   - It writes a package manifest.
+  - It uses `app.identifier` as the native app identifier.
+  - It registers the Cefari notification activation protocol.
 - Cefari can invoke `cargo-packager` when it is available.
   - Native package output is written under `dist/package/output/`.
   - If `cargo-packager` is unavailable, Cefari leaves package metadata in place.
@@ -120,6 +122,8 @@ APIs.
 - Cefari can notarize macOS artifacts.
   - It notarizes signed macOS app bundles and disk images.
   - It uses signing configuration when notarization credentials are needed.
+  - Signed, notarized macOS app bundles with real bundle identifiers are the
+    supported path for reliable native notifications.
 - Cefari can generate update metadata.
   - It signs a release archive.
   - It writes the archive signature.
@@ -363,6 +367,8 @@ APIs.
   - Default notification clicks emit a response event and focus the main
     window.
   - Dismiss responses emit an event without focusing the main window.
+  - Windows notification activation URLs decode to the same response-event
+    shape as in-process callbacks.
 - Notification requests are validated.
   - Titles must be non-empty.
   - Optional text fields are trimmed.

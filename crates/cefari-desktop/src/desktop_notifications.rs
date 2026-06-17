@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use cefari_core::{
     ActiveNotification, AppConfig, NotificationAction, NotificationCapabilities,
     NotificationCategory, NotificationCategoryAction, NotificationMediaReference,
@@ -23,6 +24,7 @@ use user_notify::{
 pub struct DesktopNotifier {
     app_id: String,
     app_name: String,
+    notification_protocol: String,
     paths: RuntimePaths,
     manager: Arc<dyn NotificationManager>,
     registration: Mutex<NotificationRegistration>,
@@ -62,11 +64,13 @@ impl DesktopNotifier {
     pub fn from_app_config(config: &AppConfig, paths: &RuntimePaths) -> Result<Self> {
         let app_id = required_notification_field(&config.identifier, "app identifier")?;
         let app_name = required_notification_field(&config.display_name, "app display name")?;
-        let manager = get_notification_manager(app_id.clone(), None);
+        let notification_protocol = notification_protocol(&app_id);
+        let manager = get_notification_manager(app_id.clone(), Some(notification_protocol.clone()));
 
         Ok(Self {
             app_id,
             app_name,
+            notification_protocol,
             paths: paths.clone(),
             manager,
             registration: Mutex::default(),
@@ -85,6 +89,7 @@ impl DesktopNotifier {
         Ok(Self {
             app_id,
             app_name,
+            notification_protocol: notification_protocol(&config.identifier),
             paths,
             manager,
             registration: Mutex::default(),
@@ -93,6 +98,13 @@ impl DesktopNotifier {
 
     pub fn app_id(&self) -> &str {
         &self.app_id
+    }
+
+    pub fn activation_response_event(
+        &self,
+        url: &str,
+    ) -> Result<Option<NotificationResponseEvent>> {
+        notification_response_event_from_activation_url(url, &self.notification_protocol)
     }
 
     #[allow(dead_code)]
@@ -492,6 +504,97 @@ fn notification_action_from_user_notify(
     }
 }
 
+pub fn notification_protocol(app_id: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_separator = false;
+    for ch in app_id.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            previous_separator = false;
+        } else if !previous_separator && !slug.is_empty() {
+            slug.push('-');
+            previous_separator = true;
+        }
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+    format!(
+        "cefari-notification-{}",
+        if slug.is_empty() { "app" } else { &slug }
+    )
+}
+
+fn notification_response_event_from_activation_url(
+    url: &str,
+    expected_protocol: &str,
+) -> Result<Option<NotificationResponseEvent>> {
+    let Some(rest) = url.strip_prefix(&format!("{expected_protocol}://")) else {
+        return Ok(None);
+    };
+    let (notification_id, rest) = rest
+        .split_once('/')
+        .context("notification activation URL is missing an action path")?;
+    if notification_id.is_empty() {
+        anyhow::bail!("notification activation URL is missing a notification id");
+    }
+    let (action, user_info_query) = rest.split_once('?').unwrap_or((rest, ""));
+    let action = percent_decode(action).context("notification activation URL action is invalid")?;
+    let user_info = if user_info_query.is_empty() {
+        BTreeMap::new()
+    } else {
+        let user_info_query = percent_decode(user_info_query)
+            .context("notification activation URL query is invalid")?;
+        serde_json::from_slice::<BTreeMap<String, String>>(
+            &BASE64_STANDARD
+                .decode(user_info_query)
+                .context("notification activation URL has invalid user info")?,
+        )
+        .context("notification activation URL user info is invalid")?
+    };
+
+    Ok(Some(NotificationResponseEvent {
+        id: notification_id.to_owned(),
+        action: match action.as_str() {
+            "__default__" => NotificationAction::Default,
+            "__dismiss__" => NotificationAction::Dismiss,
+            action => NotificationAction::Other(action.to_owned()),
+        },
+        user_text: None,
+        user_info,
+    }))
+}
+
+fn percent_decode(value: &str) -> Result<String> {
+    let mut bytes = Vec::with_capacity(value.len());
+    let mut cursor = value.as_bytes().iter().copied();
+    while let Some(byte) = cursor.next() {
+        if byte == b'%' {
+            let high = cursor
+                .next()
+                .and_then(hex_value)
+                .context("percent escape is incomplete")?;
+            let low = cursor
+                .next()
+                .and_then(hex_value)
+                .context("percent escape is incomplete")?;
+            bytes.push((high << 4) | low);
+        } else {
+            bytes.push(byte);
+        }
+    }
+    String::from_utf8(bytes).context("percent-decoded value is not UTF-8")
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
 fn optional_media_path(
     reference: Option<&NotificationMediaReference>,
     paths: &RuntimePaths,
@@ -628,8 +731,8 @@ mod tests {
     use user_notify::{NotificationResponseAction, mock::NotificationManagerMock};
 
     use super::{
-        DesktopNotifier, NotificationRequest, NotificationSendOutcome,
-        notification_response_event_parts,
+        DesktopNotifier, NotificationRequest, NotificationSendOutcome, notification_protocol,
+        notification_response_event_from_activation_url, notification_response_event_parts,
     };
 
     #[test]
@@ -745,6 +848,41 @@ mod tests {
         );
         assert_eq!(event.user_text.as_deref(), Some("Hello"));
         assert_eq!(event.user_info.get("messageId"), Some(&"m1".to_owned()));
+    }
+
+    #[test]
+    fn derives_notification_protocol_from_app_id() {
+        assert_eq!(
+            notification_protocol("Dev.Cefari.Package"),
+            "cefari-notification-dev-cefari-package"
+        );
+        assert_eq!(notification_protocol("..."), "cefari-notification-app");
+    }
+
+    #[test]
+    fn decodes_notification_activation_urls() {
+        let event = notification_response_event_from_activation_url(
+            "cefari-notification-dev-cefari-package://n1/reply%2Done?eyJidWlsZElkIjoiMTIzIn0%3D",
+            "cefari-notification-dev-cefari-package",
+        )
+        .expect("activation URL should decode")
+        .expect("activation URL should match protocol");
+
+        assert_eq!(event.id, "n1");
+        assert_eq!(
+            event.action,
+            cefari_core::NotificationAction::Other("reply-one".to_owned())
+        );
+        assert_eq!(event.user_info.get("buildId"), Some(&"123".to_owned()));
+
+        assert!(
+            notification_response_event_from_activation_url(
+                "https://example.test",
+                "cefari-notification-dev-cefari-package",
+            )
+            .expect("non-matching URLs should be ignored")
+            .is_none()
+        );
     }
 
     #[test]
