@@ -7,6 +7,7 @@ as named exports.
 import { cefari } from "cefari/app";
 
 await cefari.window.focus();
+await cefari.windows.create({ id: "settings", route: "/settings" });
 ```
 
 ## App
@@ -34,7 +35,7 @@ Current methods:
 
 ## Window
 
-Use `cefari.window` for native window operations:
+Use `cefari.window` for current-window convenience operations:
 
 ```ts
 await cefari.window.show();
@@ -45,7 +46,9 @@ console.log(state.title);
 ```
 
 `show()`, `focus()`, `close()`, and `setTitle()` return the resulting
-`WindowState`.
+`WindowState`. These methods target the current native window by default. They
+also accept an optional target when code needs to use the convenience namespace
+against a specific window.
 
 ```ts
 const closedState = await cefari.window.close();
@@ -54,6 +57,9 @@ console.log(closedState.visible);
 
 Current methods:
 
+- `current(): Promise<WindowState>`
+- `list(): Promise<WindowState[]>`
+- `create(options?: WindowCreateOptions): Promise<WindowState>`
 - `show(): Promise<WindowState>`
 - `focus(): Promise<WindowState>`
 - `close(): Promise<WindowState>`
@@ -61,6 +67,65 @@ Current methods:
 - `onShown(handler): Unsubscribe`
 - `onFocused(handler): Unsubscribe`
 - `onClosed(handler): Unsubscribe`
+
+## Windows
+
+Use `cefari.windows` when code needs to create or target specific native
+windows:
+
+```ts
+const settings = await cefari.windows.create({
+  id: "settings",
+  route: "/settings",
+  title: "Settings",
+  width: 720,
+  height: 560,
+  persistKey: "settings",
+});
+
+await cefari.windows.focus(settings.id);
+await cefari.windows.setTitle("settings", "Preferences");
+```
+
+The startup window is always `main`. Secondary windows load trusted app
+frontend content: Vite dev routes in development and `cefari://app/index.html`
+route metadata in packaged mode. Cefari persists geometry for `main` by
+default and for secondary windows only when `persistKey` is supplied.
+
+Parented and modal windows are supported for secondary windows:
+
+```ts
+await cefari.windows.create({
+  id: "dialog",
+  route: "/dialog",
+  parentId: "main",
+  modal: true,
+});
+```
+
+Modal windows require a valid parent. Closing a parent closes its child
+windows. Native modal behavior varies by platform; Cefari still tracks
+`parentId` and `modal` in `WindowState`.
+
+Current methods:
+
+- `current(): Promise<WindowState>`
+- `list(): Promise<WindowState[]>`
+- `get(target): Promise<WindowState | undefined>`
+- `create(options?: WindowCreateOptions): Promise<WindowState>`
+- `show(target): Promise<WindowState>`
+- `focus(target): Promise<WindowState>`
+- `close(target): Promise<WindowState>`
+- `setTitle(target, title): Promise<WindowState>`
+- `onCreated(handler, filter?): Unsubscribe`
+- `onShown(handler, filter?): Unsubscribe`
+- `onFocused(handler, filter?): Unsubscribe`
+- `onBlurred(handler, filter?): Unsubscribe`
+- `onCloseRequested(handler, filter?): Unsubscribe`
+- `onClosed(handler, filter?): Unsubscribe`
+- `onMoved(handler, filter?): Unsubscribe`
+- `onResized(handler, filter?): Unsubscribe`
+- `onTitleChanged(handler, filter?): Unsubscribe`
 
 ## Shell
 

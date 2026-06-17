@@ -19,9 +19,15 @@ unsubscribe();
 
 Available event names:
 
+- `windowCreated`
 - `windowShown`
 - `windowFocused`
+- `windowBlurred`
+- `windowCloseRequested`
 - `windowClosed`
+- `windowMoved`
+- `windowResized`
+- `windowTitleChanged`
 - `deepLinkOpened`
 - `trayRestoreWindow`
 - `updateStateChanged`
@@ -51,11 +57,19 @@ const offFocus = cefari.window.onFocused((state) => {
   console.log(state.title);
 });
 
+const offSettingsFocus = cefari.windows.onFocused(
+  (event) => {
+    console.log(event.state.title);
+  },
+  { windowId: "settings" },
+);
+
 const offUpdate = cefari.updates.onStateChanged((state) => {
   console.log(state.state);
 });
 
 offFocus();
+offSettingsFocus();
 offUpdate();
 ```
 

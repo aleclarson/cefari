@@ -22,7 +22,9 @@ Docs were checked against:
 - `crates/cefari-core/src/ipc.rs` and `crates/cefari-core/bindings/ipc.ts`
 - `crates/cefari-desktop/src/desktop_bridge.rs`, `desktop_ipc.rs`,
   `desktop_menu.rs`, `desktop_tray.rs`, `desktop_single_instance.rs`,
-  `desktop_notifications.rs`, and `desktop_dialogs.rs`
+  `desktop_menu.rs`, `desktop_tray.rs`, `desktop_single_instance.rs`,
+  `desktop_notifications.rs`, `desktop_dialogs.rs`, `event_loop.rs`,
+  `window.rs`, and `window_state.rs`
 - `npm/src/app/mod.ts`, namespace wrapper modules, and
   `npm/tests/app/cefari_app_test.ts`
 
@@ -81,6 +83,14 @@ Platform notes:
 - Linux: verify through the desktop environment or `xdg-open
   'myapp://open/item'` after installing the packaged app.
 
+For the multi-window feature, the current focused verification set is:
+
+```bash
+cargo test -p cefari-core
+cargo test -p cefari-desktop
+pnpm --dir npm test
+```
+
 ## Release Action CI
 
 The `Release Action Validation` CI job lint-checks the shared release action,
@@ -111,6 +121,16 @@ CEFARI_CEF_RESOURCES_DIR=/path/to/build/cef/resources \
 scripts/cef-live-smoke.sh
 ```
 
+To include the multi-window vertical slice, add `CEFARI_SMOKE_CREATE_WINDOW=1`:
+
+```bash
+CEFARI_LIVE_CEF_SMOKE=1 \
+CEFARI_SMOKE_CREATE_WINDOW=1 \
+CEFARI_SMOKE_EXIT_AFTER_MS=8000 \
+CEFARI_CEF_RESOURCES_DIR=/path/to/build/cef/resources \
+scripts/cef-live-smoke.sh
+```
+
 When `CEFARI_LIVE_CEF_SMOKE` is not set, the command exits successfully with a
 skip message so CI can include it without requiring local CEF binaries. When it
 does run, the script:
@@ -122,6 +142,8 @@ does run, the script:
 - verifies in page JavaScript that `window.cefari` exists
 - invokes harmless native IPC commands: `updateState`, `reloadUi`, and
   `windowSetTitle`
+- when `CEFARI_SMOKE_CREATE_WINDOW=1` is set, creates a secondary native window
+  for `/smoke-secondary`
 - captures process stdout and stderr under `.tmp/cef-live-smoke/`
 - exits the desktop process through `CEFARI_SMOKE_EXIT_AFTER_MS`
 
@@ -137,6 +159,14 @@ confirm that `download.started`, `download.progress`, and `download.completed`
 events reach the frontend. Repeat with the save dialog canceled and with a
 `file:` or `blob:` download URL; those cases should not write a file and should
 surface a canceled or denied outcome.
+
+Manual platform verification for parent/modal windows should cover:
+
+- Windows owner-window behavior and parent disabling while a modal child is live
+- macOS parent-window ordering; document-modal sheets are not part of this
+  supported slice
+- Linux transient-window behavior on the active X11 or Wayland backend
+- Wayland position persistence, where absolute positions may be unavailable
 
 The docs intentionally avoid listing dependency versions, exhaustive internal
 module details, or CI behavior that is not present in the current repository

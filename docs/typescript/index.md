@@ -23,6 +23,7 @@ import { cefari } from "cefari/app";
 
 if (cefari.isAvailable()) {
   await cefari.window.setTitle("Dashboard");
+  await cefari.windows.create({ id: "settings", route: "/settings" });
 }
 ```
 
@@ -77,7 +78,7 @@ whose code is `unsupported`.
 
 ## Documentation Map
 
-- [Namespace APIs](namespaces.md): `app`, `window`, `shell`, `updates`,
+- [Namespace APIs](namespaces.md): `app`, `window`, `windows`, `shell`, `updates`,
   `service`, `tray`, `notifications`, `fs`, and `files`.
 - [Events And Errors](events-and-errors.md): typed event subscriptions,
   low-level event logging, thrown errors, and result-style helpers.

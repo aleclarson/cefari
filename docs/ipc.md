@@ -5,7 +5,9 @@ Cefari IPC payloads are defined in Rust in `cefari-core::ipc` and exported to Ty
 The initial command surface reserves typed payloads for:
 
 - app quit
-- window show, focus, close, and set-title
+- current-window lookup and live window listing
+- secondary window creation
+- target-aware window show, focus, close, and set-title
 - open logs
 - reload UI
 - validated external URL opening
@@ -25,6 +27,13 @@ File commands are rooted in Cefari's managed app-data directory. They support
 text and base64 reads/writes, directory listing, directory creation, removal,
 rename, copy, stat, and access checks. The desktop dispatcher rejects absolute
 paths and parent traversal before invoking the `cap-std` directory capability.
+
+Window creation payloads support app-defined IDs, frontend routes, initial
+geometry, parent/modal options, and opt-in secondary geometry persistence through
+`persistKey`. Cefari emits typed lifecycle events for window create, show,
+focus, blur, close-request, close, move, resize, and title changes. Event
+payloads include the Cefari window ID so frontend code can route events to the
+right view.
 
 All responses use a request `id` and a typed `outcome`. Error responses use explicit `invalidCommand`, `denied`, `unknownCommand`, and `unsupported` variants.
 
