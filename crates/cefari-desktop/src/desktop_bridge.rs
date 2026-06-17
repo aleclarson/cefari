@@ -420,9 +420,10 @@ mod tests {
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
         DialogCommand, DialogResult, DownloadCommand, DownloadIdResult, DownloadResult, FileResult,
-        FilesCommand, ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult,
-        UpdateStateKind, UpdateStateResult, WindowCreateRequest, WindowKind, WindowListResult,
-        WindowSetTitleRequest, WindowState, WindowTargetRequest,
+        FilesCommand, NotificationCommand, NotificationResult, ServiceStatusResult, TrayResult,
+        UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
+        WindowCreateRequest, WindowKind, WindowListResult, WindowSetTitleRequest, WindowState,
+        WindowTargetRequest,
     };
 
     use super::{
@@ -532,6 +533,16 @@ mod tests {
                 }
             };
             Ok(DownloadResult::Canceled(DownloadIdResult { id }))
+        }
+
+        fn notification(
+            &mut self,
+            command: &NotificationCommand,
+        ) -> Result<NotificationResult, CefariIpcError> {
+            Err(crate::desktop_ipc::unsupported_notification(
+                command,
+                "desktop notifications are not available",
+            ))
         }
 
         fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {

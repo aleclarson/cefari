@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap},
+    future::Future,
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
@@ -112,6 +113,11 @@ impl DesktopNotifier {
     }
 
     #[allow(dead_code)]
+    pub fn permission_allowed_blocking(&self) -> Result<bool> {
+        block_on_notification(self.permission_allowed())
+    }
+
+    #[allow(dead_code)]
     pub async fn request_permission_once(&self) -> Result<bool> {
         self.manager
             .first_time_ask_for_notification_permission()
@@ -120,12 +126,18 @@ impl DesktopNotifier {
     }
 
     #[allow(dead_code)]
+    pub fn request_permission_once_blocking(&self) -> Result<bool> {
+        block_on_notification(self.request_permission_once())
+    }
+
+    #[allow(dead_code)]
     pub async fn send(&self, request: &NotificationSendRequest) -> Result<NotificationSendOutcome> {
+        let request = NotificationRequest::from_ipc(request, &self.paths)?;
+
         if !self.permission_allowed().await? {
             return Ok(NotificationSendOutcome::PermissionDenied);
         }
 
-        let request = NotificationRequest::from_ipc(request, &self.paths)?;
         let handle = self
             .manager
             .send_notification(request.to_user_notify_builder(&self.app_name))
@@ -135,6 +147,14 @@ impl DesktopNotifier {
         Ok(NotificationSendOutcome::Delivered {
             id: handle.get_id(),
         })
+    }
+
+    #[allow(dead_code)]
+    pub fn send_blocking(
+        &self,
+        request: &NotificationSendRequest,
+    ) -> Result<NotificationSendOutcome> {
+        block_on_notification(self.send(request))
     }
 
     #[allow(dead_code)]
@@ -156,6 +176,11 @@ impl DesktopNotifier {
                     })
                     .collect()
             })
+    }
+
+    #[allow(dead_code)]
+    pub fn active_notifications_blocking(&self) -> Result<Vec<ActiveNotification>> {
+        block_on_notification(self.active_notifications())
     }
 
     #[allow(dead_code)]
@@ -181,6 +206,11 @@ impl DesktopNotifier {
             .remove_all_delivered_notifications()
             .context("failed to remove all delivered desktop notifications")?;
         Ok(count)
+    }
+
+    #[allow(dead_code)]
+    pub fn remove_all_delivered_blocking(&self) -> Result<u32> {
+        block_on_notification(self.remove_all_delivered())
     }
 }
 
@@ -512,6 +542,13 @@ fn platform_capabilities() -> NotificationCapabilities {
         response_events: true,
         cold_start_activation: cfg!(any(target_os = "macos", target_os = "windows")),
     }
+}
+
+fn block_on_notification<T>(future: impl Future<Output = Result<T>>) -> Result<T> {
+    tokio::runtime::Builder::new_current_thread()
+        .build()
+        .context("failed to create notification async runtime")?
+        .block_on(future)
 }
 
 #[cfg(test)]

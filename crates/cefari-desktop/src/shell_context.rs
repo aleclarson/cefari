@@ -1,9 +1,10 @@
 use anyhow::Result;
 use cefari_core::{
-    CefariIpcEvent, DialogCommand, DialogResult, DownloadCommand, DownloadResult, FileResult,
-    FilesCommand, RuntimePaths, ServiceStatusResult, TrayResult, UpdateCheckResult,
-    UpdateStateResult, WindowCreateRequest, WindowIdEvent, WindowListResult, WindowSetTitleRequest,
-    WindowState, WindowStateEvent, WindowTarget, WindowTargetRequest,
+    CefariIpcError, CefariIpcEvent, DialogCommand, DialogResult, DownloadCommand, DownloadResult,
+    FileResult, FilesCommand, NotificationCommand, NotificationResult, RuntimePaths,
+    ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult, WindowCreateRequest,
+    WindowIdEvent, WindowListResult, WindowSetTitleRequest, WindowState, WindowStateEvent,
+    WindowTarget, WindowTargetRequest,
 };
 use tao::event_loop::EventLoopWindowTarget;
 use tracing::debug;
@@ -12,7 +13,7 @@ use crate::{
     desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, external, runtime,
     window, window_state,
 };
-use crate::{desktop_ui, event_loop::UserEvent};
+use crate::{desktop_notifications, desktop_ui, event_loop::UserEvent};
 
 pub(crate) struct DesktopShellContext<'a> {
     pub(crate) window_manager: &'a mut window::WindowManager,
@@ -23,6 +24,7 @@ pub(crate) struct DesktopShellContext<'a> {
     pub(crate) runtime_operations: &'a runtime::RuntimeOperations,
     pub(crate) window_state: &'a mut window_state::WindowStateStore,
     pub(crate) source_window_id: Option<String>,
+    pub(crate) desktop_notifier: Option<&'a desktop_notifications::DesktopNotifier>,
     pub(crate) should_exit: bool,
 }
 
@@ -186,6 +188,63 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
         match command {
             DownloadCommand::Cancel(request) => self.cef_runtime.cancel_download(&request.id),
             DownloadCommand::Reveal(request) => self.cef_runtime.reveal_download(&request.id),
+        }
+    }
+
+    fn notification(
+        &mut self,
+        command: &NotificationCommand,
+    ) -> Result<NotificationResult, CefariIpcError> {
+        let notifier = self.desktop_notifier.ok_or_else(|| {
+            desktop_ipc::unsupported_notification(
+                command,
+                "desktop notifications are not available",
+            )
+        })?;
+
+        match command {
+            NotificationCommand::PermissionState => notifier
+                .permission_allowed_blocking()
+                .map(|allowed| NotificationResult::PermissionState { allowed })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+            NotificationCommand::RequestPermission => notifier
+                .request_permission_once_blocking()
+                .map(|allowed| NotificationResult::PermissionRequested { allowed })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+            NotificationCommand::Capabilities => {
+                Ok(NotificationResult::Capabilities(notifier.capabilities()))
+            }
+            NotificationCommand::RegisterCategories(request) => notifier
+                .register_categories(&request.categories)
+                .map(|count| NotificationResult::CategoriesRegistered { count })
+                .map_err(|error| CefariIpcError::InvalidCommand {
+                    message: format!("notification.registerCategories: {error}"),
+                }),
+            NotificationCommand::Send(request) => notifier
+                .send_blocking(request)
+                .map(|outcome| match outcome {
+                    desktop_notifications::NotificationSendOutcome::Delivered { id } => {
+                        NotificationResult::Sent { id }
+                    }
+                    desktop_notifications::NotificationSendOutcome::PermissionDenied => {
+                        NotificationResult::PermissionDenied
+                    }
+                })
+                .map_err(|error| CefariIpcError::InvalidCommand {
+                    message: format!("notification.send: {error}"),
+                }),
+            NotificationCommand::Active => notifier
+                .active_notifications_blocking()
+                .map(|notifications| NotificationResult::Active { notifications })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+            NotificationCommand::RemoveDelivered(request) => notifier
+                .remove_delivered(&request.ids)
+                .map(|count| NotificationResult::Removed { count })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
+            NotificationCommand::RemoveAllDelivered => notifier
+                .remove_all_delivered_blocking()
+                .map(|count| NotificationResult::Removed { count })
+                .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
         }
     }
 

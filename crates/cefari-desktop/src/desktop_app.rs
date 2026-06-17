@@ -13,7 +13,7 @@ use crate::{
 pub(crate) struct RuntimeGuards {
     pub(crate) _instance: SingleInstance,
     pub(crate) _log_guards: logging::LogGuards,
-    pub(crate) _desktop_notifier: Option<desktop_notifications::DesktopNotifier>,
+    pub(crate) desktop_notifier: Option<desktop_notifications::DesktopNotifier>,
     pub(crate) cef_runtime: desktop_cef::CefRuntime,
 }
 
@@ -60,7 +60,7 @@ pub(crate) fn run() -> Result<()> {
     let guards = RuntimeGuards {
         _instance: instance,
         _log_guards: log_guards,
-        _desktop_notifier: desktop_notifier,
+        desktop_notifier,
         cef_runtime,
     };
 

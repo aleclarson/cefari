@@ -198,6 +198,7 @@ fn run_event_loop(
                         runtime_operations: &runtime_operations,
                         window_state: &mut window_state_store,
                         source_window_id: None,
+                        desktop_notifier: guards.desktop_notifier.as_ref(),
                         should_exit: false,
                     };
                     let response = desktop_ipc::DesktopIpcDispatcher::dispatch(
@@ -226,6 +227,7 @@ fn run_event_loop(
                         runtime_operations: &runtime_operations,
                         window_state: &mut window_state_store,
                         source_window_id: None,
+                        desktop_notifier: guards.desktop_notifier.as_ref(),
                         should_exit: false,
                     };
                     let response = desktop_ipc::DesktopIpcDispatcher::dispatch(
@@ -263,6 +265,7 @@ fn run_event_loop(
                     runtime_operations: &runtime_operations,
                     window_state: &mut window_state_store,
                     source_window_id: Some(source_window_id),
+                    desktop_notifier: guards.desktop_notifier.as_ref(),
                     should_exit: false,
                 };
                 let bridge = desktop_bridge::CefariBridge::new(

@@ -2,10 +2,10 @@ use anyhow::Result;
 use cefari_core::{
     CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
     CefariIpcResult, DialogCommand, DialogResult, DownloadCommand, DownloadResult,
-    ExternalUrlResult, FileResult, FilesCommand, NotificationCommand, ServiceStatusResult,
-    TrayResult, UpdateApplyResult, UpdateCheckResult, UpdateCheckState, UpdateStateKind,
-    UpdateStateResult, WindowCreateRequest, WindowListResult, WindowSetTitleRequest, WindowState,
-    WindowTargetRequest,
+    ExternalUrlResult, FileResult, FilesCommand, NotificationCommand, NotificationResult,
+    ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult, UpdateCheckState,
+    UpdateStateKind, UpdateStateResult, WindowCreateRequest, WindowListResult,
+    WindowSetTitleRequest, WindowState, WindowTargetRequest,
 };
 
 #[derive(Debug, Default)]
@@ -31,6 +31,10 @@ pub trait NativeShellContext {
     fn tray_restore_window(&mut self) -> Result<TrayResult>;
     fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult>;
     fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult>;
+    fn notification(
+        &mut self,
+        command: &NotificationCommand,
+    ) -> Result<NotificationResult, CefariIpcError>;
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult>;
 }
 
@@ -132,11 +136,13 @@ fn dispatch_command(
             .download(command)
             .map(CefariIpcResult::Download)
             .map_err(|error| invalid_command(&error, "download")),
-        CefariIpcCommand::Notification(command) => Err(unsupported_notification(command)),
         CefariIpcCommand::Dialog(command) => context
             .dialog(command)
             .map(CefariIpcResult::Dialog)
             .map_err(|error| invalid_command(&error, "dialog")),
+        CefariIpcCommand::Notification(command) => context
+            .notification(command)
+            .map(CefariIpcResult::Notification),
         CefariIpcCommand::Files(command) => context
             .files(command)
             .map(CefariIpcResult::File)
@@ -203,34 +209,26 @@ fn unsupported_command(error: &anyhow::Error, command: &str) -> CefariIpcError {
     }
 }
 
-fn unsupported_notification(command: &NotificationCommand) -> CefariIpcError {
+pub fn unsupported_notification(
+    command: &NotificationCommand,
+    reason: impl Into<String>,
+) -> CefariIpcError {
     CefariIpcError::Unsupported {
-        command: format!("notification.{command:?}"),
-        reason: match command {
-            NotificationCommand::PermissionState => {
-                "notification permission state is not exposed through IPC yet"
-            }
-            NotificationCommand::RequestPermission => {
-                "notification permission prompts are not exposed through IPC yet"
-            }
-            NotificationCommand::Capabilities => {
-                "notification capabilities are not exposed through IPC yet"
-            }
-            NotificationCommand::RegisterCategories(_) => {
-                "notification category registration is not exposed through IPC yet"
-            }
-            NotificationCommand::Send(_) => "notification sending is not exposed through IPC yet",
-            NotificationCommand::Active => {
-                "active notification listing is not exposed through IPC yet"
-            }
-            NotificationCommand::RemoveDelivered(_) => {
-                "notification removal is not exposed through IPC yet"
-            }
-            NotificationCommand::RemoveAllDelivered => {
-                "notification removal is not exposed through IPC yet"
-            }
-        }
-        .to_owned(),
+        command: format!("notification.{}", notification_command_name(command)),
+        reason: reason.into(),
+    }
+}
+
+fn notification_command_name(command: &NotificationCommand) -> &'static str {
+    match command {
+        NotificationCommand::PermissionState => "permissionState",
+        NotificationCommand::RequestPermission => "requestPermission",
+        NotificationCommand::Capabilities => "capabilities",
+        NotificationCommand::RegisterCategories(_) => "registerCategories",
+        NotificationCommand::Send(_) => "send",
+        NotificationCommand::Active => "active",
+        NotificationCommand::RemoveDelivered(_) => "removeDelivered",
+        NotificationCommand::RemoveAllDelivered => "removeAllDelivered",
     }
 }
 
@@ -240,11 +238,13 @@ mod tests {
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
         DialogCommand, DialogRequest, DialogResult, DownloadCommand, DownloadIdRequest,
-        DownloadIdResult, DownloadResult, FileResult, FilesCommand, NotificationCommand,
-        OpenExternalUrlRequest, ServiceStatusResult, TrayResult, UpdateApplyRequest,
-        UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
-        WindowCreateRequest, WindowKind, WindowListResult, WindowSetTitleRequest, WindowState,
-        WindowTargetRequest,
+        DownloadIdResult, DownloadResult, FileResult, FilesCommand, NotificationCapabilities,
+        NotificationCategory, NotificationCategoryAction, NotificationCommand,
+        NotificationRegisterCategoriesRequest, NotificationRemoveDeliveredRequest,
+        NotificationResult, NotificationSendRequest, OpenExternalUrlRequest, ServiceStatusResult,
+        TrayResult, UpdateApplyRequest, UpdateApplyResult, UpdateCheckResult, UpdateStateKind,
+        UpdateStateResult, WindowCreateRequest, WindowKind, WindowListResult,
+        WindowSetTitleRequest, WindowState, WindowTargetRequest,
     };
 
     use super::{DesktopIpcDispatcher, NativeShellContext};
@@ -254,6 +254,7 @@ mod tests {
         calls: Vec<&'static str>,
         window_title: String,
         reload_should_fail: bool,
+        notifications_available: bool,
     }
 
     impl Default for FakeShellContext {
@@ -262,6 +263,7 @@ mod tests {
                 calls: Vec::new(),
                 window_title: "Cefari".to_owned(),
                 reload_should_fail: false,
+                notifications_available: true,
             }
         }
     }
@@ -397,6 +399,83 @@ mod tests {
             }
         }
 
+        fn notification(
+            &mut self,
+            command: &NotificationCommand,
+        ) -> Result<NotificationResult, CefariIpcError> {
+            if !self.notifications_available {
+                return Err(super::unsupported_notification(
+                    command,
+                    "desktop notifications are not available",
+                ));
+            }
+
+            match command {
+                NotificationCommand::PermissionState => {
+                    self.calls.push("notification_permission_state");
+                    Ok(NotificationResult::PermissionState { allowed: true })
+                }
+                NotificationCommand::RequestPermission => {
+                    self.calls.push("notification_request_permission");
+                    Ok(NotificationResult::PermissionRequested { allowed: true })
+                }
+                NotificationCommand::Capabilities => {
+                    self.calls.push("notification_capabilities");
+                    Ok(NotificationResult::Capabilities(NotificationCapabilities {
+                        permission_state: true,
+                        permission_prompt: true,
+                        subtitle: true,
+                        image: true,
+                        icon: true,
+                        icon_round_crop: true,
+                        thread_id: true,
+                        categories: true,
+                        action_buttons: true,
+                        text_input_actions: true,
+                        user_info: true,
+                        xdg_category: true,
+                        active_notifications: true,
+                        remove_delivered: true,
+                        response_events: true,
+                        cold_start_activation: true,
+                    }))
+                }
+                NotificationCommand::RegisterCategories(request) => {
+                    self.calls.push("notification_register_categories");
+                    Ok(NotificationResult::CategoriesRegistered {
+                        count: request.categories.len().try_into().unwrap_or(u32::MAX),
+                    })
+                }
+                NotificationCommand::Send(request) => {
+                    self.calls.push("notification_send");
+                    if request.title.trim().is_empty() {
+                        return Err(CefariIpcError::InvalidCommand {
+                            message: "notification title cannot be empty".to_owned(),
+                        });
+                    }
+                    Ok(NotificationResult::Sent {
+                        id: "n1".to_owned(),
+                    })
+                }
+                NotificationCommand::Active => {
+                    self.calls.push("notification_active");
+                    Ok(NotificationResult::Active {
+                        notifications: Vec::new(),
+                    })
+                }
+                NotificationCommand::RemoveDelivered(request) => {
+                    self.calls.push("notification_remove_delivered");
+                    Ok(NotificationResult::Removed {
+                        count: request.ids.len().try_into().unwrap_or(u32::MAX),
+                    })
+                }
+                NotificationCommand::RemoveAllDelivered => {
+                    self.calls.push("notification_remove_all_delivered");
+                    Ok(NotificationResult::Removed { count: 0 })
+                }
+            }
+        }
+
         fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
             match command {
                 FilesCommand::AppDataDir => {
@@ -485,6 +564,39 @@ mod tests {
                 modality: None,
                 can_create_directories: None,
             })),
+            CefariIpcCommand::Notification(NotificationCommand::PermissionState),
+            CefariIpcCommand::Notification(NotificationCommand::RequestPermission),
+            CefariIpcCommand::Notification(NotificationCommand::Capabilities),
+            CefariIpcCommand::Notification(NotificationCommand::RegisterCategories(
+                NotificationRegisterCategoriesRequest {
+                    categories: vec![NotificationCategory {
+                        id: "message".to_owned(),
+                        actions: vec![NotificationCategoryAction::Action {
+                            id: "open".to_owned(),
+                            title: "Open".to_owned(),
+                        }],
+                    }],
+                },
+            )),
+            CefariIpcCommand::Notification(NotificationCommand::Send(NotificationSendRequest {
+                title: "Done".to_owned(),
+                body: None,
+                subtitle: None,
+                image: None,
+                icon: None,
+                icon_round_crop: false,
+                thread_id: None,
+                category_id: None,
+                user_info: Default::default(),
+                xdg_category: None,
+            })),
+            CefariIpcCommand::Notification(NotificationCommand::Active),
+            CefariIpcCommand::Notification(NotificationCommand::RemoveDelivered(
+                NotificationRemoveDeliveredRequest {
+                    ids: vec!["n1".to_owned()],
+                },
+            )),
+            CefariIpcCommand::Notification(NotificationCommand::RemoveAllDelivered),
             CefariIpcCommand::Files(FilesCommand::AppDataDir),
         ];
 
@@ -521,19 +633,60 @@ mod tests {
                 "tray_restore_window",
                 "download_cancel",
                 "dialog_open_file",
+                "notification_permission_state",
+                "notification_request_permission",
+                "notification_capabilities",
+                "notification_register_categories",
+                "notification_send",
+                "notification_active",
+                "notification_remove_delivered",
+                "notification_remove_all_delivered",
                 "files_app_data_dir",
             ]
         );
     }
 
     #[test]
-    fn returns_typed_unsupported_errors_for_reserved_commands() {
+    fn returns_typed_invalid_errors_for_invalid_notification_commands() {
         let mut context = FakeShellContext::default();
-        let command = CefariIpcCommand::Notification(NotificationCommand::PermissionState);
+        let command =
+            CefariIpcCommand::Notification(NotificationCommand::Send(NotificationSendRequest {
+                title: " ".to_owned(),
+                body: None,
+                subtitle: None,
+                image: None,
+                icon: None,
+                icon_round_crop: false,
+                thread_id: None,
+                category_id: None,
+                user_info: Default::default(),
+                xdg_category: None,
+            }));
         let response = DesktopIpcDispatcher::dispatch(
             CefariIpcRequest {
-                id: "reserved".to_owned(),
+                id: "invalid-notification".to_owned(),
                 command,
+            },
+            &mut context,
+        );
+
+        assert!(matches!(
+            response.outcome,
+            CefariIpcOutcome::Err(CefariIpcError::InvalidCommand { .. })
+        ));
+    }
+
+    #[test]
+    fn returns_typed_unsupported_when_notifications_are_unavailable() {
+        let mut context = FakeShellContext {
+            notifications_available: false,
+            ..Default::default()
+        };
+
+        let response = DesktopIpcDispatcher::dispatch(
+            CefariIpcRequest {
+                id: "notifications-disabled".to_owned(),
+                command: CefariIpcCommand::Notification(NotificationCommand::Capabilities),
             },
             &mut context,
         );
