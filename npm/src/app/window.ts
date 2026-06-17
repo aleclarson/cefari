@@ -1,16 +1,13 @@
 import { on } from "./events.ts";
-import { invokeWindow, invokeWindowList } from "./results.ts";
-import type {
-  WindowCreateRequest,
-  WindowIdEvent,
-  WindowState,
-  WindowTarget,
-  WindowTargetRequest,
-} from "./ipc.ts";
+import type { WindowIdEvent, WindowState } from "./ipc.ts";
 import type { Unsubscribe } from "./transport.ts";
+import {
+  type WindowCreateOptions,
+  windows,
+  type WindowTargetInput,
+} from "./windows.ts";
 
-export type WindowTargetInput = string | WindowTarget | null;
-export type WindowCreateOptions = Partial<WindowCreateRequest>;
+export type { WindowCreateOptions, WindowTargetInput } from "./windows.ts";
 
 export type WindowApi = {
   current(): Promise<WindowState>;
@@ -26,23 +23,18 @@ export type WindowApi = {
 };
 
 export const windowControls: WindowApi = {
-  current: (): Promise<WindowState> =>
-    invokeWindow({ command: "windowCurrent" }),
-  list: async (): Promise<WindowState[]> =>
-    (await invokeWindowList({ command: "windowList" })).windows,
+  current: (): Promise<WindowState> => windows.current(),
+  list: async (): Promise<WindowState[]> => windows.list(),
   create: (options: WindowCreateOptions = {}): Promise<WindowState> =>
-    invokeWindow({ command: "windowCreate", payload: createRequest(options) }),
+    windows.create(options),
   show: (target?: WindowTargetInput): Promise<WindowState> =>
-    invokeWindow({ command: "windowShow", payload: targetRequest(target) }),
+    windows.show(target ?? null),
   focus: (target?: WindowTargetInput): Promise<WindowState> =>
-    invokeWindow({ command: "windowFocus", payload: targetRequest(target) }),
+    windows.focus(target ?? null),
   close: (target?: WindowTargetInput): Promise<WindowState> =>
-    invokeWindow({ command: "windowClose", payload: targetRequest(target) }),
+    windows.close(target ?? null),
   setTitle: (title: string, target?: WindowTargetInput): Promise<WindowState> =>
-    invokeWindow({
-      command: "windowSetTitle",
-      payload: { ...targetRequest(target), title },
-    }),
+    windows.setTitle(target ?? null, title),
   onShown: (handler: (state: WindowState) => void): Unsubscribe =>
     on("windowShown", (event) => handler(event.state)),
   onFocused: (handler: (state: WindowState) => void): Unsubscribe =>
@@ -50,33 +42,3 @@ export const windowControls: WindowApi = {
   onClosed: (handler: (event: WindowIdEvent) => void): Unsubscribe =>
     on("windowClosed", handler),
 };
-
-function targetRequest(target?: WindowTargetInput): WindowTargetRequest {
-  if (target == null) return { target: null };
-  if (typeof target === "string") return { target: { id: target } };
-  return { target: { id: target.id ?? null } };
-}
-
-function createRequest(options: WindowCreateOptions): WindowCreateRequest {
-  return {
-    id: options.id ?? null,
-    route: options.route ?? null,
-    title: options.title ?? null,
-    width: options.width ?? null,
-    height: options.height ?? null,
-    minWidth: options.minWidth ?? null,
-    minHeight: options.minHeight ?? null,
-    maxWidth: options.maxWidth ?? null,
-    maxHeight: options.maxHeight ?? null,
-    x: options.x ?? null,
-    y: options.y ?? null,
-    visible: options.visible ?? null,
-    focused: options.focused ?? null,
-    resizable: options.resizable ?? null,
-    decorations: options.decorations ?? null,
-    alwaysOnTop: options.alwaysOnTop ?? null,
-    parentId: options.parentId ?? null,
-    modal: options.modal ?? null,
-    persistKey: options.persistKey ?? null,
-  };
-}

@@ -38,10 +38,11 @@ Deno.test("wraps typed namespace commands", async () => {
     },
   });
 
-  assertEquals(await cefari.window.current(), mainWindowState("Focused"));
-  assertEquals(await cefari.window.list(), [mainWindowState("Focused")]);
+  assertEquals(await cefari.windows.current(), mainWindowState("Focused"));
+  assertEquals(await cefari.windows.list(), [mainWindowState("Focused")]);
+  assertEquals(await cefari.windows.get("main"), mainWindowState("Focused"));
   assertEquals(
-    await cefari.window.create({
+    await cefari.windows.create({
       id: "settings",
       route: "/settings",
       title: "Settings",
@@ -54,10 +55,18 @@ Deno.test("wraps typed namespace commands", async () => {
     ...mainWindowState("Focused"),
     focused: true,
   });
+  assertEquals(
+    await cefari.windows.focus("settings"),
+    mainWindowState("Focused"),
+  );
   assertEquals(await cefari.window.setTitle("Dashboard"), {
     ...mainWindowState("Dashboard"),
     focused: true,
   });
+  assertEquals(
+    await cefari.windows.setTitle("settings", "Settings"),
+    mainWindowState("Settings"),
+  );
   assertEquals(
     await cefari.shell.openExternalUrl(new URL("https://example.com")),
     {
@@ -116,6 +125,7 @@ Deno.test("wraps typed namespace commands", async () => {
   assertEquals(commands, [
     { command: "windowCurrent" },
     { command: "windowList" },
+    { command: "windowList" },
     {
       command: "windowCreate",
       payload: {
@@ -141,9 +151,14 @@ Deno.test("wraps typed namespace commands", async () => {
       },
     },
     { command: "windowFocus", payload: { target: null } },
+    { command: "windowFocus", payload: { target: { id: "settings" } } },
     {
       command: "windowSetTitle",
       payload: { target: null, title: "Dashboard" },
+    },
+    {
+      command: "windowSetTitle",
+      payload: { target: { id: "settings" }, title: "Settings" },
     },
     {
       command: "openExternalUrl",
@@ -429,6 +444,7 @@ Deno.test("filters typed events", () => {
   const focused: string[] = [];
   const deepLinks: string[] = [];
   const downloads: string[] = [];
+  const filteredFocus: string[] = [];
   const notifications: string[] = [];
 
   const unsubscribeFocus = cefari.window.onFocused((state) => {
@@ -440,6 +456,10 @@ Deno.test("filters typed events", () => {
   const unsubscribeDownload = cefari.on("download.completed", (event) => {
     downloads.push(event.destinationPath);
   });
+  const unsubscribeFilteredFocus = cefari.windows.onFocused(
+    (event) => filteredFocus.push(event.windowId),
+    { windowId: "settings" },
+  );
   const unsubscribeNotification = cefari.notifications.onResponse((event) => {
     notifications.push(event.id);
   });
@@ -450,6 +470,18 @@ Deno.test("filters typed events", () => {
       payload: {
         windowId: "main",
         state: mainWindowState("Dashboard"),
+      },
+    });
+    handler({
+      event: "windowFocused",
+      payload: {
+        windowId: "settings",
+        state: mainWindowState(
+          "Settings",
+          "settings",
+          "secondary",
+          "/settings",
+        ),
       },
     });
     handler({
@@ -478,14 +510,16 @@ Deno.test("filters typed events", () => {
     });
   }
 
-  assertEquals(focused, ["Dashboard"]);
+  assertEquals(focused, ["Dashboard", "Settings"]);
   assertEquals(deepLinks, ["myapp://open/item?id=1"]);
   assertEquals(downloads, ["/tmp/file.txt"]);
+  assertEquals(filteredFocus, ["settings"]);
   assertEquals(notifications, ["n1"]);
 
   unsubscribeFocus();
   unsubscribeDeepLink();
   unsubscribeDownload();
+  unsubscribeFilteredFocus();
   unsubscribeNotification();
   assertEquals(handlers.size, 0);
 });

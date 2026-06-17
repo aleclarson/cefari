@@ -27,6 +27,8 @@ export type {
   WindowTargetInput,
 } from "./window.ts";
 export { windowControls as window } from "./window.ts";
+export type { WindowEventFilter, WindowsApi } from "./windows.ts";
+export { windows } from "./windows.ts";
 export type { ShellApi } from "./shell.ts";
 export { shell } from "./shell.ts";
 export type { UpdateApplyOptions, UpdatesApi } from "./updates.ts";
@@ -63,6 +65,7 @@ import { invoke, isAvailable, onAnyEvent, tryInvoke } from "./transport.ts";
 import type { Unsubscribe } from "./transport.ts";
 import { updates, type UpdatesApi } from "./updates.ts";
 import { type WindowApi, windowControls } from "./window.ts";
+import { windows, type WindowsApi } from "./windows.ts";
 
 export type CefariApp = {
   isAvailable(): boolean;
@@ -75,6 +78,7 @@ export type CefariApp = {
   onAnyEvent(handler: (event: CefariIpcEvent) => void): Unsubscribe;
   app: AppApi;
   window: WindowApi;
+  windows: WindowsApi;
   shell: ShellApi;
   updates: UpdatesApi;
   service: ServiceApi;
@@ -94,6 +98,7 @@ export const cefari: Readonly<CefariApp> = Object.freeze({
   onAnyEvent,
   app,
   window: windowControls,
+  windows,
   shell,
   updates,
   service,
