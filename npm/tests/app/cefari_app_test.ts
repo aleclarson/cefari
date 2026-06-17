@@ -5,6 +5,7 @@ import {
   type CefariIpcCommand,
   type CefariIpcEvent,
   type CefariIpcResponse,
+  type NotificationResponseEvent,
   type WindowKind,
   type WindowState,
 } from "../../src/app/mod.ts";
@@ -556,8 +557,14 @@ Deno.test("filters typed events", () => {
   const deepLinks: string[] = [];
   const downloads: string[] = [];
   const filteredFocus: string[] = [];
-  const notifications: Array<[string, string | null, Record<string, string>]> =
-    [];
+  const notifications: Array<
+    [
+      string,
+      NotificationResponseEvent["action"],
+      string | null,
+      Record<string, string>,
+    ]
+  > = [];
 
   const unsubscribeFocus = cefari.window.onFocused((state) => {
     focused.push(state.title);
@@ -573,7 +580,7 @@ Deno.test("filters typed events", () => {
     { windowId: "settings" },
   );
   const unsubscribeNotification = cefari.notifications.onResponse((event) => {
-    notifications.push([event.id, event.userText, event.userInfo]);
+    notifications.push([event.id, event.action, event.userText, event.userInfo]);
   });
 
   for (const handler of handlers) {
@@ -631,7 +638,7 @@ Deno.test("filters typed events", () => {
   assertEquals(deepLinks, ["myapp://open/item?id=1"]);
   assertEquals(downloads, ["/tmp/file.txt"]);
   assertEquals(filteredFocus, ["settings"]);
-  assertEquals(notifications, [["n1", null, { buildId: "123" }]]);
+  assertEquals(notifications, [["n1", "default", null, { buildId: "123" }]]);
 
   unsubscribeFocus();
   unsubscribeDeepLink();

@@ -389,9 +389,8 @@ Current methods:
 
 ## Notifications
 
-Notification commands are typed in the protocol and wrapped by `cefari/app`,
-but the current desktop dispatcher returns `unsupported` until notification IPC
-is wired end to end.
+Notification commands are typed in the protocol, wrapped by `cefari/app`, and
+dispatched by the desktop runtime.
 
 ```ts
 const capabilities = await cefari.notifications.capabilities();
@@ -448,6 +447,9 @@ const unsubscribe = cefari.notifications.onResponse((event) => {
   console.log(event.id, event.action, event.userText, event.userInfo);
 });
 ```
+
+Default notification clicks emit a response event and focus the main window.
+Dismiss responses emit an event without focusing the main window.
 
 Current methods:
 
