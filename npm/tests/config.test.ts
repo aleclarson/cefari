@@ -43,8 +43,32 @@ test("loads an object config", async () => {
 
   assert.equal(config.root, root);
   assert.equal(config.app.projectName, "example-app");
+  assert.ok(config.daemon);
   assert.equal(config.daemon.entry, "daemon/main.ts");
   assert.equal(config.package.version, "0.1.0");
+});
+
+test("loads a config without a daemon", async () => {
+  const root = await projectWithConfig(`import { defineConfig } from "__CEFARI_CONFIG_API__";
+
+export default defineConfig({
+  app: {
+    projectName: "example-app",
+    name: "Example App",
+    identifier: "dev.cefari.example",
+  },
+  package: {
+    productName: "Example App",
+    version: "0.1.0",
+  },
+});
+`);
+
+  const config = await loadCefariConfig({ root });
+  const serializable = toSerializableProjectConfig(config);
+
+  assert.equal(config.daemon, undefined);
+  assert.equal(Object.hasOwn(serializable, "daemon"), false);
 });
 
 test("loads a factory config with Cefari context", async () => {
@@ -206,6 +230,15 @@ test("reports clear validation errors", async () => {
   const root = await projectWithConfig(baseConfig(`vite: { devPort: 0 },`));
 
   await assert.rejects(loadCefariConfig({ root }), /vite\.devPort must be an integer from 1 to 65535/);
+});
+
+test("reports clear daemon validation errors when daemon is configured", async () => {
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig().replace('entry: "daemon/main.ts"', 'entry: "../daemon/main.ts"')),
+    }),
+    /daemon\.entry must be a relative path inside the project/,
+  );
 });
 
 test("creates a serializable projection", async () => {

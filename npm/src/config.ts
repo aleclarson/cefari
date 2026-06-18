@@ -16,7 +16,7 @@ export interface CefariConfigInput {
   app: AppConfigInput;
   capabilities?: CefariCapability[];
   vite?: ViteConfigInput;
-  daemon: DaemonConfigInput;
+  daemon?: DaemonConfigInput;
   package: PackageConfigInput;
   frontend?: never;
 }
@@ -83,7 +83,7 @@ export interface ResolvedCefariConfig {
   app: AppConfig;
   capabilities: CefariCapability[];
   vite: ViteConfig;
-  daemon: DaemonConfig;
+  daemon?: DaemonConfig;
   package: PackageConfig;
 }
 
@@ -91,7 +91,7 @@ export interface SerializableProjectConfig {
   app: AppConfig;
   capabilities: CefariCapability[];
   vite: ViteConfig;
-  daemon: DaemonConfig;
+  daemon?: DaemonConfig;
   package: PackageConfig;
 }
 
@@ -156,7 +156,7 @@ export function toSerializableProjectConfig(config: ResolvedCefariConfig): Seria
     app: { ...config.app },
     capabilities: config.capabilities.map((capability) => ({ ...capability })),
     vite: { ...config.vite },
-    daemon: { ...config.daemon },
+    ...(config.daemon === undefined ? {} : { daemon: { ...config.daemon } }),
     package: { ...config.package },
   };
 }
@@ -288,7 +288,10 @@ function normalizeViteConfigFile(value: unknown): string | false {
   return relativePath(value, "vite.configFile");
 }
 
-function normalizeDaemon(value: unknown): DaemonConfig {
+function normalizeDaemon(value: unknown): DaemonConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
   const daemon = asRecord(value, "daemon");
   return {
     entry: relativePath(daemon.entry, "daemon.entry"),

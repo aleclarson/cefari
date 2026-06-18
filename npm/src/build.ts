@@ -122,7 +122,7 @@ async function writeDesktopConfig(config: ResolvedCefariConfig, outputDir: strin
 }
 
 async function buildDaemon(config: ResolvedCefariConfig, outputDir: string, deps: BuildDependencies): Promise<void> {
-  const source = resolve(config.root, config.daemon.entry);
+  const source = resolve(config.root, config.daemon!.entry);
   const sourceCopy = join(outputDir, "main.ts");
   await copyFile(source, sourceCopy);
 
