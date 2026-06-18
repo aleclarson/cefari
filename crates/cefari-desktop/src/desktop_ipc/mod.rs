@@ -1,47 +1,57 @@
-use anyhow::Result;
 use cefari_core::{
     CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
-    CefariIpcResult, DialogCommand, DialogResult, DownloadCommand, DownloadResult,
-    ExternalUrlResult, FileResult, FilesCommand, NotificationCommand, NotificationResult,
-    ServiceStatusResult, TrayResult, UpdateApplyResult, UpdateCheckResult, UpdateCheckState,
-    UpdateStateKind, UpdateStateResult, WindowCreateRequest, WindowListResult,
-    WindowSetTitleRequest, WindowState, WindowTargetRequest,
+    CefariIpcResult,
 };
+
+pub mod app;
+pub mod dialogs;
+pub mod downloads;
+pub mod files;
+pub mod notifications;
+pub mod service;
+pub mod shell;
+pub mod tray;
+pub mod updates;
+pub mod windows;
+
+pub use notifications::unsupported_notification;
+pub use updates::{update_apply_result, update_check_result, update_state_result};
 
 #[derive(Debug, Default)]
 pub struct DesktopIpcDispatcher;
 
-pub trait NativeShellContext {
-    fn quit_app(&mut self) -> Result<()>;
-    fn window_current(&mut self) -> Result<WindowState>;
-    fn window_list(&mut self) -> Result<WindowListResult>;
-    fn window_create(&mut self, request: &WindowCreateRequest) -> Result<WindowState>;
-    fn window_show(&mut self, request: &WindowTargetRequest) -> Result<WindowState>;
-    fn window_focus(&mut self, request: &WindowTargetRequest) -> Result<WindowState>;
-    fn window_close(&mut self, request: &WindowTargetRequest) -> Result<WindowState>;
-    fn window_set_title(&mut self, request: &WindowSetTitleRequest) -> Result<WindowState>;
-    fn open_logs(&mut self) -> Result<()>;
-    fn reload_ui(&mut self) -> Result<()>;
-    fn open_external_url(&mut self, url: &str) -> Result<()>;
-    fn update_state(&mut self) -> Result<UpdateStateResult>;
-    fn update_check(&mut self) -> Result<UpdateCheckResult>;
-    fn update_apply(&mut self, update_id: Option<&str>) -> Result<UpdateApplyResult>;
-    fn update_restart(&mut self) -> Result<()>;
-    fn service_status(&mut self) -> Result<ServiceStatusResult>;
-    fn tray_restore_window(&mut self) -> Result<TrayResult>;
-    fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult>;
-    fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult>;
-    fn notification(
-        &mut self,
-        command: &NotificationCommand,
-    ) -> Result<NotificationResult, CefariIpcError>;
-    fn files(&mut self, command: &FilesCommand) -> Result<FileResult>;
+pub trait DesktopIpcContext:
+    app::AppContext
+    + windows::WindowContext
+    + shell::ShellContext
+    + updates::UpdateContext
+    + service::ServiceContext
+    + tray::TrayContext
+    + downloads::DownloadContext
+    + dialogs::DialogContext
+    + notifications::NotificationContext
+    + files::FilesContext
+{
+}
+
+impl<T> DesktopIpcContext for T where
+    T: app::AppContext
+        + windows::WindowContext
+        + shell::ShellContext
+        + updates::UpdateContext
+        + service::ServiceContext
+        + tray::TrayContext
+        + downloads::DownloadContext
+        + dialogs::DialogContext
+        + notifications::NotificationContext
+        + files::FilesContext
+{
 }
 
 impl DesktopIpcDispatcher {
     pub fn dispatch(
         request: CefariIpcRequest,
-        context: &mut impl NativeShellContext,
+        context: &mut impl DesktopIpcContext,
     ) -> CefariIpcResponse {
         let result = dispatch_command(&request.command, context);
 
@@ -57,178 +67,43 @@ impl DesktopIpcDispatcher {
 
 fn dispatch_command(
     command: &CefariIpcCommand,
-    context: &mut impl NativeShellContext,
+    context: &mut impl DesktopIpcContext,
 ) -> Result<CefariIpcResult, CefariIpcError> {
     match command {
-        CefariIpcCommand::AppQuit => context
-            .quit_app()
-            .map(|()| CefariIpcResult::Empty)
-            .map_err(|error| invalid_command(&error, "appQuit")),
-        CefariIpcCommand::WindowCurrent => context
-            .window_current()
-            .map(CefariIpcResult::Window)
-            .map_err(|error| invalid_command(&error, "windowCurrent")),
-        CefariIpcCommand::WindowList => context
-            .window_list()
-            .map(CefariIpcResult::WindowList)
-            .map_err(|error| invalid_command(&error, "windowList")),
-        CefariIpcCommand::WindowCreate(request) => context
-            .window_create(request)
-            .map(CefariIpcResult::Window)
-            .map_err(|error| unsupported_command(&error, "windowCreate")),
-        CefariIpcCommand::WindowShow(request) => context
-            .window_show(request)
-            .map(CefariIpcResult::Window)
-            .map_err(|error| invalid_command(&error, "windowShow")),
-        CefariIpcCommand::WindowFocus(request) => context
-            .window_focus(request)
-            .map(CefariIpcResult::Window)
-            .map_err(|error| invalid_command(&error, "windowFocus")),
-        CefariIpcCommand::WindowClose(request) => context
-            .window_close(request)
-            .map(CefariIpcResult::Window)
-            .map_err(|error| invalid_command(&error, "windowClose")),
-        CefariIpcCommand::WindowSetTitle(request) => context
-            .window_set_title(request)
-            .map(CefariIpcResult::Window)
-            .map_err(|error| invalid_command(&error, "windowSetTitle")),
-        CefariIpcCommand::OpenLogs => context
-            .open_logs()
-            .map(|()| CefariIpcResult::Empty)
-            .map_err(|error| invalid_command(&error, "openLogs")),
-        CefariIpcCommand::ReloadUi => context
-            .reload_ui()
-            .map(|()| CefariIpcResult::ReloadUi)
-            .map_err(|error| unsupported_command(&error, "reloadUi")),
-        CefariIpcCommand::OpenExternalUrl(request) => context
-            .open_external_url(&request.url)
-            .map(|()| {
-                CefariIpcResult::ExternalUrl(ExternalUrlResult {
-                    url: request.url.clone(),
-                })
-            })
-            .map_err(|error| invalid_command(&error, "openExternalUrl")),
-        CefariIpcCommand::UpdateState => context
-            .update_state()
-            .map(CefariIpcResult::UpdateState)
-            .map_err(|error| unsupported_command(&error, "updateState")),
-        CefariIpcCommand::UpdateCheck => context
-            .update_check()
-            .map(CefariIpcResult::UpdateCheck)
-            .map_err(|error| unsupported_command(&error, "updateCheck")),
-        CefariIpcCommand::UpdateApply(request) => context
-            .update_apply(request.update_id.as_deref())
-            .map(CefariIpcResult::UpdateApply)
-            .map_err(|error| unsupported_command(&error, "updateApply")),
-        CefariIpcCommand::UpdateRestart => context
-            .update_restart()
-            .map(|()| CefariIpcResult::Empty)
-            .map_err(|error| unsupported_command(&error, "updateRestart")),
-        CefariIpcCommand::ServiceStatus => context
-            .service_status()
-            .map(CefariIpcResult::ServiceStatus)
-            .map_err(|error| unsupported_command(&error, "serviceStatus")),
-        CefariIpcCommand::TrayRestoreWindow => context
-            .tray_restore_window()
-            .map(CefariIpcResult::Tray)
-            .map_err(|error| invalid_command(&error, "trayRestoreWindow")),
-        CefariIpcCommand::Download(command) => context
-            .download(command)
-            .map(CefariIpcResult::Download)
-            .map_err(|error| invalid_command(&error, "download")),
-        CefariIpcCommand::Dialog(command) => context
-            .dialog(command)
-            .map(CefariIpcResult::Dialog)
-            .map_err(|error| invalid_command(&error, "dialog")),
-        CefariIpcCommand::Notification(command) => context
-            .notification(command)
-            .map(CefariIpcResult::Notification),
-        CefariIpcCommand::Files(command) => context
-            .files(command)
-            .map(CefariIpcResult::File)
-            .map_err(|error| invalid_command(&error, "files")),
+        CefariIpcCommand::AppQuit => app::dispatch(context),
+        CefariIpcCommand::WindowCurrent
+        | CefariIpcCommand::WindowList
+        | CefariIpcCommand::WindowCreate(_)
+        | CefariIpcCommand::WindowShow(_)
+        | CefariIpcCommand::WindowFocus(_)
+        | CefariIpcCommand::WindowClose(_)
+        | CefariIpcCommand::WindowSetTitle(_) => windows::dispatch(command, context),
+        CefariIpcCommand::OpenLogs
+        | CefariIpcCommand::ReloadUi
+        | CefariIpcCommand::OpenExternalUrl(_) => shell::dispatch(command, context),
+        CefariIpcCommand::UpdateState
+        | CefariIpcCommand::UpdateCheck
+        | CefariIpcCommand::UpdateApply(_)
+        | CefariIpcCommand::UpdateRestart => updates::dispatch(command, context),
+        CefariIpcCommand::ServiceStatus => service::dispatch(context),
+        CefariIpcCommand::TrayRestoreWindow => tray::dispatch(context),
+        CefariIpcCommand::Download(command) => downloads::dispatch(command, context),
+        CefariIpcCommand::Dialog(command) => dialogs::dispatch(command, context),
+        CefariIpcCommand::Notification(command) => notifications::dispatch(command, context),
+        CefariIpcCommand::Files(command) => files::dispatch(command, context),
     }
 }
 
-pub fn update_state_result(state: &UpdateCheckState) -> UpdateStateResult {
-    UpdateStateResult {
-        state: update_state_kind(state),
-    }
-}
-
-pub fn update_check_result(state: &UpdateCheckState) -> UpdateCheckResult {
-    let version = match state {
-        UpdateCheckState::UpdateAvailable { version } => Some(version.clone()),
-        _ => None,
-    };
-
-    UpdateCheckResult {
-        state: update_state_kind(state),
-        version,
-        update_id: update_id_for_state(state),
-    }
-}
-
-pub fn update_apply_result(version: &str) -> UpdateApplyResult {
-    UpdateApplyResult {
-        state: UpdateStateKind::ReadyToRestart,
-        version: Some(version.to_owned()),
-        restart_required: true,
-    }
-}
-
-fn update_state_kind(state: &UpdateCheckState) -> UpdateStateKind {
-    match state {
-        UpdateCheckState::NotConfigured => UpdateStateKind::NotConfigured,
-        UpdateCheckState::Ready | UpdateCheckState::NoUpdate => UpdateStateKind::Current,
-        UpdateCheckState::Checking => UpdateStateKind::Checking,
-        UpdateCheckState::UpdateAvailable { .. } => UpdateStateKind::Available,
-        UpdateCheckState::Applying => UpdateStateKind::Applying,
-        UpdateCheckState::ReadyToRestart => UpdateStateKind::ReadyToRestart,
-        UpdateCheckState::Failed { .. } => UpdateStateKind::Error,
-    }
-}
-
-fn update_id_for_state(state: &UpdateCheckState) -> Option<String> {
-    match state {
-        UpdateCheckState::UpdateAvailable { version } => Some(version.clone()),
-        _ => None,
-    }
-}
-
-fn invalid_command(error: &anyhow::Error, command: &str) -> CefariIpcError {
+pub(super) fn invalid_command(error: &anyhow::Error, command: &str) -> CefariIpcError {
     CefariIpcError::InvalidCommand {
         message: format!("{command}: {error}"),
     }
 }
 
-fn unsupported_command(error: &anyhow::Error, command: &str) -> CefariIpcError {
+pub(super) fn unsupported_command(error: &anyhow::Error, command: &str) -> CefariIpcError {
     CefariIpcError::Unsupported {
         command: command.to_owned(),
         reason: error.to_string(),
-    }
-}
-
-pub fn unsupported_notification(
-    command: &NotificationCommand,
-    reason: impl Into<String>,
-) -> CefariIpcError {
-    CefariIpcError::Unsupported {
-        command: format!("notification.{}", notification_command_name(command)),
-        reason: reason.into(),
-    }
-}
-
-fn notification_command_name(command: &NotificationCommand) -> &'static str {
-    match command {
-        NotificationCommand::PermissionState => "permissionState",
-        NotificationCommand::RequestPermission => "requestPermission",
-        NotificationCommand::Capabilities => "capabilities",
-        NotificationCommand::RegisterCategories(_) => "registerCategories",
-        NotificationCommand::Send(_) => "send",
-        NotificationCommand::Active => "active",
-        NotificationCommand::RemoveDelivered(_) => "removeDelivered",
-        NotificationCommand::RemoveAllDelivered => "removeAllDelivered",
     }
 }
 
@@ -247,7 +122,10 @@ mod tests {
         WindowSetTitleRequest, WindowState, WindowTargetRequest,
     };
 
-    use super::{DesktopIpcDispatcher, NativeShellContext};
+    use super::{
+        DesktopIpcDispatcher, app, dialogs, downloads, files, notifications, service, shell, tray,
+        updates, windows,
+    };
 
     #[derive(Debug)]
     struct FakeShellContext {
@@ -268,12 +146,14 @@ mod tests {
         }
     }
 
-    impl NativeShellContext for FakeShellContext {
+    impl app::AppContext for FakeShellContext {
         fn quit_app(&mut self) -> Result<()> {
             self.calls.push("quit");
             Ok(())
         }
+    }
 
+    impl windows::WindowContext for FakeShellContext {
         fn window_current(&mut self) -> Result<WindowState> {
             self.calls.push("window_current");
             Ok(self.window_state(true, true))
@@ -311,7 +191,9 @@ mod tests {
             self.window_title = request.title.clone();
             Ok(self.window_state(true, true))
         }
+    }
 
+    impl shell::ShellContext for FakeShellContext {
         fn open_logs(&mut self) -> Result<()> {
             self.calls.push("open_logs");
             Ok(())
@@ -329,7 +211,9 @@ mod tests {
             self.calls.push("open_external_url");
             Ok(())
         }
+    }
 
+    impl updates::UpdateContext for FakeShellContext {
         fn update_state(&mut self) -> Result<UpdateStateResult> {
             self.calls.push("update_state");
             Ok(UpdateStateResult {
@@ -359,19 +243,25 @@ mod tests {
             self.calls.push("update_restart");
             Ok(())
         }
+    }
 
+    impl service::ServiceContext for FakeShellContext {
         fn service_status(&mut self) -> Result<ServiceStatusResult> {
             self.calls.push("service_status");
             Ok(ServiceStatusResult {
                 status: "running".to_owned(),
             })
         }
+    }
 
+    impl tray::TrayContext for FakeShellContext {
         fn tray_restore_window(&mut self) -> Result<TrayResult> {
             self.calls.push("tray_restore_window");
             Ok(TrayResult { restored: true })
         }
+    }
 
+    impl dialogs::DialogContext for FakeShellContext {
         fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult> {
             match command {
                 DialogCommand::OpenFile(_) => {
@@ -381,7 +271,9 @@ mod tests {
                 _ => anyhow::bail!("unsupported test dialog command"),
             }
         }
+    }
 
+    impl downloads::DownloadContext for FakeShellContext {
         fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult> {
             match command {
                 DownloadCommand::Cancel(request) => {
@@ -398,7 +290,9 @@ mod tests {
                 }
             }
         }
+    }
 
+    impl notifications::NotificationContext for FakeShellContext {
         fn notification(
             &mut self,
             command: &NotificationCommand,
@@ -475,7 +369,9 @@ mod tests {
                 }
             }
         }
+    }
 
+    impl files::FilesContext for FakeShellContext {
         fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
             match command {
                 FilesCommand::AppDataDir => {

@@ -28,13 +28,15 @@ pub(crate) struct DesktopShellContext<'a> {
     pub(crate) should_exit: bool,
 }
 
-impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
+impl desktop_ipc::app::AppContext for DesktopShellContext<'_> {
     fn quit_app(&mut self) -> Result<()> {
         self.window_manager.close_main();
         self.should_exit = true;
         Ok(())
     }
+}
 
+impl desktop_ipc::windows::WindowContext for DesktopShellContext<'_> {
     fn window_current(&mut self) -> Result<WindowState> {
         let id = self
             .source_window_id
@@ -119,7 +121,9 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
         self.emit_event(&CefariIpcEvent::WindowTitleChanged(state_event(&state)));
         Ok(state)
     }
+}
 
+impl desktop_ipc::shell::ShellContext for DesktopShellContext<'_> {
     fn open_logs(&mut self) -> Result<()> {
         external::open_external_file(&self.paths.log_dir)
     }
@@ -135,7 +139,9 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
     fn open_external_url(&mut self, url: &str) -> Result<()> {
         external::open_external_url(url)
     }
+}
 
+impl desktop_ipc::updates::UpdateContext for DesktopShellContext<'_> {
     fn update_state(&mut self) -> Result<UpdateStateResult> {
         self.runtime_operations
             .update_state()
@@ -160,22 +166,31 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
         self.should_exit = true;
         Ok(())
     }
+}
 
+impl desktop_ipc::service::ServiceContext for DesktopShellContext<'_> {
     fn service_status(&mut self) -> Result<ServiceStatusResult> {
         self.runtime_operations
             .daemon_service_status()
             .map(|status| ServiceStatusResult { status })
     }
+}
 
+impl desktop_ipc::tray::TrayContext for DesktopShellContext<'_> {
     fn tray_restore_window(&mut self) -> Result<TrayResult> {
-        self.window_focus(&WindowTargetRequest {
-            target: Some(WindowTarget {
-                id: Some(window::MAIN_WINDOW_ID.to_owned()),
-            }),
-        })?;
+        desktop_ipc::windows::WindowContext::window_focus(
+            self,
+            &WindowTargetRequest {
+                target: Some(WindowTarget {
+                    id: Some(window::MAIN_WINDOW_ID.to_owned()),
+                }),
+            },
+        )?;
         Ok(TrayResult { restored: true })
     }
+}
 
+impl desktop_ipc::dialogs::DialogContext for DesktopShellContext<'_> {
     fn dialog(&mut self, command: &DialogCommand) -> Result<DialogResult> {
         desktop_dialogs::dispatch(
             command,
@@ -183,14 +198,18 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
             self.window_manager.window(window::MAIN_WINDOW_ID).ok(),
         )
     }
+}
 
+impl desktop_ipc::downloads::DownloadContext for DesktopShellContext<'_> {
     fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult> {
         match command {
             DownloadCommand::Cancel(request) => self.cef_runtime.cancel_download(&request.id),
             DownloadCommand::Reveal(request) => self.cef_runtime.reveal_download(&request.id),
         }
     }
+}
 
+impl desktop_ipc::notifications::NotificationContext for DesktopShellContext<'_> {
     fn notification(
         &mut self,
         command: &NotificationCommand,
@@ -247,7 +266,9 @@ impl desktop_ipc::NativeShellContext for DesktopShellContext<'_> {
                 .map_err(|error| desktop_ipc::unsupported_notification(command, error.to_string())),
         }
     }
+}
 
+impl desktop_ipc::files::FilesContext for DesktopShellContext<'_> {
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
         desktop_files::AppDataFs::open(self.paths)?.dispatch(command)
     }

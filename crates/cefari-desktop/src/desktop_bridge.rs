@@ -3,7 +3,7 @@
 use cefari_core::{CefariIpcError, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse};
 use serde_json::Value;
 
-use crate::desktop_ipc::{DesktopIpcDispatcher, NativeShellContext};
+use crate::desktop_ipc::{DesktopIpcContext, DesktopIpcDispatcher};
 
 pub const CEFARI_DEFAULT_DEV_PORT: u16 = 5173;
 pub const CEFARI_DEFAULT_STYLES: &str = r".cefari-drag {
@@ -316,7 +316,7 @@ impl CefariBridge {
         &self,
         origin: &str,
         request_json: &str,
-        context: &mut impl NativeShellContext,
+        context: &mut impl DesktopIpcContext,
     ) -> String {
         let request_id = request_id(request_json);
 
@@ -431,18 +431,20 @@ mod tests {
         NavigationDecision, NavigationPolicy, NavigationSurface, origin_from_url,
         transport_error_response_json,
     };
-    use crate::desktop_ipc::NativeShellContext;
+    use crate::desktop_ipc;
 
     #[derive(Debug, Default)]
     struct FakeShellContext {
         update_state_calls: usize,
     }
 
-    impl NativeShellContext for FakeShellContext {
+    impl desktop_ipc::app::AppContext for FakeShellContext {
         fn quit_app(&mut self) -> Result<()> {
             Ok(())
         }
+    }
 
+    impl desktop_ipc::windows::WindowContext for FakeShellContext {
         fn window_current(&mut self) -> Result<WindowState> {
             Ok(window_state())
         }
@@ -472,7 +474,9 @@ mod tests {
         fn window_set_title(&mut self, _request: &WindowSetTitleRequest) -> Result<WindowState> {
             Ok(window_state())
         }
+    }
 
+    impl desktop_ipc::shell::ShellContext for FakeShellContext {
         fn open_logs(&mut self) -> Result<()> {
             Ok(())
         }
@@ -484,7 +488,9 @@ mod tests {
         fn open_external_url(&mut self, _url: &str) -> Result<()> {
             Ok(())
         }
+    }
 
+    impl desktop_ipc::updates::UpdateContext for FakeShellContext {
         fn update_state(&mut self) -> Result<UpdateStateResult> {
             self.update_state_calls += 1;
             Ok(UpdateStateResult {
@@ -511,21 +517,29 @@ mod tests {
         fn update_restart(&mut self) -> Result<()> {
             Ok(())
         }
+    }
 
+    impl desktop_ipc::service::ServiceContext for FakeShellContext {
         fn service_status(&mut self) -> Result<ServiceStatusResult> {
             Ok(ServiceStatusResult {
                 status: "unknown".to_owned(),
             })
         }
+    }
 
+    impl desktop_ipc::tray::TrayContext for FakeShellContext {
         fn tray_restore_window(&mut self) -> Result<TrayResult> {
             Ok(TrayResult { restored: true })
         }
+    }
 
+    impl desktop_ipc::dialogs::DialogContext for FakeShellContext {
         fn dialog(&mut self, _command: &DialogCommand) -> Result<DialogResult> {
             Ok(DialogResult::Canceled)
         }
+    }
 
+    impl desktop_ipc::downloads::DownloadContext for FakeShellContext {
         fn download(&mut self, command: &DownloadCommand) -> Result<DownloadResult> {
             let id = match command {
                 DownloadCommand::Cancel(request) | DownloadCommand::Reveal(request) => {
@@ -534,7 +548,9 @@ mod tests {
             };
             Ok(DownloadResult::Canceled(DownloadIdResult { id }))
         }
+    }
 
+    impl desktop_ipc::notifications::NotificationContext for FakeShellContext {
         fn notification(
             &mut self,
             command: &NotificationCommand,
@@ -544,7 +560,9 @@ mod tests {
                 "desktop notifications are not available",
             ))
         }
+    }
 
+    impl desktop_ipc::files::FilesContext for FakeShellContext {
         fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
             match command {
                 FilesCommand::AppDataDir => Ok(FileResult::AppDataDir(AppDataDirInfo {
