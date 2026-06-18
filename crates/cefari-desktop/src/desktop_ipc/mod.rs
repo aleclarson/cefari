@@ -13,6 +13,7 @@ pub mod shell;
 pub mod tray;
 pub mod updates;
 pub mod windows;
+pub mod workers;
 
 pub use notifications::unsupported_notification;
 pub use updates::{update_apply_result, update_check_result, update_state_result};
@@ -31,6 +32,7 @@ pub trait DesktopIpcContext:
     + dialogs::DialogContext
     + notifications::NotificationContext
     + files::FilesContext
+    + workers::WorkersContext
 {
 }
 
@@ -45,6 +47,7 @@ impl<T> DesktopIpcContext for T where
         + dialogs::DialogContext
         + notifications::NotificationContext
         + files::FilesContext
+        + workers::WorkersContext
 {
 }
 
@@ -91,6 +94,7 @@ fn dispatch_command(
         CefariIpcCommand::Dialog(command) => dialogs::dispatch(command, context),
         CefariIpcCommand::Notification(command) => notifications::dispatch(command, context),
         CefariIpcCommand::Files(command) => files::dispatch(command, context),
+        CefariIpcCommand::Worker(command) => workers::dispatch(command, context),
     }
 }
 
@@ -119,12 +123,14 @@ mod tests {
         NotificationResult, NotificationSendRequest, OpenExternalUrlRequest, ServiceStatusResult,
         TrayResult, UpdateApplyRequest, UpdateApplyResult, UpdateCheckResult, UpdateStateKind,
         UpdateStateResult, WindowCreateRequest, WindowKind, WindowListResult,
-        WindowSetTitleRequest, WindowState, WindowTargetRequest,
+        WindowSetTitleRequest, WindowState, WindowTargetRequest, WorkerCommand, WorkerListResult,
+        WorkerIdResult, WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState,
+        WorkerStatus,
     };
 
     use super::{
         DesktopIpcDispatcher, app, dialogs, downloads, files, notifications, service, shell, tray,
-        updates, windows,
+        updates, windows, workers,
     };
 
     #[derive(Debug)]
@@ -390,6 +396,37 @@ mod tests {
         }
     }
 
+    impl workers::WorkersContext for FakeShellContext {
+        fn worker(&mut self, command: &WorkerCommand) -> Result<WorkerResult, CefariIpcError> {
+            match command {
+                WorkerCommand::Spawn(request) => {
+                    self.calls.push("worker_spawn");
+                    Ok(WorkerResult::Spawned(WorkerSpawnResult {
+                        id: "worker-1".to_owned(),
+                        worker: request.worker.clone(),
+                        status: WorkerStatus::Running,
+                    }))
+                }
+                WorkerCommand::Terminate(request) => {
+                    self.calls.push("worker_terminate");
+                    Ok(WorkerResult::Terminated(WorkerIdResult {
+                        id: request.id.clone(),
+                    }))
+                }
+                WorkerCommand::List => {
+                    self.calls.push("worker_list");
+                    Ok(WorkerResult::List(WorkerListResult {
+                        workers: vec![WorkerState {
+                            id: "worker-1".to_owned(),
+                            worker: "thumbnailer".to_owned(),
+                            status: WorkerStatus::Running,
+                        }],
+                    }))
+                }
+            }
+        }
+    }
+
     impl FakeShellContext {
         fn window_state(&self, visible: bool, focused: bool) -> WindowState {
             WindowState {
@@ -501,6 +538,11 @@ mod tests {
             CefariIpcCommand::Files(FilesCommand::Exists(cefari_core::FilePathRequest {
                 path: "state.json".to_owned(),
             })),
+            CefariIpcCommand::Worker(WorkerCommand::Spawn(WorkerSpawnRequest {
+                worker: "thumbnailer".to_owned(),
+                input_json: r#"{"imageId":"abc"}"#.to_owned(),
+            })),
+            CefariIpcCommand::Worker(WorkerCommand::List),
         ];
 
         for (index, command) in commands.into_iter().enumerate() {
@@ -546,6 +588,8 @@ mod tests {
                 "notification_remove_all_delivered",
                 "files_app_data_dir",
                 "files_exists",
+                "worker_spawn",
+                "worker_list",
             ]
         );
     }

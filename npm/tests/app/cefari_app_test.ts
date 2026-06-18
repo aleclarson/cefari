@@ -11,6 +11,16 @@ import {
 } from "../../src/app/mod.ts";
 import { isCefariDaemon } from "../../src/daemon.ts";
 
+declare module "../../src/app/workers.ts" {
+  interface CefariWorkerRegistry {
+    thumbnailer: {
+      input: { imageId: string };
+      output: { outputPath: string };
+      message: { progress: number };
+    };
+  }
+}
+
 Deno.test("reports unavailable outside the Cefari shell", async () => {
   withBridge(undefined);
 
@@ -107,6 +117,16 @@ Deno.test("wraps typed namespace commands", async () => {
     result: "revealed",
     payload: { id: "cef-1" },
   });
+  const worker = await cefari.workers.spawn("thumbnailer", {
+    imageId: "abc",
+  });
+  assertEquals(worker.id, "worker-1");
+  assertEquals(worker.worker, "thumbnailer");
+  assertEquals(worker.status, "running");
+  assertEquals(await cefari.workers.list(), [
+    { id: "worker-1", worker: "thumbnailer", status: "running" },
+  ]);
+  await worker.terminate();
   assertEquals(await cefari.notifications.permissionState(), { allowed: true });
   assertEquals(await cefari.notifications.requestPermission(), {
     allowed: true,
@@ -237,6 +257,27 @@ Deno.test("wraps typed namespace commands", async () => {
     {
       command: "download",
       payload: { download: "reveal", payload: { id: "cef-1" } },
+    },
+    {
+      command: "worker",
+      payload: {
+        worker: "spawn",
+        payload: {
+          worker: "thumbnailer",
+          inputJson: '{"imageId":"abc"}',
+        },
+      },
+    },
+    {
+      command: "worker",
+      payload: { worker: "list" },
+    },
+    {
+      command: "worker",
+      payload: {
+        worker: "terminate",
+        payload: { id: "worker-1" },
+      },
     },
     {
       command: "notification",
@@ -583,6 +624,7 @@ Deno.test("filters typed events", () => {
       Record<string, string>,
     ]
   > = [];
+  const workerMessages: number[] = [];
 
   const unsubscribeFocus = cefari.window.onFocused((state) => {
     focused.push(state.title);
@@ -604,6 +646,11 @@ Deno.test("filters typed events", () => {
       event.userText,
       event.userInfo,
     ]);
+  });
+  const unsubscribeWorker = cefari.on("worker.message", (event) => {
+    if (event.id === "worker-1") {
+      workerMessages.push(JSON.parse(event.messageJson).progress);
+    }
   });
 
   for (const handler of handlers) {
@@ -655,6 +702,17 @@ Deno.test("filters typed events", () => {
         },
       },
     });
+    handler({
+      event: "worker",
+      payload: {
+        event: "message",
+        payload: {
+          id: "worker-1",
+          worker: "thumbnailer",
+          messageJson: '{"progress":0.5}',
+        },
+      },
+    });
   }
 
   assertEquals(focused, ["Dashboard", "Settings"]);
@@ -662,12 +720,14 @@ Deno.test("filters typed events", () => {
   assertEquals(downloads, ["/tmp/file.txt"]);
   assertEquals(filteredFocus, ["settings"]);
   assertEquals(notifications, [["n1", "default", null, { buildId: "123" }]]);
+  assertEquals(workerMessages, [0.5]);
 
   unsubscribeFocus();
   unsubscribeDeepLink();
   unsubscribeDownload();
   unsubscribeFilteredFocus();
   unsubscribeNotification();
+  unsubscribeWorker();
   assertEquals(handlers.size, 0);
 });
 
@@ -943,6 +1003,46 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
             payload: {
               result: "revealed",
               payload: { id: command.payload.payload.id },
+            },
+          });
+      }
+      break;
+    case "worker":
+      switch (command.payload.worker) {
+        case "spawn":
+          return ok({
+            result: "worker",
+            payload: {
+              result: "spawned",
+              payload: {
+                id: "worker-1",
+                worker: command.payload.payload.worker,
+                status: "running",
+              },
+            },
+          });
+        case "terminate":
+          return ok({
+            result: "worker",
+            payload: {
+              result: "terminated",
+              payload: { id: command.payload.payload.id },
+            },
+          });
+        case "list":
+          return ok({
+            result: "worker",
+            payload: {
+              result: "list",
+              payload: {
+                workers: [
+                  {
+                    id: "worker-1",
+                    worker: "thumbnailer",
+                    status: "running",
+                  },
+                ],
+              },
             },
           });
       }

@@ -533,7 +533,8 @@ mod tests {
         FilesCommand, NotificationCommand, NotificationResult, ServiceStatusResult, TrayResult,
         UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
         WindowCreateRequest, WindowKind, WindowListResult, WindowSetTitleRequest, WindowState,
-        WindowTargetRequest,
+        WindowTargetRequest, WorkerCommand, WorkerListResult, WorkerResult, WorkerState,
+        WorkerStatus,
     };
 
     use super::{
@@ -682,6 +683,24 @@ mod tests {
                 })),
                 FilesCommand::Exists(_) => Ok(FileResult::Exists { exists: true }),
                 _ => anyhow::bail!("unsupported test file command"),
+            }
+        }
+    }
+
+    impl desktop_ipc::workers::WorkersContext for FakeShellContext {
+        fn worker(&mut self, command: &WorkerCommand) -> Result<WorkerResult, CefariIpcError> {
+            match command {
+                WorkerCommand::List => Ok(WorkerResult::List(WorkerListResult {
+                    workers: vec![WorkerState {
+                        id: "worker-1".to_owned(),
+                        worker: "thumbnailer".to_owned(),
+                        status: WorkerStatus::Running,
+                    }],
+                })),
+                _ => Err(crate::desktop_ipc::workers::unsupported_worker(
+                    command,
+                    "workers are not available in this test context",
+                )),
             }
         }
     }

@@ -30,6 +30,18 @@ export type {
 export { windowControls as window } from "./window.ts";
 export type { WindowEventFilter, WindowsApi } from "./windows.ts";
 export { windows } from "./windows.ts";
+export type {
+  CefariWorkerErrorEvent,
+  CefariWorkerExitEvent,
+  CefariWorkerHandle,
+  CefariWorkerInput,
+  CefariWorkerMessage,
+  CefariWorkerName,
+  CefariWorkerOutput,
+  CefariWorkerRegistry,
+  WorkersApi,
+} from "./workers.ts";
+export { workers } from "./workers.ts";
 export type { ShellApi } from "./shell.ts";
 export { shell } from "./shell.ts";
 export type { UpdateApplyOptions, UpdatesApi } from "./updates.ts";
@@ -70,8 +82,7 @@ import type { Unsubscribe } from "./transport.ts";
 import { updates, type UpdatesApi } from "./updates.ts";
 import { type WindowApi, windowControls } from "./window.ts";
 import { windows, type WindowsApi } from "./windows.ts";
-
-export interface CefariWorkerRegistry {}
+import { workers, type WorkersApi } from "./workers.ts";
 
 export type CefariApp = {
   isAvailable(): boolean;
@@ -85,6 +96,7 @@ export type CefariApp = {
   app: AppApi;
   window: WindowApi;
   windows: WindowsApi;
+  workers: WorkersApi;
   shell: ShellApi;
   updates: UpdatesApi;
   service: ServiceApi;
@@ -106,6 +118,7 @@ export const cefari: Readonly<CefariApp> = Object.freeze({
   app,
   window: windowControls,
   windows,
+  workers,
   shell,
   updates,
   service,

@@ -4,7 +4,7 @@ use cefari_core::{
     FileResult, FilesCommand, NotificationCommand, NotificationResult, RuntimePaths,
     ServiceStatusResult, TrayResult, UpdateCheckResult, UpdateStateResult, WindowCreateRequest,
     WindowIdEvent, WindowListResult, WindowSetTitleRequest, WindowState, WindowStateEvent,
-    WindowTarget, WindowTargetRequest,
+    WindowTarget, WindowTargetRequest, WorkerCommand, WorkerResult,
 };
 use tao::event_loop::EventLoopWindowTarget;
 use tracing::debug;
@@ -271,6 +271,15 @@ impl desktop_ipc::notifications::NotificationContext for DesktopShellContext<'_>
 impl desktop_ipc::files::FilesContext for DesktopShellContext<'_> {
     fn files(&mut self, command: &FilesCommand) -> Result<FileResult> {
         desktop_files::AppDataFs::open(self.paths)?.dispatch(command)
+    }
+}
+
+impl desktop_ipc::workers::WorkersContext for DesktopShellContext<'_> {
+    fn worker(&mut self, command: &WorkerCommand) -> Result<WorkerResult, CefariIpcError> {
+        Err(desktop_ipc::workers::unsupported_worker(
+            command,
+            "worker process manager is not wired yet",
+        ))
     }
 }
 

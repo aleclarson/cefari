@@ -11,6 +11,7 @@ pub mod shell;
 pub mod tray;
 pub mod updates;
 pub mod windows;
+pub mod workers;
 
 pub use dialogs::*;
 pub use downloads::*;
@@ -21,6 +22,7 @@ pub use shell::*;
 pub use tray::*;
 pub use updates::*;
 pub use windows::*;
+pub use workers::*;
 
 include!(concat!(env!("OUT_DIR"), "/ipc_generated.rs"));
 

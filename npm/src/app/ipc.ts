@@ -9,7 +9,7 @@ export type AppDataDirInfo = {
 	displayPath: string,
 };
 
-export type CefariIpcCommand = { command: "appQuit" } | { command: "windowCurrent" } | { command: "windowList" } | { command: "windowCreate"; payload: WindowCreateRequest } | { command: "windowShow"; payload: WindowTargetRequest } | { command: "windowFocus"; payload: WindowTargetRequest } | { command: "windowClose"; payload: WindowTargetRequest } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "download"; payload: DownloadCommand } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand };
+export type CefariIpcCommand = { command: "appQuit" } | { command: "windowCurrent" } | { command: "windowList" } | { command: "windowCreate"; payload: WindowCreateRequest } | { command: "windowShow"; payload: WindowTargetRequest } | { command: "windowFocus"; payload: WindowTargetRequest } | { command: "windowClose"; payload: WindowTargetRequest } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "download"; payload: DownloadCommand } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand } | { command: "worker"; payload: WorkerCommand };
 
 export type CefariIpcError = { code: "invalidCommand"; details: {
 	message: string,
@@ -22,7 +22,7 @@ export type CefariIpcError = { code: "invalidCommand"; details: {
 	reason: string,
 } };
 
-export type CefariIpcEvent = { event: "windowCreated"; payload: WindowStateEvent } | { event: "windowShown"; payload: WindowStateEvent } | { event: "windowFocused"; payload: WindowStateEvent } | { event: "windowBlurred"; payload: WindowStateEvent } | { event: "windowCloseRequested"; payload: WindowStateEvent } | { event: "windowClosed"; payload: WindowIdEvent } | { event: "windowMoved"; payload: WindowStateEvent } | { event: "windowResized"; payload: WindowStateEvent } | { event: "windowTitleChanged"; payload: WindowStateEvent } | { event: "deepLinkOpened"; payload: DeepLinkOpenEvent } | { event: "trayRestoreWindow" } | { event: "updateStateChanged"; payload: UpdateStateResult } | { event: "serviceStatusChanged"; payload: ServiceStatusResult } | { event: "download"; payload: DownloadEvent } | { event: "notification"; payload: NotificationEvent };
+export type CefariIpcEvent = { event: "windowCreated"; payload: WindowStateEvent } | { event: "windowShown"; payload: WindowStateEvent } | { event: "windowFocused"; payload: WindowStateEvent } | { event: "windowBlurred"; payload: WindowStateEvent } | { event: "windowCloseRequested"; payload: WindowStateEvent } | { event: "windowClosed"; payload: WindowIdEvent } | { event: "windowMoved"; payload: WindowStateEvent } | { event: "windowResized"; payload: WindowStateEvent } | { event: "windowTitleChanged"; payload: WindowStateEvent } | { event: "deepLinkOpened"; payload: DeepLinkOpenEvent } | { event: "trayRestoreWindow" } | { event: "updateStateChanged"; payload: UpdateStateResult } | { event: "serviceStatusChanged"; payload: ServiceStatusResult } | { event: "download"; payload: DownloadEvent } | { event: "notification"; payload: NotificationEvent } | { event: "worker"; payload: WorkerEvent };
 
 export type CefariIpcOutcome = { status: "ok"; payload: CefariIpcResult } | { status: "err"; payload: CefariIpcError };
 
@@ -36,7 +36,7 @@ export type CefariIpcResponse = {
 	outcome: CefariIpcOutcome,
 };
 
-export type CefariIpcResult = { result: "empty" } | { result: "window"; payload: WindowState } | { result: "windowList"; payload: WindowListResult } | { result: "reloadUi" } | { result: "externalUrl"; payload: ExternalUrlResult } | { result: "updateState"; payload: UpdateStateResult } | { result: "updateCheck"; payload: UpdateCheckResult } | { result: "updateApply"; payload: UpdateApplyResult } | { result: "serviceStatus"; payload: ServiceStatusResult } | { result: "tray"; payload: TrayResult } | { result: "download"; payload: DownloadResult } | { result: "notification"; payload: NotificationResult } | { result: "dialog"; payload: DialogResult } | { result: "file"; payload: FileResult };
+export type CefariIpcResult = { result: "empty" } | { result: "window"; payload: WindowState } | { result: "windowList"; payload: WindowListResult } | { result: "reloadUi" } | { result: "externalUrl"; payload: ExternalUrlResult } | { result: "updateState"; payload: UpdateStateResult } | { result: "updateCheck"; payload: UpdateCheckResult } | { result: "updateApply"; payload: UpdateApplyResult } | { result: "serviceStatus"; payload: ServiceStatusResult } | { result: "tray"; payload: TrayResult } | { result: "download"; payload: DownloadResult } | { result: "notification"; payload: NotificationResult } | { result: "dialog"; payload: DialogResult } | { result: "file"; payload: FileResult } | { result: "worker"; payload: WorkerResult };
 
 export type CopyFileRequest = {
 	from: string,
@@ -382,3 +382,59 @@ export type WindowTarget = {
 export type WindowTargetRequest = {
 	target: WindowTarget | null,
 };
+
+export type WorkerCommand = { worker: "spawn"; payload: WorkerSpawnRequest } | { worker: "terminate"; payload: WorkerIdRequest } | { worker: "list" };
+
+export type WorkerErrorEvent = {
+	id: string,
+	worker: string,
+	message: string,
+};
+
+export type WorkerEvent = { event: "message"; payload: WorkerMessageEvent } | { event: "exited"; payload: WorkerExitEvent } | { event: "error"; payload: WorkerErrorEvent };
+
+export type WorkerExitEvent = {
+	id: string,
+	worker: string,
+	code: number | null,
+	reason: string | null,
+};
+
+export type WorkerIdRequest = {
+	id: string,
+};
+
+export type WorkerIdResult = {
+	id: string,
+};
+
+export type WorkerListResult = {
+	workers: WorkerState[],
+};
+
+export type WorkerMessageEvent = {
+	id: string,
+	worker: string,
+	messageJson: string,
+};
+
+export type WorkerResult = { result: "spawned"; payload: WorkerSpawnResult } | { result: "terminated"; payload: WorkerIdResult } | { result: "list"; payload: WorkerListResult };
+
+export type WorkerSpawnRequest = {
+	worker: string,
+	inputJson: string,
+};
+
+export type WorkerSpawnResult = {
+	id: string,
+	worker: string,
+	status: WorkerStatus,
+};
+
+export type WorkerState = {
+	id: string,
+	worker: string,
+	status: WorkerStatus,
+};
+
+export type WorkerStatus = "running" | "exited";

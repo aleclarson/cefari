@@ -12,6 +12,7 @@ import type {
   UpdateApplyResult,
   UpdateCheckResult,
   UpdateStateResult,
+  WorkerResult,
   WindowListResult,
   WindowState,
 } from "./ipc.ts";
@@ -129,4 +130,10 @@ export async function invokeFile(
   command: CefariIpcCommand,
 ): Promise<FileResult> {
   return (await invokeResult(command, "file")).payload;
+}
+
+export async function invokeWorker(
+  command: CefariIpcCommand,
+): Promise<WorkerResult> {
+  return (await invokeResult(command, "worker")).payload;
 }

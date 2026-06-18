@@ -9,6 +9,9 @@ import type {
   NotificationResponseEvent,
   ServiceStatusResult,
   UpdateStateResult,
+  WorkerErrorEvent,
+  WorkerExitEvent,
+  WorkerMessageEvent,
   WindowIdEvent,
   WindowStateEvent,
 } from "./ipc.ts";
@@ -34,6 +37,9 @@ export type CefariEventMap = {
   "download.canceled": DownloadCanceledEvent;
   "download.failed": DownloadFailedEvent;
   "notification.response": NotificationResponseEvent;
+  "worker.message": WorkerMessageEvent;
+  "worker.exited": WorkerExitEvent;
+  "worker.error": WorkerErrorEvent;
 };
 
 export type CefariEventName = keyof CefariEventMap;
@@ -132,6 +138,18 @@ function eventPayload(
     case "notification.response":
       return event.event === "notification" &&
           event.payload.event === "response"
+        ? { matched: true, value: event.payload.payload }
+        : { matched: false };
+    case "worker.message":
+      return event.event === "worker" && event.payload.event === "message"
+        ? { matched: true, value: event.payload.payload }
+        : { matched: false };
+    case "worker.exited":
+      return event.event === "worker" && event.payload.event === "exited"
+        ? { matched: true, value: event.payload.payload }
+        : { matched: false };
+    case "worker.error":
+      return event.event === "worker" && event.payload.event === "error"
         ? { matched: true, value: event.payload.payload }
         : { matched: false };
   }
