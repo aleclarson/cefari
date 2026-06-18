@@ -65,4 +65,10 @@ export {
   type TrayCapabilityOptions,
   type ViteConfigInput,
   type ViteConfig,
+  type WorkerConfigInput,
+  type WorkerConfig,
+  type WorkerPermissionsInput,
+  type WorkerPermissions,
+  type WorkerPermissionValueInput,
+  type WorkerPermissionValue,
 } from "./config.js";

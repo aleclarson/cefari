@@ -16,6 +16,7 @@ export interface CefariConfigInput {
   app: AppConfigInput;
   browser?: BrowserConfigInput;
   capabilities?: CefariCapability[];
+  workers?: Record<string, WorkerConfigInput>;
   vite?: ViteConfigInput;
   daemon?: DaemonConfigInput;
   package: PackageConfigInput;
@@ -41,6 +42,21 @@ export interface ViteConfigInput {
 
 export interface DaemonConfigInput {
   entry: string;
+}
+
+export type WorkerPermissionValueInput = "none" | string[];
+
+export interface WorkerPermissionsInput {
+  read?: WorkerPermissionValueInput;
+  write?: WorkerPermissionValueInput;
+  net?: WorkerPermissionValueInput;
+  env?: WorkerPermissionValueInput;
+  run?: WorkerPermissionValueInput;
+}
+
+export interface WorkerConfigInput {
+  entry: string;
+  permissions: WorkerPermissionsInput;
 }
 
 export interface PackageConfigInput {
@@ -80,6 +96,21 @@ export interface ViteConfig {
 
 export interface DaemonConfig extends DaemonConfigInput {}
 
+export type WorkerPermissionValue = "none" | string[];
+
+export interface WorkerPermissions {
+  read: WorkerPermissionValue;
+  write: WorkerPermissionValue;
+  net: WorkerPermissionValue;
+  env: WorkerPermissionValue;
+  run: WorkerPermissionValue;
+}
+
+export interface WorkerConfig {
+  entry: string;
+  permissions: WorkerPermissions;
+}
+
 export interface PackageConfig extends PackageConfigInput {}
 
 export interface BrowserConfig {
@@ -92,6 +123,7 @@ export interface ResolvedCefariConfig {
   app: AppConfig;
   browser: BrowserConfig;
   capabilities: CefariCapability[];
+  workers: Record<string, WorkerConfig>;
   vite: ViteConfig;
   daemon?: DaemonConfig;
   package: PackageConfig;
@@ -101,6 +133,7 @@ export interface SerializableProjectConfig {
   app: AppConfig;
   browser: BrowserConfig;
   capabilities: CefariCapability[];
+  workers: Record<string, WorkerConfig>;
   vite: ViteConfig;
   daemon?: DaemonConfig;
   package: PackageConfig;
@@ -167,6 +200,7 @@ export function toSerializableProjectConfig(config: ResolvedCefariConfig): Seria
     app: { ...config.app },
     browser: { ...config.browser },
     capabilities: config.capabilities.map((capability) => ({ ...capability })),
+    workers: cloneWorkers(config.workers),
     vite: { ...config.vite },
     ...(config.daemon === undefined ? {} : { daemon: { ...config.daemon } }),
     package: { ...config.package },
@@ -182,6 +216,7 @@ function normalizeConfig(config: unknown, paths: { root: string; configPath: str
   const app = normalizeApp(input.app);
   const browser = normalizeBrowser(input.browser);
   const capabilities = normalizeCapabilities(input.capabilities);
+  const workers = normalizeWorkers(input.workers);
   const vite = normalizeVite(input.vite);
   const daemon = normalizeDaemon(input.daemon);
   const packageConfig = normalizePackage(input.package);
@@ -192,6 +227,7 @@ function normalizeConfig(config: unknown, paths: { root: string; configPath: str
     app,
     browser,
     capabilities,
+    workers,
     vite,
     daemon,
     package: packageConfig,
@@ -258,6 +294,61 @@ function normalizeCapabilities(value: unknown): CefariCapability[] {
       };
     }
     throw new Error(`capabilities[${index}].type must be "tray" or "deepLinks"`);
+  });
+}
+
+function normalizeWorkers(value: unknown): Record<string, WorkerConfig> {
+  if (value === undefined) {
+    return {};
+  }
+
+  const workers = asRecord(value, "workers");
+  const normalized: Record<string, WorkerConfig> = {};
+  for (const [id, config] of Object.entries(workers)) {
+    const field = `workers.${id}`;
+    if (!/^[a-z][a-z0-9-]*$/.test(id)) {
+      throw new Error(`${field} must use an id matching ^[a-z][a-z0-9-]*$`);
+    }
+    const worker = asRecord(config, field);
+    assertOnlyFields(worker, field, ["entry", "permissions"]);
+    normalized[id] = {
+      entry: relativePath(worker.entry, `${field}.entry`),
+      permissions: normalizeWorkerPermissions(worker.permissions, `${field}.permissions`),
+    };
+  }
+  return normalized;
+}
+
+function normalizeWorkerPermissions(value: unknown, field: string): WorkerPermissions {
+  const permissions = asRecord(value, field);
+  assertOnlyFields(permissions, field, ["read", "write", "net", "env", "run"]);
+  return {
+    read: normalizeWorkerPermissionValue(permissions.read, `${field}.read`, "path"),
+    write: normalizeWorkerPermissionValue(permissions.write, `${field}.write`, "path"),
+    net: normalizeWorkerPermissionValue(permissions.net, `${field}.net`, "name"),
+    env: normalizeWorkerPermissionValue(permissions.env, `${field}.env`, "name"),
+    run: normalizeWorkerPermissionValue(permissions.run, `${field}.run`, "path"),
+  };
+}
+
+function normalizeWorkerPermissionValue(
+  value: unknown,
+  field: string,
+  itemKind: "path" | "name",
+): WorkerPermissionValue {
+  if (value === undefined || value === "none") {
+    return "none";
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${field} must be "none" or a non-empty string array`);
+  }
+
+  return value.map((entry, index) => {
+    const item = requiredString(entry, `${field}[${index}]`);
+    if (itemKind === "path" && (item.startsWith("/") || item.split(/[\\/]/).includes(".."))) {
+      throw new Error(`${field}[${index}] must be a relative path or Cefari permission token`);
+    }
+    return item;
   });
 }
 
@@ -341,6 +432,37 @@ function asRecord(value: unknown, field: string): Record<string, unknown> {
     throw new Error(`${field} must be an object`);
   }
   return value as Record<string, unknown>;
+}
+
+function assertOnlyFields(value: Record<string, unknown>, field: string, allowedFields: string[]): void {
+  const allowed = new Set(allowedFields);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new Error(`${field}.${key} is not supported`);
+    }
+  }
+}
+
+function cloneWorkers(workers: Record<string, WorkerConfig>): Record<string, WorkerConfig> {
+  return Object.fromEntries(
+    Object.entries(workers).map(([id, worker]) => [
+      id,
+      {
+        entry: worker.entry,
+        permissions: {
+          read: clonePermissionValue(worker.permissions.read),
+          write: clonePermissionValue(worker.permissions.write),
+          net: clonePermissionValue(worker.permissions.net),
+          env: clonePermissionValue(worker.permissions.env),
+          run: clonePermissionValue(worker.permissions.run),
+        },
+      },
+    ]),
+  );
+}
+
+function clonePermissionValue(value: WorkerPermissionValue): WorkerPermissionValue {
+  return value === "none" ? "none" : [...value];
 }
 
 function requiredString(value: unknown, field: string): string {

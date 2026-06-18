@@ -46,6 +46,7 @@ test("loads an object config", async () => {
   assert.ok(config.daemon);
   assert.equal(config.daemon.entry, "daemon/main.ts");
   assert.equal(config.package.version, "0.1.0");
+  assert.deepEqual(config.workers, {});
 });
 
 test("loads a config without a daemon", async () => {
@@ -189,6 +190,120 @@ export default defineConfig({
   assert.deepEqual(deepLinks({ schemes: ["myapp"] }), { type: "deepLinks", schemes: ["myapp"] });
 });
 
+test("normalizes configured workers", async () => {
+  const root = await projectWithConfig(baseConfig(`workers: {
+    thumbnailer: {
+      entry: "workers/thumbnailer.ts",
+      permissions: {
+        read: ["$appData/uploads"],
+        write: ["$appData/cache"],
+        net: "none",
+      },
+    },
+  },`));
+
+  const config = await loadCefariConfig({ root });
+
+  assert.deepEqual(config.workers, {
+    thumbnailer: {
+      entry: "workers/thumbnailer.ts",
+      permissions: {
+        read: ["$appData/uploads"],
+        write: ["$appData/cache"],
+        net: "none",
+        env: "none",
+        run: "none",
+      },
+    },
+  });
+});
+
+test("rejects invalid worker config", async () => {
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        Thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {},
+        },
+      },`)),
+    }),
+    /workers\.Thumbnailer must use an id matching/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "../workers/thumbnailer.ts",
+          permissions: {},
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.entry must be a relative path inside the project/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.permissions must be an object/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {},
+          webviewPermissions: true,
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.webviewPermissions is not supported/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {
+            ffi: ["sqlite"],
+          },
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.permissions\.ffi is not supported/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {
+            read: [],
+          },
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.permissions\.read must be "none" or a non-empty string array/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {
+            read: ["/tmp/uploads"],
+          },
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.permissions\.read\[0\] must be a relative path or Cefari permission token/,
+  );
+});
+
 test("rejects invalid deep link schemes", async () => {
   await assert.rejects(
     loadCefariConfig({
@@ -265,7 +380,15 @@ test("reports clear daemon validation errors when daemon is configured", async (
 });
 
 test("creates a serializable projection", async () => {
-  const root = await projectWithConfig(baseConfig(`vite: { root: "ui", configFile: false, devPort: 3000 },`));
+  const root = await projectWithConfig(baseConfig(`workers: {
+    thumbnailer: {
+      entry: "workers/thumbnailer.ts",
+      permissions: {
+        read: ["$appData/uploads"],
+      },
+    },
+  },
+  vite: { root: "ui", configFile: false, devPort: 3000 },`));
 
   const config = await loadCefariConfig({ root });
   const serializable = toSerializableProjectConfig(config);
@@ -278,5 +401,6 @@ test("creates a serializable projection", async () => {
     configFile: false,
     devPort: 3000,
   });
+  assert.deepEqual(serializable.workers.thumbnailer.permissions.read, ["$appData/uploads"]);
   assert.equal(JSON.parse(JSON.stringify(serializable)).app.name, "Example App");
 });
