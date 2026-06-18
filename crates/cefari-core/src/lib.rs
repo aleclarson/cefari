@@ -16,7 +16,8 @@ mod error;
 
 pub use config::{
     AppConfig, BrowserConfig, CefariConfig, DaemonConfig, DeepLinkConfig, ServiceConfig,
-    UpdateConfig, load_config, save_config,
+    UpdateConfig, WorkerConfig, WorkerEntryConfig, WorkerPermissionConfig, WorkerPermissionsConfig,
+    load_config, save_config,
 };
 pub use error::{Error, Result};
 pub use ipc::*;

@@ -8,8 +8,9 @@ use anyhow::Result;
 use cefari_core::{
     AppConfig, BrowserConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, DaemonConfig,
     PendingUpdate, RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
-    check_for_update, install_service, install_update, load_config, packaged_resources_dir,
-    resolve_resource, service_manager, service_status, start_service, stop_service, update_id,
+    WorkerConfig, check_for_update, install_service, install_update, load_config,
+    packaged_resources_dir, resolve_resource, service_manager, service_status, start_service,
+    stop_service, update_id,
 };
 
 use crate::desktop_daemon::DaemonProcessConfig;
@@ -150,6 +151,10 @@ impl RuntimeOperations {
 
     pub fn deep_link_schemes(&self) -> &[String] {
         &self.config.deep_links.schemes
+    }
+
+    pub fn worker_config(&self) -> &WorkerConfig {
+        &self.config.workers
     }
 
     pub fn daemon_configured(&self) -> bool {

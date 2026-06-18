@@ -162,6 +162,20 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
       enabled: true,
       executable: "daemon/build-app-daemon",
     },
+    workers: {
+      entries: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {
+            read: ["$appData/uploads"],
+            write: "none",
+            net: "none",
+            env: "none",
+            run: "none",
+          },
+        },
+      },
+    },
   });
   assert.equal(await readFile(join(root, "build/desktop/build-app"), "utf8"), "desktop-runtime");
   assert.equal(existsSync(join(root, "build/cef/resources/archive.json")), true);

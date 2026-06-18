@@ -10,8 +10,8 @@ use tao::event_loop::EventLoopWindowTarget;
 use tracing::debug;
 
 use crate::{
-    desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, external, runtime,
-    window, window_state,
+    desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, desktop_workers,
+    external, runtime, window, window_state,
 };
 use crate::{desktop_notifications, desktop_ui, event_loop::UserEvent};
 
@@ -22,6 +22,7 @@ pub(crate) struct DesktopShellContext<'a> {
     pub(crate) paths: &'a RuntimePaths,
     pub(crate) cef_runtime: &'a mut desktop_cef::CefRuntime,
     pub(crate) runtime_operations: &'a runtime::RuntimeOperations,
+    pub(crate) worker_manager: &'a mut desktop_workers::DesktopWorkerManager,
     pub(crate) window_state: &'a mut window_state::WindowStateStore,
     pub(crate) source_window_id: Option<String>,
     pub(crate) desktop_notifier: Option<&'a desktop_notifications::DesktopNotifier>,
@@ -276,10 +277,7 @@ impl desktop_ipc::files::FilesContext for DesktopShellContext<'_> {
 
 impl desktop_ipc::workers::WorkersContext for DesktopShellContext<'_> {
     fn worker(&mut self, command: &WorkerCommand) -> Result<WorkerResult, CefariIpcError> {
-        Err(desktop_ipc::workers::unsupported_worker(
-            command,
-            "worker process manager is not wired yet",
-        ))
+        self.worker_manager.dispatch(command)
     }
 }
 

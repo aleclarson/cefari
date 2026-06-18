@@ -123,8 +123,8 @@ mod tests {
         NotificationResult, NotificationSendRequest, OpenExternalUrlRequest, ServiceStatusResult,
         TrayResult, UpdateApplyRequest, UpdateApplyResult, UpdateCheckResult, UpdateStateKind,
         UpdateStateResult, WindowCreateRequest, WindowKind, WindowListResult,
-        WindowSetTitleRequest, WindowState, WindowTargetRequest, WorkerCommand, WorkerListResult,
-        WorkerIdResult, WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState,
+        WindowSetTitleRequest, WindowState, WindowTargetRequest, WorkerCommand, WorkerIdResult,
+        WorkerListResult, WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState,
         WorkerStatus,
     };
 

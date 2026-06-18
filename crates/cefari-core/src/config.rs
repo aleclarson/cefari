@@ -13,6 +13,7 @@ pub struct CefariConfig {
     pub deep_links: DeepLinkConfig,
     pub updates: UpdateConfig,
     pub service: ServiceConfig,
+    pub workers: WorkerConfig,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -57,6 +58,63 @@ pub struct DaemonConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct DeepLinkConfig {
     pub schemes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkerConfig {
+    pub entries: std::collections::BTreeMap<String, WorkerEntryConfig>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkerEntryConfig {
+    pub entry: String,
+    pub permissions: WorkerPermissionsConfig,
+}
+
+impl Default for WorkerEntryConfig {
+    fn default() -> Self {
+        Self {
+            entry: String::new(),
+            permissions: WorkerPermissionsConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkerPermissionsConfig {
+    pub read: WorkerPermissionConfig,
+    pub write: WorkerPermissionConfig,
+    pub net: WorkerPermissionConfig,
+    pub env: WorkerPermissionConfig,
+    pub run: WorkerPermissionConfig,
+}
+
+impl Default for WorkerPermissionsConfig {
+    fn default() -> Self {
+        Self {
+            read: WorkerPermissionConfig::default(),
+            write: WorkerPermissionConfig::default(),
+            net: WorkerPermissionConfig::default(),
+            env: WorkerPermissionConfig::default(),
+            run: WorkerPermissionConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum WorkerPermissionConfig {
+    None(String),
+    Allow(Vec<String>),
+}
+
+impl Default for WorkerPermissionConfig {
+    fn default() -> Self {
+        Self::None("none".to_owned())
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -107,7 +165,10 @@ pub fn save_config(path: impl AsRef<Path>, config: &CefariConfig) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, BrowserConfig, CefariConfig, DaemonConfig, ServiceConfig};
+    use super::{
+        AppConfig, BrowserConfig, CefariConfig, DaemonConfig, ServiceConfig,
+        WorkerPermissionConfig,
+    };
 
     #[test]
     fn parses_defaultable_config() {
@@ -120,6 +181,16 @@ mod tests {
               },
               "deep_links": {
                 "schemes": ["testapp"]
+              },
+              "workers": {
+                "entries": {
+                  "thumbnailer": {
+                    "entry": "workers/thumbnailer.ts",
+                    "permissions": {
+                      "read": ["$appData/uploads"]
+                    }
+                  }
+                }
               }
             }"#,
         )
@@ -137,6 +208,10 @@ mod tests {
         assert_eq!(config.browser, BrowserConfig::default());
         assert_eq!(config.daemon, DaemonConfig::default());
         assert_eq!(config.service, ServiceConfig::default());
+        assert_eq!(
+            config.workers.entries["thumbnailer"].permissions.read,
+            WorkerPermissionConfig::Allow(vec!["$appData/uploads".to_owned()])
+        );
     }
 
     #[test]

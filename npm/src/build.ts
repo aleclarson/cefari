@@ -131,6 +131,9 @@ async function writeDesktopConfig(config: ResolvedCefariConfig, outputDir: strin
                 enabled: true,
                 executable: normalizePath(join("daemon", daemonExecutableName(config))),
               },
+        workers: {
+          entries: config.workers,
+        },
       },
       null,
       2,

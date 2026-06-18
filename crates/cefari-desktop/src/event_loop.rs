@@ -20,7 +20,7 @@ use tracing::{debug, error, info};
 use crate::{
     desktop_app::RuntimeGuards, desktop_bridge, desktop_cef, desktop_daemon, desktop_ipc,
     desktop_menu, desktop_notifications, desktop_single_instance, desktop_tray, desktop_ui,
-    external, runtime, shell_context::DesktopShellContext, window, window_state,
+    desktop_workers, external, runtime, shell_context::DesktopShellContext, window, window_state,
 };
 
 const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
@@ -39,6 +39,7 @@ pub(crate) enum UserEvent {
     CefMessagePump(Instant),
     ForwardedDeepLink(String),
     NotificationResponse(NotificationResponseEvent),
+    WorkerEvent(CefariIpcEvent),
 }
 
 pub(crate) fn run_native_shell(
@@ -108,6 +109,13 @@ pub(crate) fn run_native_shell(
         event_proxy: event_loop.create_proxy(),
     });
     let daemon_spawner = Arc::new(desktop_daemon::SystemDaemonSpawner);
+    let worker_manager = desktop_workers::DesktopWorkerManager::new(
+        runtime_operations.worker_config().clone(),
+        paths.clone(),
+        Arc::new(TaoWorkerEventSink {
+            event_proxy: event_loop.create_proxy(),
+        }),
+    );
 
     info!(window = ?window.id(), cefari_window = window::MAIN_WINDOW_ID, "cefari native shell started");
     let window_manager = window::WindowManager::with_main(window);
@@ -120,6 +128,7 @@ pub(crate) fn run_native_shell(
         shell_ui.clone(),
         paths,
         runtime_operations,
+        worker_manager,
         devtools_enabled,
         window_state_store,
         desktop_daemon::DaemonManager::new(daemon_config, daemon_spawner, daemon_event_sink),
@@ -135,6 +144,7 @@ fn run_event_loop(
     shell_ui: desktop_ui::ShellUi,
     paths: RuntimePaths,
     runtime_operations: runtime::RuntimeOperations,
+    mut worker_manager: desktop_workers::DesktopWorkerManager,
     devtools_enabled: bool,
     mut window_state_store: window_state::WindowStateStore,
     mut daemon_manager: desktop_daemon::DaemonManager,
@@ -172,6 +182,7 @@ fn run_event_loop(
                             paths: &paths,
                             cef_runtime: &mut guards.cef_runtime,
                             runtime_operations: &runtime_operations,
+                            worker_manager: &mut worker_manager,
                             window_state: &mut window_state_store,
                             source_window_id: None,
                             desktop_notifier: guards.desktop_notifier.as_ref(),
@@ -219,6 +230,7 @@ fn run_event_loop(
                         paths: &paths,
                         cef_runtime: &mut guards.cef_runtime,
                         runtime_operations: &runtime_operations,
+                        worker_manager: &mut worker_manager,
                         window_state: &mut window_state_store,
                         source_window_id: None,
                         desktop_notifier: guards.desktop_notifier.as_ref(),
@@ -248,6 +260,7 @@ fn run_event_loop(
                         paths: &paths,
                         cef_runtime: &mut guards.cef_runtime,
                         runtime_operations: &runtime_operations,
+                        worker_manager: &mut worker_manager,
                         window_state: &mut window_state_store,
                         source_window_id: None,
                         desktop_notifier: guards.desktop_notifier.as_ref(),
@@ -305,6 +318,7 @@ fn run_event_loop(
                     paths: &paths,
                     cef_runtime: &mut guards.cef_runtime,
                     runtime_operations: &runtime_operations,
+                    worker_manager: &mut worker_manager,
                     window_state: &mut window_state_store,
                     source_window_id: Some(source_window_id),
                     desktop_notifier: guards.desktop_notifier.as_ref(),
@@ -334,6 +348,11 @@ fn run_event_loop(
             }
             Event::UserEvent(UserEvent::Daemon(event)) => {
                 handle_daemon_event(&guards.cef_runtime, &mut daemon_manager, event);
+            }
+            Event::UserEvent(UserEvent::WorkerEvent(event)) => {
+                if let Err(error) = guards.cef_runtime.emit_event(&event) {
+                    debug!(%error, ?event, "failed to emit worker IPC event");
+                }
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -910,6 +929,19 @@ impl desktop_notifications::NotificationResponseSink for TaoNotificationResponse
     fn send_notification_response(&self, event: NotificationResponseEvent) -> Result<()> {
         self.event_proxy
             .send_event(UserEvent::NotificationResponse(event))
+            .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
+    }
+}
+
+#[derive(Debug)]
+struct TaoWorkerEventSink {
+    event_proxy: tao::event_loop::EventLoopProxy<UserEvent>,
+}
+
+impl desktop_workers::WorkerEventSink for TaoWorkerEventSink {
+    fn send_worker_event(&self, event: CefariIpcEvent) -> Result<()> {
+        self.event_proxy
+            .send_event(UserEvent::WorkerEvent(event))
             .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
     }
 }

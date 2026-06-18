@@ -13,6 +13,7 @@ mod desktop_notifications;
 mod desktop_single_instance;
 mod desktop_tray;
 mod desktop_ui;
+mod desktop_workers;
 mod event_loop;
 mod external;
 mod logging;

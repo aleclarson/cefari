@@ -697,10 +697,10 @@ mod tests {
                         status: WorkerStatus::Running,
                     }],
                 })),
-                _ => Err(crate::desktop_ipc::workers::unsupported_worker(
-                    command,
-                    "workers are not available in this test context",
-                )),
+                _ => Err(CefariIpcError::Unsupported {
+                    command: "worker".to_owned(),
+                    reason: format!("workers are not available in this test context: {command:?}"),
+                }),
             }
         }
     }
