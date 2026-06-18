@@ -161,6 +161,7 @@ Deno.test("wraps typed namespace commands", async () => {
     rootKind: "appData",
     displayPath: "/tmp/cefari",
   });
+  assertEquals(await cefari.files.exists("state.json"), true);
   assertEquals(
     await cefari.files.readBytes("blob.bin"),
     new Uint8Array([1, 2]),
@@ -339,6 +340,10 @@ Deno.test("wraps typed namespace commands", async () => {
     {
       command: "files",
       payload: { file: "appDataDir" },
+    },
+    {
+      command: "files",
+      payload: { file: "exists", payload: { path: "state.json" } },
     },
     {
       command: "files",
@@ -990,6 +995,11 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
           return ok({
             result: "file",
             payload: { result: "access", payload: { ok: true } },
+          });
+        case "exists":
+          return ok({
+            result: "file",
+            payload: { result: "exists", payload: { exists: true } },
           });
       }
   }

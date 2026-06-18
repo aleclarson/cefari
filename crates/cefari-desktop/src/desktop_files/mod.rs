@@ -58,6 +58,9 @@ impl AppDataFs {
             FilesCommand::Access(request) => Ok(FileResult::Access {
                 ok: self.access(request)?,
             }),
+            FilesCommand::Exists(request) => Ok(FileResult::Exists {
+                exists: self.access(request)?,
+            }),
         }
     }
 }
@@ -67,7 +70,7 @@ mod tests {
     use std::path::PathBuf;
 
     use cefari_core::{
-        FileContents, FileEncoding, FileReadRequest, FileResult, FileWriteOptions,
+        FileContents, FileEncoding, FilePathRequest, FileReadRequest, FileResult, FileWriteOptions,
         FileWriteRequest, FilesCommand, ReadDirRequest, RmRequest, RuntimePaths,
     };
 
@@ -101,6 +104,21 @@ mod tests {
             FileResult::Text {
                 contents: "{\"ok\":true}".to_owned()
             }
+        );
+
+        assert_eq!(
+            fs.dispatch(&FilesCommand::Exists(FilePathRequest {
+                path: "settings/state.json".to_owned(),
+            }))
+            .expect("existing path should resolve"),
+            FileResult::Exists { exists: true }
+        );
+        assert_eq!(
+            fs.dispatch(&FilesCommand::Exists(FilePathRequest {
+                path: "settings/missing.json".to_owned(),
+            }))
+            .expect("missing path should resolve"),
+            FileResult::Exists { exists: false }
         );
     }
 

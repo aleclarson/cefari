@@ -14,6 +14,7 @@ pub enum FilesCommand {
     CopyFile(CopyFileRequest),
     Stat(FilePathRequest),
     Access(FilePathRequest),
+    Exists(FilePathRequest),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -103,6 +104,7 @@ pub enum FileResult {
     DirEntries { entries: Vec<DirEntry> },
     Stat(FileStat),
     Access { ok: bool },
+    Exists { exists: bool },
     Written(FileWriteResult),
     Empty,
 }

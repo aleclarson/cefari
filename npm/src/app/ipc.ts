@@ -157,6 +157,8 @@ export type FileResult = { result: "appDataDir"; payload: AppDataDirInfo } | { r
 	entries: DirEntry[],
 } } | { result: "stat"; payload: FileStat } | { result: "access"; payload: {
 	ok: boolean,
+} } | { result: "exists"; payload: {
+	exists: boolean,
 } } | { result: "written"; payload: FileWriteResult } | { result: "empty" };
 
 export type FileStat = {
@@ -183,7 +185,7 @@ export type FileWriteResult = {
 	bytesWritten: number | null,
 };
 
-export type FilesCommand = { file: "appDataDir" } | { file: "readFile"; payload: FileReadRequest } | { file: "writeFile"; payload: FileWriteRequest } | { file: "readdir"; payload: ReadDirRequest } | { file: "mkdir"; payload: MkdirRequest } | { file: "rm"; payload: RmRequest } | { file: "rename"; payload: RenameRequest } | { file: "copyFile"; payload: CopyFileRequest } | { file: "stat"; payload: FilePathRequest } | { file: "access"; payload: FilePathRequest };
+export type FilesCommand = { file: "appDataDir" } | { file: "readFile"; payload: FileReadRequest } | { file: "writeFile"; payload: FileWriteRequest } | { file: "readdir"; payload: ReadDirRequest } | { file: "mkdir"; payload: MkdirRequest } | { file: "rm"; payload: RmRequest } | { file: "rename"; payload: RenameRequest } | { file: "copyFile"; payload: CopyFileRequest } | { file: "stat"; payload: FilePathRequest } | { file: "access"; payload: FilePathRequest } | { file: "exists"; payload: FilePathRequest };
 
 export type MkdirRequest = {
 	path: string,

@@ -305,6 +305,10 @@ console.log(root.displayPath);
 const state = await cefari.files.readJson("state.json");
 await cefari.files.writeJson("state.json", { ...state, openedAt: Date.now() });
 
+if (await cefari.files.exists("assets/icon.png")) {
+  console.log("icon is cached");
+}
+
 const iconUrl = await cefari.files.toObjectUrl("assets/icon.png", {
   type: "image/png",
 });
@@ -333,6 +337,7 @@ Current `cefari.files` methods:
 - `writeText(path, contents): Promise<void>`
 - `readBytes(path): Promise<Uint8Array>`
 - `writeBytes(path, contents): Promise<void>`
+- `exists(path): Promise<boolean>`
 - `readJson(path): Promise<JsonValue>`
 - `writeJson(path, value, options?): Promise<void>`
 - `toObjectUrl(path, options?): Promise<string>`

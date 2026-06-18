@@ -30,6 +30,7 @@ export type FilesApi = {
   writeText(path: string, contents: string): Promise<void>;
   readBytes(path: string): Promise<Uint8Array>;
   writeBytes(path: string, contents: Uint8Array | ArrayBuffer): Promise<void>;
+  exists(path: string): Promise<boolean>;
   readJson<T extends JsonValue = JsonValue>(path: string): Promise<T>;
   writeJson(path: string, value: JsonValue, options?: WriteJsonOptions): Promise<void>;
   toObjectUrl(path: string, options?: ObjectUrlOptions): Promise<string>;
@@ -65,6 +66,17 @@ async function writeBytes(
   await fs.writeFile(path, contents);
 }
 
+async function exists(path: string): Promise<boolean> {
+  const result = await invokeFile({
+    command: "files",
+    payload: { file: "exists", payload: { path } },
+  });
+  if (result.result !== "exists") {
+    throw new Error(`Unexpected file result: ${result.result}`);
+  }
+  return result.payload.exists;
+}
+
 async function readJson<T extends JsonValue = JsonValue>(
   path: string,
 ): Promise<T> {
@@ -98,6 +110,7 @@ export const files: Readonly<FilesApi> = Object.freeze({
   writeText,
   readBytes,
   writeBytes,
+  exists,
   readJson,
   writeJson,
   toObjectUrl,

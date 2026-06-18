@@ -401,6 +401,7 @@ APIs.
   - They can get the app-data directory display path.
   - They can read and write text.
   - They can read and write bytes.
+  - They can check whether an app-data path exists.
   - They can read and write JSON.
   - They can convert app-data files into object URLs for frontend use.
 - The app-data filesystem intentionally omits broad OS filesystem features.

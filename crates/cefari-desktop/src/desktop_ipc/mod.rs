@@ -381,6 +381,10 @@ mod tests {
                         display_path: "/tmp/cefari".to_owned(),
                     }))
                 }
+                FilesCommand::Exists(_) => {
+                    self.calls.push("files_exists");
+                    Ok(FileResult::Exists { exists: true })
+                }
                 _ => anyhow::bail!("unsupported test file command"),
             }
         }
@@ -494,6 +498,9 @@ mod tests {
             )),
             CefariIpcCommand::Notification(NotificationCommand::RemoveAllDelivered),
             CefariIpcCommand::Files(FilesCommand::AppDataDir),
+            CefariIpcCommand::Files(FilesCommand::Exists(cefari_core::FilePathRequest {
+                path: "state.json".to_owned(),
+            })),
         ];
 
         for (index, command) in commands.into_iter().enumerate() {
@@ -538,6 +545,7 @@ mod tests {
                 "notification_remove_delivered",
                 "notification_remove_all_delivered",
                 "files_app_data_dir",
+                "files_exists",
             ]
         );
     }

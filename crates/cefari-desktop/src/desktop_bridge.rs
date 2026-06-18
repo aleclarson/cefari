@@ -569,6 +569,7 @@ mod tests {
                     root_kind: "appData".to_owned(),
                     display_path: "/tmp/cefari".to_owned(),
                 })),
+                FilesCommand::Exists(_) => Ok(FileResult::Exists { exists: true }),
                 _ => anyhow::bail!("unsupported test file command"),
             }
         }
