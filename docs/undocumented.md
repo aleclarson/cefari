@@ -5,4 +5,6 @@ the supported feature inventory or another documentation page.
 
 ## Pending Placement
 
-- No pending user-facing behavior is currently tracked here.
+- `cefari.workers.spawn()` does not yet expose a first-class promise for the
+  worker's returned output value. The runtime currently emits that returned
+  value as a final `worker.message` event.

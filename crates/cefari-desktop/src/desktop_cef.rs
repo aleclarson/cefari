@@ -213,6 +213,12 @@ mod imp {
             append_chromium_switch(command_line, "deny-permission-prompts");
         }
 
+        if smoke_background_chromium_switches_requested() {
+            append_chromium_switch(command_line, "disable-gpu");
+            append_chromium_switch(command_line, "disable-gpu-compositing");
+            append_chromium_switch(command_line, "disable-gpu-sandbox");
+        }
+
         debug!(
             process_type = %display_cef_process_type(process_type),
             webgpu = browser_config.webgpu,
@@ -231,6 +237,10 @@ mod imp {
             std::env::var(super::CEFARI_DEV_MODE_ENV).as_deref() == Ok("1"),
             std::env::var(super::CEFARI_SMOKE_BACKGROUND_ENV).as_deref() == Ok("1"),
         )
+    }
+
+    fn smoke_background_chromium_switches_requested() -> bool {
+        std::env::var(super::CEFARI_SMOKE_BACKGROUND_ENV).as_deref() == Ok("1")
     }
 
     fn development_chromium_switches_requested_from(

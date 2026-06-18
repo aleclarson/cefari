@@ -23,6 +23,7 @@ If `PATH` is omitted, Cefari uses the current directory.
 - `build/daemon/main.ts`, when `daemon.entry` is configured
 - `build/daemon/<projectName>-daemon`, when `daemon.entry` is configured
 - `build/desktop/<projectName>`
+- `build/workers/`
 - `build/cef/resources/`
 - `build/cef/resources/archive.json`
 - `build/cef/manifest.json`
@@ -63,7 +64,18 @@ runtime and skip the Cargo build.
 
 `cefari build` writes `build/config/cefari.json` for the desktop runtime. The
 file contains the app identity, app version, configured deep-link schemes, and
-whether a daemon executable is available after packaging.
+whether a daemon executable is available after packaging. It also contains
+configured worker metadata with packaged worker entry paths.
+
+## Worker Builds
+
+Configured workers remain Deno source scripts. `cefari build` copies each
+worker entry directory into `build/workers/<workerId>/` and points packaged
+runtime config at that copied entry.
+
+Packaged apps currently require a resolvable `deno` executable at runtime for
+configured workers. Cefari launches workers with the per-worker permissions from
+`cefari.config.ts`.
 
 ## CEF Resources
 
@@ -75,7 +87,8 @@ locales when present, and platform framework files when present.
 Packaging verifies that the desktop binary used as the CEF subprocess is present,
 that `build/config/cefari.json` exists, that `archive.json` exists, that the CEF
 resource directory contains runtime payload files, and that `cef/locales/`
-contains at least one locale file.
+contains at least one locale file. It also includes `build/workers/` as the
+package resource target `workers`.
 
 On macOS, packages that include `Chromium Embedded Framework.framework` must be
 signed and notarized with that framework payload intact. Run

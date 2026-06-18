@@ -11,6 +11,15 @@ export default defineConfig({
     configFile: false,
     devPort: 5273,
   },
+  workers: {
+    "smoke-worker": {
+      entry: "workers/smoke-worker.ts",
+      permissions: {
+        read: ["$appData/smoke/work"],
+        write: ["$appData/smoke/work"],
+      },
+    },
+  },
   daemon: {
     entry: "daemon/main.ts",
   },

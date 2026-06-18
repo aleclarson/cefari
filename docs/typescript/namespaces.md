@@ -127,6 +127,47 @@ Current methods:
 - `onResized(handler, filter?): Unsubscribe`
 - `onTitleChanged(handler, filter?): Unsubscribe`
 
+## Workers
+
+Use `cefari.workers` to spawn configured Deno script workers from trusted
+frontend code:
+
+```ts
+import { cefari } from "cefari/app";
+
+const worker = await cefari.workers.spawn("thumbnailer", {
+  inputPath: "uploads/photo.jpg",
+});
+
+const unsubscribe = worker.onMessage((message) => {
+  console.log(message);
+});
+```
+
+Worker names, input, message, and output types come from the generated
+`.cefari/workers.d.ts` registry. A worker must be listed in `cefari.config.ts`
+before frontend code can spawn it.
+
+Workers run as Deno scripts with the permissions configured for that worker.
+They are separate from the app daemon and have their own process lifecycle.
+
+`worker.onMessage()` receives messages posted with `context.postMessage()` and
+the final value returned by the worker's `run()` function. Use `onExit()` and
+`onError()` to observe lifecycle and protocol failures.
+
+Current methods:
+
+- `spawn(name, input): Promise<CefariWorkerHandle>`
+- `terminate(id): Promise<void>`
+- `list(): Promise<WorkerState[]>`
+
+Current handle methods:
+
+- `terminate(): Promise<void>`
+- `onMessage(handler): Unsubscribe`
+- `onExit(handler): Unsubscribe`
+- `onError(handler): Unsubscribe`
+
 ## Shell
 
 Use `cefari.shell` for OS shell tasks:

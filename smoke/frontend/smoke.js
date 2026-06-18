@@ -70,6 +70,42 @@ async function expectFileEmpty(command) {
   return result.payload;
 }
 
+function commandWorker(worker, payload) {
+  return payload === undefined
+    ? { command: "worker", payload: { worker } }
+    : { command: "worker", payload: { worker, payload } };
+}
+
+async function invokeWorkerOk(worker, payload, resultTag) {
+  const result = await invokeOk(commandWorker(worker, payload), "worker");
+  if (result.payload.result !== resultTag) {
+    throw new Error(
+      `worker command returned ${result.payload.result}, expected ${resultTag}`,
+    );
+  }
+  return result.payload.payload;
+}
+
+function waitForWorkerEvent(id, eventName, predicate = () => true, timeoutMs = 10_000) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error(`timed out waiting for ${eventName} from worker ${id}`));
+    }, timeoutMs);
+    const unsubscribe = window.cefari.on((event) => {
+      if (event.event !== eventName || event.payload.id !== id) return;
+      if (!predicate(event.payload)) return;
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve(event.payload);
+    });
+  });
+}
+
+function parseWorkerMessage(event) {
+  return JSON.parse(event.messageJson);
+}
+
 async function writeResult(status, details = {}) {
   const payload = {
     status,
@@ -303,6 +339,83 @@ async function fileSmoke() {
   );
 }
 
+async function workerSmoke() {
+  const appData = await invokeOk(commandFile("appDataDir"), "file");
+  const appDataPath = appData.payload.payload.displayPath;
+  const inputPath = `${appDataPath}/smoke/work/nested/input.txt`;
+  const outputPath = `${appDataPath}/smoke/work/worker-output.txt`;
+  const deniedPath = `${appDataPath}/smoke/result.json`;
+
+  const spawned = await invokeWorkerOk("spawn", {
+    worker: "smoke-worker",
+    inputJson: JSON.stringify({ inputPath, outputPath, deniedPath }),
+  }, "spawned");
+  assert(spawned.worker === "smoke-worker", "spawned the wrong worker");
+
+  const started = parseWorkerMessage(
+    await waitForWorkerEvent(spawned.id, "worker.message", (event) =>
+      parseWorkerMessage(event).phase === "started"
+    ),
+  );
+  assert(started.phase === "started", "worker did not report start");
+
+  const denied = parseWorkerMessage(
+    await waitForWorkerEvent(spawned.id, "worker.message", (event) =>
+      parseWorkerMessage(event).phase === "permission-denied"
+    ),
+  );
+  assert(
+    denied.phase === "permission-denied",
+    "worker did not report denied read",
+  );
+
+  const result = parseWorkerMessage(
+    await waitForWorkerEvent(spawned.id, "worker.message", (event) =>
+      parseWorkerMessage(event).uppercased === "CEFARI SMOKE TEXT\n"
+    ),
+  );
+  assert(result.denied === true, "worker denied read was not enforced");
+
+  const workerOutput = await invokeOk(
+    commandFile("readFile", {
+      path: `${workRoot}/worker-output.txt`,
+      encoding: "utf8",
+    }),
+    "file",
+  );
+  assert(
+    workerOutput.payload.payload.contents === "CEFARI SMOKE TEXT\n",
+    "worker output file contents changed",
+  );
+
+  await waitForWorkerEvent(spawned.id, "worker.exited");
+  const listAfterExit = await invokeWorkerOk("list", undefined, "list");
+  assert(
+    listAfterExit.workers.some((worker) =>
+      worker.id === spawned.id && worker.status === "exited"
+    ),
+    "worker list did not include exited worker",
+  );
+
+  const held = await invokeWorkerOk("spawn", {
+    worker: "smoke-worker",
+    inputJson: JSON.stringify({
+      inputPath,
+      outputPath,
+      deniedPath,
+      holdMs: 30_000,
+    }),
+  }, "spawned");
+  await waitForWorkerEvent(held.id, "worker.message", (event) =>
+    parseWorkerMessage(event).phase === "holding"
+  );
+  const terminated = await invokeWorkerOk("terminate", { id: held.id }, "terminated");
+  assert(terminated.id === held.id, "terminated worker id mismatch");
+  await waitForWorkerEvent(held.id, "worker.exited");
+
+  return { firstWorker: spawned.id, terminatedWorker: held.id };
+}
+
 async function postReloadSmoke() {
   record("post-reload");
   const updateState = await invokeOk({ command: "updateState" }, "updateState");
@@ -357,6 +470,7 @@ async function postReloadSmoke() {
 
   await fileSmoke();
   await daemonRoundTripSmoke();
+  const worker = await workerSmoke();
 
   const title = await invokeOk({
     command: "windowSetTitle",
@@ -373,6 +487,7 @@ async function postReloadSmoke() {
 
   await writeResult("pass", {
     window: title.payload,
+    worker,
     service: service.outcome.status === "ok"
       ? service.outcome.payload.payload
       : service.outcome.payload,

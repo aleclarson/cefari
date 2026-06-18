@@ -23,6 +23,15 @@ export default defineConfig({
       schemes: ["my-cefari-app"],
     }),
   ],
+  workers: {
+    thumbnailer: {
+      entry: "workers/thumbnailer.ts",
+      permissions: {
+        read: ["$appData/uploads"],
+        write: ["$appData/cache"],
+      },
+    },
+  },
   vite: {
     root: "frontend",
     configFile: "frontend/vite.config.ts",
@@ -46,6 +55,7 @@ after evaluating the config. Legacy `frontend` fields are rejected.
 - [`app`](app.md): project name, display name, app identifier, and app icon.
 - [`browser`](browser.md): embedded browser feature opt-ins.
 - [`capabilities`](capabilities.md): opt-in native desktop integrations.
+- [`workers`](workers.md): configured Deno script workers and permissions.
 - [`vite`](frontend.md): Vite root, Vite config file, and development port.
 - [`daemon`](daemon.md): optional Deno daemon entrypoint and stream contract.
 - [`package`](package.md): packaged product name and app version.

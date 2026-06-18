@@ -10,12 +10,13 @@ have the native bridge unless a test installs a mock bridge.
 
 ## Package Boundary
 
-The package exports three public TypeScript entrypoints:
+The package exports four public TypeScript entrypoints:
 
 - `cefari/app`: ergonomic wrappers, namespace APIs, bridge helpers, event
   helpers, error helpers, and generated IPC types.
 - `cefari/ipc`: generated IPC types only.
 - `cefari/daemon`: daemon-side stdio helpers for configured daemon programs.
+- `cefari/worker`: helpers for Deno worker entry scripts.
 
 The default app object is `cefari`:
 
@@ -113,7 +114,8 @@ whose code is `unsupported`.
 
 ## Documentation Map
 
-- [Namespace APIs](namespaces.md): `app`, `window`, `windows`, `shell`, `updates`,
-  `service`, `tray`, `notifications`, `daemon`, `fs`, and `files`.
+- [Namespace APIs](namespaces.md): `app`, `window`, `windows`, `workers`,
+  `shell`, `updates`, `service`, `tray`, `notifications`, `daemon`, `fs`, and
+  `files`.
 - [Events And Errors](events-and-errors.md): typed event subscriptions,
   low-level event logging, thrown errors, and result-style helpers.

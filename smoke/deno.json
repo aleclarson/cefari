@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "cefari/worker": "../npm/src/worker.ts"
+  }
+}

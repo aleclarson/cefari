@@ -24,6 +24,11 @@ frontend APIs.
   - Dev mode runs the daemon from source.
   - Build mode compiles the daemon into an executable.
   - Apps without a daemon do not spawn, build, or package daemon artifacts.
+- The config can define Deno script workers.
+  - Each worker has a stable ID.
+  - Each worker has a source entrypoint.
+  - Each worker declares explicit Deno permissions.
+  - Workers are separate from the daemon.
 - The config can define package metadata.
   - It sets the packaged product name.
   - It sets the app version used by package metadata and update checks.
@@ -57,6 +62,10 @@ frontend APIs.
   - It makes a configured Deno daemon available to the desktop runtime.
   - It starts the native desktop runtime.
   - It stops the remaining child processes when one process exits or fails.
+- Dev mode can spawn configured workers on demand.
+  - Workers run from source.
+  - Workers use their configured Deno permissions.
+  - Workers receive input from trusted frontend IPC.
 - Dev mode uses the app's configured Vite port by default.
   - The CLI can override the Vite port for a run.
   - The CLI can expose a Chrome DevTools Protocol port for the embedded CEF
@@ -75,6 +84,7 @@ frontend APIs.
   - It writes runtime config into `build/config/cefari.json`.
   - It copies and compiles daemon artifacts only when a daemon is configured.
   - It prepares a desktop runtime executable.
+  - It copies configured worker source directories into `build/workers/`.
   - It prepares CEF resources and manifest data.
 - Cefari can build with a release profile.
   - Release builds use Cargo's release profile when the desktop runtime is built
@@ -107,6 +117,7 @@ frontend APIs.
   - It expects build artifacts to already exist.
   - It checks the desktop executable.
   - It checks runtime config.
+  - It checks worker resource output.
   - It checks CEF resource metadata.
   - It checks for locale files.
   - It includes configured tray icons.
@@ -166,6 +177,11 @@ frontend APIs.
   - The frontend talks to the runtime through `window.cefari`.
   - The runtime exposes a typed IPC contract.
   - The TypeScript package re-exports the generated IPC types.
+- Cefari can spawn configured workers from trusted frontend IPC.
+  - Workers run as Deno scripts.
+  - Worker permissions are converted to Deno CLI permission flags.
+  - Workers emit typed messages, errors, and exit events.
+  - Frontend code can terminate a running worker.
 - Cefari can receive configured OS deep links.
   - Configured URL schemes are registered in packaged apps.
   - Opened deep links are delivered to frontend code as events.
@@ -202,6 +218,26 @@ frontend APIs.
 - Cefari exposes typed errors.
   - Unsupported native calls report a typed unsupported error.
   - Runtime IPC errors are wrapped as `CefariError` values.
+
+## Worker APIs
+
+> This section covers configured Deno workers exposed to frontend code.
+
+- Apps can define worker contracts with `cefari/worker`.
+  - `defineWorker()` describes input, output, and message types.
+  - `runCefariWorker()` runs the stdio protocol used by the desktop runtime.
+- Cefari generates worker registry types during dev and build.
+  - Generated types live under `.cefari/workers.d.ts`.
+  - `cefari.workers.spawn()` only accepts configured worker names.
+  - Worker input and message handlers use the generated registry types.
+- Apps can spawn workers through `cefari.workers`.
+  - The runtime rejects unknown worker IDs.
+  - The runtime starts a separate Deno process for each spawn.
+  - The runtime sends the configured input as JSON.
+  - Worker messages are delivered as frontend events.
+  - The worker return value is delivered as a final worker message.
+  - Worker errors are delivered as worker error events.
+  - Worker exits are delivered as worker exit events.
 
 ## App And Window APIs
 
