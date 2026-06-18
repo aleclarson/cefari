@@ -10,6 +10,7 @@ import { loadCefariConfig } from "./config.js";
 import type { CefariCapability, ResolvedCefariConfig } from "./config.js";
 
 const CEFARI_DAEMON_LOG_ENV = "CEFARI_DAEMON_LOG";
+const CEFARI_DAEMON_ENV = "CEFARI_DAEMON";
 const CEFARI_DESKTOP_RUNTIME_ENV = "CEFARI_DESKTOP_RUNTIME";
 const CEFARI_DEV_MODE_ENV = "CEFARI_DEV_MODE";
 const CEFARI_DEVTOOLS_PORT_ENV = "CEFARI_DEVTOOLS_PORT";
@@ -24,7 +25,7 @@ export interface DevOptions {
 export interface DevSession {
   frontendUrl: string;
   devtoolsUrl: string;
-  daemon: ChildLike;
+  daemon?: ChildLike;
   desktop: ChildLike;
   close(): Promise<void>;
 }
@@ -80,7 +81,7 @@ export async function startCefariDev(options: DevOptions = {}, deps = defaultDev
   deps.stdout.write(`chrome devtools: ${devtoolsUrl}\n`);
   deps.stdout.write(`chrome-devtools start --browserUrl ${devtoolsUrl}\n`);
 
-  const daemon = spawnDaemon(config, deps);
+  const daemon = config.daemon === undefined ? undefined : spawnDaemon(config, deps);
   const desktop = spawnDesktop(config, frontendUrl, devtoolsPort, deps);
   const session = {
     frontendUrl,
@@ -88,7 +89,7 @@ export async function startCefariDev(options: DevOptions = {}, deps = defaultDev
     daemon,
     desktop,
     async close() {
-      daemon.kill("SIGTERM");
+      daemon?.kill("SIGTERM");
       desktop.kill("SIGTERM");
       await server.close();
     },
@@ -150,6 +151,7 @@ function spawnDaemon(config: ResolvedCefariConfig, deps: DevDependencies): Child
     cwd: config.root,
     env: {
       ...deps.env,
+      [CEFARI_DAEMON_ENV]: "1",
       [CEFARI_DAEMON_LOG_ENV]: daemonLog,
     },
     stdio: ["ignore", "inherit", "inherit"],
@@ -313,10 +315,11 @@ async function waitForDevSession(session: DevSession, deps: DevDependencies): Pr
   deps.process.once("SIGTERM", interrupt);
 
   try {
-    await Promise.race([
-      childExit("deno daemon", session.daemon),
-      childExit("cefari desktop app", session.desktop),
-    ]);
+    const exits = [childExit("cefari desktop app", session.desktop)];
+    if (session.daemon !== undefined) {
+      exits.push(childExit("deno daemon", session.daemon));
+    }
+    await Promise.race(exits);
   } finally {
     deps.process.off("SIGINT", interrupt);
     deps.process.off("SIGTERM", interrupt);

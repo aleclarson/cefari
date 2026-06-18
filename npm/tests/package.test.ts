@@ -11,11 +11,14 @@ import type { PackageDependencies } from "../src/index.js";
 const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
 
-async function projectWithPackageBuild(): Promise<string> {
+async function projectWithPackageBuild(options: { daemon?: boolean } = { daemon: true }): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "cefari-package-"));
   await mkdir(join(root, "build/frontend"), { recursive: true });
   await mkdir(join(root, "build/config"), { recursive: true });
-  await mkdir(join(root, "build/daemon"), { recursive: true });
+  if (options.daemon !== false) {
+    await mkdir(join(root, "build/daemon"), { recursive: true });
+    await writeFile(join(root, "build/daemon/package-app-daemon"), "daemon");
+  }
   await mkdir(join(root, "build/desktop"), { recursive: true });
   await mkdir(join(root, "build/cef/resources"), { recursive: true });
   await mkdir(join(root, "assets"), { recursive: true });
@@ -26,7 +29,6 @@ async function projectWithPackageBuild(): Promise<string> {
     join(root, "build/config/cefari.json"),
     JSON.stringify({ app: { identifier: "dev.cefari.package" }, deep_links: { schemes: ["packageapp"] } }),
   );
-  await writeFile(join(root, "build/daemon/package-app-daemon"), "daemon");
   await writeFile(join(root, "build/desktop/package-app"), "desktop");
   await writeFile(
     join(root, "build/cef/resources/archive.json"),
@@ -47,9 +49,9 @@ export default defineConfig({
     tray({ icon: "assets/tray.png" }),
     deepLinks({ schemes: ["packageapp", "packageapp+dev"] }),
   ],
-  daemon: {
+  ${options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
-  },
+  },`}
   package: {
     productName: "Package App",
     version: "0.1.0",
@@ -113,6 +115,18 @@ test("package writes metadata and manifest for build artifacts", async () => {
     command: "cargo-packager",
     args: ["--config", join(root, "dist/package/cargo-packager.toml"), "--out-dir", join(root, "dist/package/output")],
   });
+});
+
+test("package omits daemon artifacts when daemon is not configured", async () => {
+  const root = await projectWithPackageBuild({ daemon: false });
+
+  await runCefariPackage({ root }, packageDeps());
+
+  const metadata = await readFile(join(root, "dist/package/cargo-packager.toml"), "utf8");
+  assert.doesNotMatch(metadata, /target = "daemon"/);
+  const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
+  assert.equal(Object.hasOwn(manifest, "daemon_dir"), false);
+  assert.equal(Object.hasOwn(manifest, "daemon_executable"), false);
 });
 
 test("package sign maps to cargo-codesign macos args", async () => {

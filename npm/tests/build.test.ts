@@ -11,15 +11,19 @@ import type { BuildDependencies } from "../src/index.js";
 const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
 
-async function projectWithBuildConfig(): Promise<{ root: string; runtime: string; cefResources: string }> {
+async function projectWithBuildConfig(
+  options: { daemon?: boolean } = { daemon: true },
+): Promise<{ root: string; runtime: string; cefResources: string }> {
   const root = await mkdtemp(join(tmpdir(), "cefari-build-"));
   const runtime = join(root, "cefari-desktop");
   const cefResources = join(root, "cef-fixture");
   await mkdir(join(root, "ui"), { recursive: true });
-  await mkdir(join(root, "daemon"), { recursive: true });
+  if (options.daemon !== false) {
+    await mkdir(join(root, "daemon"), { recursive: true });
+    await writeFile(join(root, "daemon/main.ts"), "console.log('daemon');\n");
+  }
   await mkdir(cefResources, { recursive: true });
   await writeFile(join(root, "ui/deno.json"), JSON.stringify({ imports: { "local/app": "../src/app.ts" } }));
-  await writeFile(join(root, "daemon/main.ts"), "console.log('daemon');\n");
   await writeFile(runtime, "desktop-runtime");
   await writeFile(
     join(cefResources, "archive.json"),
@@ -47,9 +51,9 @@ export default defineConfig({
   capabilities: [
     deepLinks({ schemes: ["buildapp"] }),
   ],
-  daemon: {
+  ${options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
-  },
+  },`}
   package: {
     productName: "Build App",
     version: "0.1.0",
@@ -141,4 +145,35 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
   assert.equal(existsSync(join(root, "build/cef/resources/archive.json")), true);
   assert.equal(existsSync(join(root, "build/cef/resources/libcef.dylib")), true);
   assert.match(await readFile(join(root, "build/cef/manifest.json"), "utf8"), /fixture-sha1/);
+});
+
+test("builds frontend, desktop, and CEF outputs without daemon artifacts when daemon is omitted", async () => {
+  const { root, runtime, cefResources } = await projectWithBuildConfig({ daemon: false });
+  const spawned: Array<{ command: string; args: string[] }> = [];
+  const deps: BuildDependencies = {
+    async viteBuild() {
+      await mkdir(join(root, "build/frontend"), { recursive: true });
+      await writeFile(join(root, "build/frontend/index.html"), "<!doctype html>");
+    },
+    spawnSync(command, args) {
+      spawned.push({ command, args });
+      return { status: 0 };
+    },
+    env: {
+      CEFARI_DESKTOP_RUNTIME: runtime,
+      CEFARI_CEF_RESOURCES_DIR: cefResources,
+    },
+    stdout: {
+      write() {
+        return true;
+      },
+    },
+  };
+
+  await runCefariBuild({ root, release: true }, deps);
+
+  assert.deepEqual(spawned, []);
+  assert.equal(existsSync(join(root, "build/daemon")), false);
+  assert.equal(await readFile(join(root, "build/desktop/build-app"), "utf8"), "desktop-runtime");
+  assert.equal(existsSync(join(root, "build/cef/resources/archive.json")), true);
 });

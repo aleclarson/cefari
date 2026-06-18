@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
 import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
-import type { ResolvedCefariConfig } from "./config.js";
+import type { DaemonConfig, ResolvedCefariConfig } from "./config.js";
 import { resolveDesktopRuntime } from "./dev.js";
 
 const CEF_VERSION = "148.4.0";
@@ -32,18 +32,21 @@ export async function runCefariBuild(options: BuildOptions = {}, deps = defaultB
   });
   const buildDir = join(root, "build");
   const frontendOut = join(buildDir, "frontend");
-  const daemonOut = join(buildDir, "daemon");
   const desktopOut = join(buildDir, "desktop");
   const configOut = join(buildDir, "config");
 
   await mkdir(frontendOut, { recursive: true });
-  await mkdir(daemonOut, { recursive: true });
   await mkdir(desktopOut, { recursive: true });
   await mkdir(configOut, { recursive: true });
+  if (config.daemon !== undefined) {
+    await mkdir(join(buildDir, "daemon"), { recursive: true });
+  }
 
   await deps.viteBuild(createViteBuildConfig(config, frontendOut));
   await writeDesktopConfig(config, configOut);
-  await buildDaemon(config, daemonOut, deps);
+  if (config.daemon !== undefined) {
+    await buildDaemon(config, config.daemon, join(buildDir, "daemon"), deps);
+  }
   await prepareCefResources(root, deps);
   await buildDesktop(config, desktopOut, Boolean(options.release), deps);
 
@@ -121,8 +124,13 @@ async function writeDesktopConfig(config: ResolvedCefariConfig, outputDir: strin
   );
 }
 
-async function buildDaemon(config: ResolvedCefariConfig, outputDir: string, deps: BuildDependencies): Promise<void> {
-  const source = resolve(config.root, config.daemon!.entry);
+async function buildDaemon(
+  config: ResolvedCefariConfig,
+  daemon: DaemonConfig,
+  outputDir: string,
+  deps: BuildDependencies,
+): Promise<void> {
+  const source = resolve(config.root, daemon.entry);
   const sourceCopy = join(outputDir, "main.ts");
   await copyFile(source, sourceCopy);
 

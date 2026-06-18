@@ -20,7 +20,7 @@ class FakeChild extends EventEmitter implements ChildLike {
   }
 }
 
-async function projectWithDevConfig(): Promise<{ root: string; runtime: string }> {
+async function projectWithDevConfig(options: { daemon?: boolean } = { daemon: true }): Promise<{ root: string; runtime: string }> {
   const root = await mkdtemp(join(tmpdir(), "cefari-dev-"));
   const runtime = join(root, "cefari-desktop");
   await mkdir(join(root, "ui"), { recursive: true });
@@ -44,9 +44,9 @@ export default defineConfig({
   capabilities: [
     tray({ icon: "assets/tray.png" }),
   ],
-  daemon: {
+  ${options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
-  },
+  },`}
   package: {
     productName: "Dev App",
     version: "0.1.0",
@@ -128,6 +128,7 @@ test("starts Vite, daemon, and desktop with expected dev inputs", async () => {
   assert.equal(spawned[0].command, "deno");
   assert.deepEqual(spawned[0].args, ["run", "-A", "--watch", "daemon/main.ts"]);
   assert.equal(spawned[0].options.cwd, root);
+  assert.equal(spawned[0].options.env?.CEFARI_DAEMON, "1");
   assert.equal(spawned[0].options.env?.CEFARI_DAEMON_LOG, join(root, ".cefari", "daemon.log"));
 
   assert.equal(spawned[1].command, runtime);
@@ -142,5 +143,60 @@ test("starts Vite, daemon, and desktop with expected dev inputs", async () => {
 
   assert.equal(spawned[0].child.killedWith, "SIGTERM");
   assert.equal(spawned[1].child.killedWith, "SIGTERM");
+  assert.equal(closed, true);
+});
+
+test("starts Vite and desktop without a daemon when daemon is omitted", async () => {
+  const { root, runtime } = await projectWithDevConfig({ daemon: false });
+  const spawned: Array<{ command: string; args: string[]; options: Parameters<DevDependencies["spawn"]>[2]; child: FakeChild }> = [];
+  let closed = false;
+  const deps: DevDependencies = {
+    async createServer() {
+      return {
+        resolvedUrls: {
+          local: ["http://127.0.0.1:5555/"],
+          network: [],
+        },
+        async listen() {},
+        async close() {
+          closed = true;
+        },
+      };
+    },
+    spawn(command, args, options) {
+      const child = new FakeChild();
+      spawned.push({ command, args, options, child });
+      return child;
+    },
+    spawnSync() {
+      return { status: 0 };
+    },
+    env: {
+      CEFARI_DESKTOP_RUNTIME: runtime,
+    },
+    stdout: {
+      write() {
+        return true;
+      },
+    },
+    process: {
+      once() {
+        return undefined;
+      },
+      off() {
+        return undefined;
+      },
+    },
+  };
+
+  const session = await startCefariDev({ root, vitePort: 5555, devtoolsPort: 9222 }, deps);
+
+  assert.equal(session.daemon, undefined);
+  assert.equal(spawned.length, 1);
+  assert.equal(spawned[0].command, runtime);
+
+  await session.close();
+
+  assert.equal(spawned[0].child.killedWith, "SIGTERM");
   assert.equal(closed, true);
 });
