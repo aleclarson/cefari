@@ -1,20 +1,14 @@
 use std::{
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::Mutex,
 };
 
 use anyhow::Result;
 use cefari_core::{
-    AppConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, PendingUpdate,
+    AppConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, DaemonConfig, PendingUpdate,
     RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState, check_for_update,
     install_service, install_update, load_config, packaged_resources_dir, resolve_resource,
     service_manager, service_status, start_service, stop_service, update_id,
-};
-
-const DAEMON_EXECUTABLE_NAME: &str = if cfg!(windows) {
-    "cefari-daemon.exe"
-} else {
-    "cefari-daemon"
 };
 
 pub struct RuntimeOperations {
@@ -148,51 +142,67 @@ impl RuntimeOperations {
         &self.config.deep_links.schemes
     }
 
-    pub fn daemon_service_spec(&self) -> CefariServiceSpec {
+    pub fn daemon_service_spec(&self) -> Result<CefariServiceSpec> {
         let log_config = RuntimeLogConfig::new(&self.paths);
-        CefariServiceSpec::daemon(self.daemon_program())
+        Ok(CefariServiceSpec::daemon(self.daemon_program()?)
             .with_arg("--foreground")
             .with_working_directory(&self.paths.data_dir)
             .with_environment(
                 CEFARI_DAEMON_LOG_ENV,
                 log_config.daemon.file_path().display().to_string(),
-            )
+            ))
     }
 
     #[allow(dead_code)]
     pub fn install_daemon_service(&self) -> Result<()> {
         let manager = service_manager(None)?;
-        install_service(manager.as_ref(), &self.daemon_service_spec())?;
+        install_service(manager.as_ref(), &self.daemon_service_spec()?)?;
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn start_daemon_service(&self) -> Result<()> {
         let manager = service_manager(None)?;
-        start_service(manager.as_ref(), &self.daemon_service_spec())?;
+        start_service(manager.as_ref(), &self.daemon_service_spec()?)?;
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn stop_daemon_service(&self) -> Result<()> {
         let manager = service_manager(None)?;
-        stop_service(manager.as_ref(), &self.daemon_service_spec())?;
+        stop_service(manager.as_ref(), &self.daemon_service_spec()?)?;
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn daemon_service_status(&self) -> Result<String> {
         let manager = service_manager(None)?;
-        let status = service_status(manager.as_ref(), &self.daemon_service_spec())?;
+        let status = service_status(manager.as_ref(), &self.daemon_service_spec()?)?;
         Ok(format!("{status:?}"))
     }
 
-    fn daemon_program(&self) -> PathBuf {
-        self.paths
-            .resource_dir
-            .join("daemon")
-            .join(DAEMON_EXECUTABLE_NAME)
+    fn daemon_program(&self) -> Result<PathBuf> {
+        daemon_executable_path(&self.config.daemon, &self.paths.resource_dir)
     }
+}
+
+fn daemon_executable_path(config: &DaemonConfig, resource_dir: &Path) -> Result<PathBuf> {
+    if !config.enabled {
+        anyhow::bail!("daemon is not configured");
+    }
+    let executable = config
+        .executable
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("daemon executable is not configured"))?;
+    let executable_path = Path::new(executable);
+    if executable_path.is_absolute()
+        || executable_path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
+        anyhow::bail!("daemon executable must be a relative path inside resources");
+    }
+    Ok(resource_dir.join(executable_path))
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -251,9 +261,14 @@ fn platform_package_formats() -> &'static [cefari_core::PackageFormat] {
 
 #[cfg(test)]
 mod tests {
-    use cefari_core::{AppIdentity, CEFARI_DAEMON_LOG_ENV, RuntimePaths, UpdateCheckState};
+    use std::sync::Mutex;
 
-    use super::{DAEMON_EXECUTABLE_NAME, RuntimeOperations};
+    use cefari_core::{
+        AppIdentity, CEFARI_DAEMON_LOG_ENV, CefariConfig, DaemonConfig, RuntimePaths,
+        UpdateCheckState,
+    };
+
+    use super::{RuntimeOperations, RuntimeUpdateState, daemon_executable_path};
 
     #[test]
     fn defaults_to_unconfigured_updates_without_config_file() {
@@ -271,13 +286,36 @@ mod tests {
     }
 
     #[test]
-    fn builds_daemon_service_spec_from_runtime_paths() {
+    fn default_config_has_no_daemon_service_spec() {
         let paths = RuntimePaths::resolve(&AppIdentity::cefari()).expect("paths should resolve");
         let runtime = RuntimeOperations::load(&paths).expect("default config should load");
-        let spec = runtime.daemon_service_spec();
+
+        let error = runtime
+            .daemon_service_spec()
+            .expect_err("default runtime should not configure daemon");
+
+        assert!(error.to_string().contains("daemon is not configured"));
+    }
+
+    #[test]
+    fn builds_daemon_service_spec_from_configured_runtime_path() {
+        let paths = RuntimePaths::resolve(&AppIdentity::cefari()).expect("paths should resolve");
+        let runtime = runtime_with_daemon(
+            &paths,
+            DaemonConfig {
+                enabled: true,
+                executable: Some("daemon/example-daemon".to_owned()),
+            },
+        );
+        let spec = runtime
+            .daemon_service_spec()
+            .expect("daemon should be configured");
 
         assert_eq!(spec.label.to_qualified_name(), "dev.cefari.daemon");
-        assert!(spec.program.ends_with(DAEMON_EXECUTABLE_NAME));
+        assert_eq!(
+            spec.program,
+            paths.resource_dir.join("daemon/example-daemon")
+        );
         assert_eq!(spec.working_directory, Some(paths.data_dir));
         assert_eq!(
             spec.environment,
@@ -286,5 +324,37 @@ mod tests {
                 paths.log_dir.join("daemon.log").display().to_string()
             )]
         );
+    }
+
+    #[test]
+    fn rejects_daemon_executables_outside_resources() {
+        let paths = RuntimePaths::resolve(&AppIdentity::cefari()).expect("paths should resolve");
+        for executable in ["/tmp/daemon", "../daemon"] {
+            let error = daemon_executable_path(
+                &DaemonConfig {
+                    enabled: true,
+                    executable: Some(executable.to_owned()),
+                },
+                &paths.resource_dir,
+            )
+            .expect_err("daemon path should be rejected");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("daemon executable must be a relative path")
+            );
+        }
+    }
+
+    fn runtime_with_daemon(paths: &RuntimePaths, daemon: DaemonConfig) -> RuntimeOperations {
+        RuntimeOperations {
+            config: CefariConfig {
+                daemon,
+                ..CefariConfig::default()
+            },
+            paths: paths.clone(),
+            updates: Mutex::<RuntimeUpdateState>::default(),
+        }
     }
 }

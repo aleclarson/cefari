@@ -140,6 +140,10 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
     deep_links: {
       schemes: ["buildapp"],
     },
+    daemon: {
+      enabled: true,
+      executable: "daemon/build-app-daemon",
+    },
   });
   assert.equal(await readFile(join(root, "build/desktop/build-app"), "utf8"), "desktop-runtime");
   assert.equal(existsSync(join(root, "build/cef/resources/archive.json")), true);
@@ -173,6 +177,9 @@ test("builds frontend, desktop, and CEF outputs without daemon artifacts when da
   await runCefariBuild({ root, release: true }, deps);
 
   assert.deepEqual(spawned, []);
+  assert.deepEqual(JSON.parse(await readFile(join(root, "build/config/cefari.json"), "utf8")).daemon, {
+    enabled: false,
+  });
   assert.equal(existsSync(join(root, "build/daemon")), false);
   assert.equal(await readFile(join(root, "build/desktop/build-app"), "utf8"), "desktop-runtime");
   assert.equal(existsSync(join(root, "build/cef/resources/archive.json")), true);

@@ -54,7 +54,10 @@ pub(crate) fn run() -> Result<()> {
         |notifier| notifier.app_id().to_owned(),
     );
     let update_state = runtime_operations.update_check_config();
-    let daemon_program = runtime_operations.daemon_service_spec().program;
+    let daemon_program = runtime_operations
+        .daemon_service_spec()
+        .map(|spec| spec.program.display().to_string())
+        .unwrap_or_else(|_| "<disabled>".to_owned());
     let shell_ui = desktop_ui::ShellUi::load(&paths)?;
 
     let guards = RuntimeGuards {
@@ -67,7 +70,7 @@ pub(crate) fn run() -> Result<()> {
     info!(
         config = %paths.config_file.display(),
         updates_configured = update_state.is_configured(),
-        daemon = %daemon_program.display(),
+        daemon = %daemon_program,
         notifications_app_id,
         ui_entry = %shell_ui.entry_path.display(),
         ui_diagnostic = shell_ui.is_diagnostic(),

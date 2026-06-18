@@ -8,6 +8,7 @@ use crate::{Error, Result};
 #[serde(default, deny_unknown_fields)]
 pub struct CefariConfig {
     pub app: AppConfig,
+    pub daemon: DaemonConfig,
     pub deep_links: DeepLinkConfig,
     pub updates: UpdateConfig,
     pub service: ServiceConfig,
@@ -36,6 +37,13 @@ impl Default for AppConfig {
 pub struct UpdateConfig {
     pub endpoint: Option<String>,
     pub public_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct DaemonConfig {
+    pub enabled: bool,
+    pub executable: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
@@ -92,7 +100,7 @@ pub fn save_config(path: impl AsRef<Path>, config: &CefariConfig) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, CefariConfig, ServiceConfig};
+    use super::{AppConfig, CefariConfig, DaemonConfig, ServiceConfig};
 
     #[test]
     fn parses_defaultable_config() {
@@ -119,7 +127,29 @@ mod tests {
             }
         );
         assert_eq!(config.deep_links.schemes, vec!["testapp"]);
+        assert_eq!(config.daemon, DaemonConfig::default());
         assert_eq!(config.service, ServiceConfig::default());
+    }
+
+    #[test]
+    fn parses_configured_daemon() {
+        let config: CefariConfig = serde_json::from_str(
+            r#"{
+              "daemon": {
+                "enabled": true,
+                "executable": "daemon/example-daemon"
+              }
+            }"#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(
+            config.daemon,
+            DaemonConfig {
+                enabled: true,
+                executable: Some("daemon/example-daemon".to_owned()),
+            }
+        );
     }
 
     #[test]

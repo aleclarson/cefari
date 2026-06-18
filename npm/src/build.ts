@@ -117,6 +117,15 @@ async function writeDesktopConfig(config: ResolvedCefariConfig, outputDir: strin
         deep_links: {
           schemes: deepLinkSchemes,
         },
+        daemon:
+          config.daemon === undefined
+            ? {
+                enabled: false,
+              }
+            : {
+                enabled: true,
+                executable: normalizePath(join("daemon", daemonExecutableName(config))),
+              },
       },
       null,
       2,
@@ -210,6 +219,10 @@ function desktopExecutableName(config: ResolvedCefariConfig): string {
 
 function platformExecutableName(stem: string): string {
   return process.platform === "win32" ? `${stem}.exe` : stem;
+}
+
+function normalizePath(path: string): string {
+  return path.replaceAll("\\", "/");
 }
 
 function defaultBuildDependencies(): BuildDependencies {

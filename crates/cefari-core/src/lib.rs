@@ -15,7 +15,8 @@ pub mod updates;
 mod error;
 
 pub use config::{
-    AppConfig, CefariConfig, DeepLinkConfig, ServiceConfig, UpdateConfig, load_config, save_config,
+    AppConfig, CefariConfig, DaemonConfig, DeepLinkConfig, ServiceConfig, UpdateConfig,
+    load_config, save_config,
 };
 pub use error::{Error, Result};
 pub use ipc::*;
