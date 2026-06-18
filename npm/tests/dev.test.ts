@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -53,6 +53,14 @@ export default defineConfig({
   capabilities: [
     tray({ icon: "assets/tray.png" }),
   ],
+  workers: {
+    thumbnailer: {
+      entry: "workers/thumbnailer.ts",
+      permissions: {
+        read: ["$appData/uploads"],
+      },
+    },
+  },
   ${
       options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
@@ -146,6 +154,10 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
   });
   assert.equal(session.frontendUrl, "http://127.0.0.1:5555");
   assert.equal(session.devtoolsUrl, "http://127.0.0.1:9222");
+  assert.match(
+    await readFile(join(root, ".cefari/workers.d.ts"), "utf8"),
+    /"thumbnailer": InferCefariWorker<typeof worker_0>/,
+  );
 
   assert.equal(session.daemon, undefined);
   assert.equal(spawned.length, 1);

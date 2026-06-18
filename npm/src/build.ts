@@ -7,6 +7,7 @@ import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { DaemonConfig, ResolvedCefariConfig } from "./config.js";
 import { resolveDesktopRuntime } from "./dev.js";
+import { generateWorkerRegistryTypes } from "./workers.js";
 
 const CEF_VERSION = "148.4.0";
 const CEF_ARCHIVE_VERSION = "148.0.10";
@@ -35,6 +36,7 @@ export async function runCefariBuild(options: BuildOptions = {}, deps = defaultB
   const desktopOut = join(buildDir, "desktop");
   const configOut = join(buildDir, "config");
 
+  await generateWorkerRegistryTypes(config);
   await mkdir(frontendOut, { recursive: true });
   await mkdir(desktopOut, { recursive: true });
   await mkdir(configOut, { recursive: true });

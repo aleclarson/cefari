@@ -72,3 +72,8 @@ export {
   type WorkerPermissionValueInput,
   type WorkerPermissionValue,
 } from "./config.js";
+export {
+  generateWorkerRegistryTypes,
+  workerRegistryTypes,
+  WORKER_TYPES_PATH,
+} from "./workers.js";

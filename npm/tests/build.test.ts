@@ -54,6 +54,14 @@ export default defineConfig({
   capabilities: [
     deepLinks({ schemes: ["buildapp"] }),
   ],
+  workers: {
+    thumbnailer: {
+      entry: "workers/thumbnailer.ts",
+      permissions: {
+        read: ["$appData/uploads"],
+      },
+    },
+  },
   ${options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
   },`}
@@ -102,6 +110,10 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
 
   await runCefariBuild({ root, release: true }, deps);
 
+  assert.match(
+    await readFile(join(root, ".cefari/workers.d.ts"), "utf8"),
+    /"thumbnailer": InferCefariWorker<typeof worker_0>/,
+  );
   const frontendRoot = realpathSync(join(root, "ui"));
   assert.deepEqual(viteConfigs[0], {
     root: frontendRoot,

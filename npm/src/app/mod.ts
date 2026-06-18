@@ -71,6 +71,8 @@ import { updates, type UpdatesApi } from "./updates.ts";
 import { type WindowApi, windowControls } from "./window.ts";
 import { windows, type WindowsApi } from "./windows.ts";
 
+export interface CefariWorkerRegistry {}
+
 export type CefariApp = {
   isAvailable(): boolean;
   invoke(command: CefariIpcCommand): Promise<CefariIpcResult>;

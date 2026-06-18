@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { InlineConfig, ViteDevServer } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { CefariCapability, ResolvedCefariConfig } from "./config.js";
+import { generateWorkerRegistryTypes } from "./workers.js";
 
 const CEFARI_DAEMON_LOG_ENV = "CEFARI_DAEMON_LOG";
 const CEFARI_DAEMON_DEV_CWD_ENV = "CEFARI_DAEMON_DEV_CWD";
@@ -81,6 +82,7 @@ export async function startCefariDev(
   });
   const vitePort = options.vitePort ?? config.vite.devPort;
   validateFixedPort(vitePort, "vitePort");
+  await generateWorkerRegistryTypes(config);
 
   const server = await deps.createServer(createViteDevConfig(config, vitePort));
   await server.listen();
