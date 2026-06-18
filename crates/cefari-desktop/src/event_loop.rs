@@ -17,9 +17,9 @@ use tao::{
 use tracing::{debug, error, info};
 
 use crate::{
-    desktop_app::RuntimeGuards, desktop_bridge, desktop_cef, desktop_ipc, desktop_menu,
-    desktop_notifications, desktop_single_instance, desktop_tray, desktop_ui, external, runtime,
-    shell_context::DesktopShellContext, window, window_state,
+    desktop_app::RuntimeGuards, desktop_bridge, desktop_cef, desktop_daemon, desktop_ipc,
+    desktop_menu, desktop_notifications, desktop_single_instance, desktop_tray, desktop_ui,
+    external, runtime, shell_context::DesktopShellContext, window, window_state,
 };
 
 const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
@@ -34,6 +34,7 @@ pub(crate) enum UserEvent {
     Tray(tray_icon::TrayIconEvent),
     SmokeExit,
     BridgeIpc(desktop_cef::CefBridgeIpcRequest),
+    Daemon(desktop_daemon::DaemonEvent),
     CefMessagePump(Instant),
     ForwardedDeepLink(String),
     NotificationResponse(NotificationResponseEvent),
@@ -97,6 +98,15 @@ pub(crate) fn run_native_shell(
     let menu = desktop_menu::DesktopMenu::new(runtime_operations.app_config(), devtools_enabled)?;
     menu.install();
     schedule_startup_deep_links(&event_loop, startup_deep_links);
+    let daemon_config = if runtime_operations.daemon_configured() {
+        Some(runtime_operations.daemon_process_config()?)
+    } else {
+        None
+    };
+    let daemon_event_sink = Arc::new(TaoDaemonEventSink {
+        event_proxy: event_loop.create_proxy(),
+    });
+    let daemon_spawner = Arc::new(desktop_daemon::SystemDaemonSpawner);
 
     info!(window = ?window.id(), cefari_window = window::MAIN_WINDOW_ID, "cefari native shell started");
     let window_manager = window::WindowManager::with_main(window);
@@ -111,6 +121,7 @@ pub(crate) fn run_native_shell(
         runtime_operations,
         devtools_enabled,
         window_state_store,
+        desktop_daemon::DaemonManager::new(daemon_config, daemon_spawner, daemon_event_sink),
     )
 }
 
@@ -125,6 +136,7 @@ fn run_event_loop(
     runtime_operations: runtime::RuntimeOperations,
     devtools_enabled: bool,
     mut window_state_store: window_state::WindowStateStore,
+    mut daemon_manager: desktop_daemon::DaemonManager,
 ) -> ! {
     #![allow(clippy::too_many_lines)]
 
@@ -299,6 +311,9 @@ fn run_event_loop(
                     &mut window_manager,
                     response,
                 );
+            }
+            Event::UserEvent(UserEvent::Daemon(event)) => {
+                handle_daemon_event(&mut daemon_manager, event);
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -509,6 +524,35 @@ fn run_event_loop(
             control_flow,
         );
     });
+}
+
+fn handle_daemon_event(
+    daemon_manager: &mut desktop_daemon::DaemonManager,
+    event: desktop_daemon::DaemonEvent,
+) {
+    match event {
+        desktop_daemon::DaemonEvent::Chunk {
+            connection_id,
+            bytes,
+        } => {
+            debug!(
+                ?connection_id,
+                byte_count = bytes.len(),
+                "received daemon stream chunk"
+            );
+        }
+        desktop_daemon::DaemonEvent::Closed { connection_id } => {
+            daemon_manager.clear_closed(connection_id);
+            debug!(?connection_id, "daemon stream closed");
+        }
+        desktop_daemon::DaemonEvent::Error {
+            connection_id,
+            message,
+        } => {
+            daemon_manager.clear_closed(connection_id);
+            error!(?connection_id, %message, "daemon stream failed");
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -774,6 +818,19 @@ impl desktop_cef::MessagePumpScheduler for TaoMessagePumpScheduler {
             .send_event(UserEvent::CefMessagePump(cef_message_pump_deadline(
                 delay_ms,
             )))
+            .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
+    }
+}
+
+#[derive(Debug)]
+struct TaoDaemonEventSink {
+    event_proxy: tao::event_loop::EventLoopProxy<UserEvent>,
+}
+
+impl desktop_daemon::DaemonEventSink for TaoDaemonEventSink {
+    fn send_daemon_event(&self, event: desktop_daemon::DaemonEvent) -> Result<()> {
+        self.event_proxy
+            .send_event(UserEvent::Daemon(event))
             .map_err(|_| anyhow::anyhow!("desktop event loop is not available"))
     }
 }

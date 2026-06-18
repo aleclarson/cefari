@@ -11,6 +11,8 @@ use cefari_core::{
     service_manager, service_status, start_service, stop_service, update_id,
 };
 
+use crate::desktop_daemon::DaemonProcessConfig;
+
 pub struct RuntimeOperations {
     config: CefariConfig,
     paths: RuntimePaths,
@@ -142,15 +144,27 @@ impl RuntimeOperations {
         &self.config.deep_links.schemes
     }
 
+    pub fn daemon_configured(&self) -> bool {
+        self.config.daemon.enabled
+    }
+
     pub fn daemon_service_spec(&self) -> Result<CefariServiceSpec> {
-        let log_config = RuntimeLogConfig::new(&self.paths);
-        Ok(CefariServiceSpec::daemon(self.daemon_program()?)
+        let daemon = self.daemon_process_config()?;
+        Ok(CefariServiceSpec::daemon(daemon.program)
             .with_arg("--foreground")
-            .with_working_directory(&self.paths.data_dir)
-            .with_environment(
-                CEFARI_DAEMON_LOG_ENV,
-                log_config.daemon.file_path().display().to_string(),
-            ))
+            .with_working_directory(daemon.working_directory)
+            .with_environment(CEFARI_DAEMON_LOG_ENV, daemon_log_path(&self.paths)))
+    }
+
+    pub fn daemon_process_config(&self) -> Result<DaemonProcessConfig> {
+        Ok(DaemonProcessConfig {
+            program: self.daemon_program()?,
+            working_directory: self.paths.data_dir.clone(),
+            environment: vec![(
+                CEFARI_DAEMON_LOG_ENV.into(),
+                daemon_log_path(&self.paths).into(),
+            )],
+        })
     }
 
     #[allow(dead_code)]
@@ -203,6 +217,14 @@ fn daemon_executable_path(config: &DaemonConfig, resource_dir: &Path) -> Result<
         anyhow::bail!("daemon executable must be a relative path inside resources");
     }
     Ok(resource_dir.join(executable_path))
+}
+
+fn daemon_log_path(paths: &RuntimePaths) -> String {
+    RuntimeLogConfig::new(paths)
+        .daemon
+        .file_path()
+        .display()
+        .to_string()
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
