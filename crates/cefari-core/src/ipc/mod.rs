@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use specta::{Type, Types};
+use specta::Type;
 
 pub mod app;
 pub mod dialogs;
@@ -21,6 +21,8 @@ pub use shell::*;
 pub use tray::*;
 pub use updates::*;
 pub use windows::*;
+
+include!(concat!(env!("OUT_DIR"), "/ipc_generated.rs"));
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -44,85 +46,12 @@ pub enum CefariIpcOutcome {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
-#[serde(tag = "command", content = "payload", rename_all = "camelCase")]
-pub enum CefariIpcCommand {
-    AppQuit,
-    WindowCurrent,
-    WindowList,
-    WindowCreate(WindowCreateRequest),
-    WindowShow(WindowTargetRequest),
-    WindowFocus(WindowTargetRequest),
-    WindowClose(WindowTargetRequest),
-    WindowSetTitle(WindowSetTitleRequest),
-    OpenLogs,
-    ReloadUi,
-    OpenExternalUrl(OpenExternalUrlRequest),
-    UpdateState,
-    UpdateCheck,
-    UpdateApply(UpdateApplyRequest),
-    UpdateRestart,
-    ServiceStatus,
-    TrayRestoreWindow,
-    Download(DownloadCommand),
-    Notification(NotificationCommand),
-    Dialog(DialogCommand),
-    Files(FilesCommand),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
-#[serde(tag = "result", content = "payload", rename_all = "camelCase")]
-pub enum CefariIpcResult {
-    Empty,
-    Window(WindowState),
-    WindowList(WindowListResult),
-    ReloadUi,
-    ExternalUrl(ExternalUrlResult),
-    UpdateState(UpdateStateResult),
-    UpdateCheck(UpdateCheckResult),
-    UpdateApply(UpdateApplyResult),
-    ServiceStatus(ServiceStatusResult),
-    Tray(TrayResult),
-    Download(DownloadResult),
-    Notification(NotificationResult),
-    Dialog(DialogResult),
-    File(FileResult),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
-#[serde(tag = "event", content = "payload", rename_all = "camelCase")]
-pub enum CefariIpcEvent {
-    WindowCreated(WindowStateEvent),
-    WindowShown(WindowStateEvent),
-    WindowFocused(WindowStateEvent),
-    WindowBlurred(WindowStateEvent),
-    WindowCloseRequested(WindowStateEvent),
-    WindowClosed(WindowIdEvent),
-    WindowMoved(WindowStateEvent),
-    WindowResized(WindowStateEvent),
-    WindowTitleChanged(WindowStateEvent),
-    DeepLinkOpened(DeepLinkOpenEvent),
-    TrayRestoreWindow,
-    UpdateStateChanged(UpdateStateResult),
-    ServiceStatusChanged(ServiceStatusResult),
-    Download(DownloadEvent),
-    Notification(NotificationEvent),
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "code", content = "details", rename_all = "camelCase")]
 pub enum CefariIpcError {
     InvalidCommand { message: String },
     Denied { message: String },
     UnknownCommand { command: String },
     Unsupported { command: String, reason: String },
-}
-
-#[must_use]
-pub fn ipc_types() -> Types {
-    Types::default()
-        .register::<CefariIpcRequest>()
-        .register::<CefariIpcResponse>()
-        .register::<CefariIpcEvent>()
 }
 
 #[cfg(test)]
