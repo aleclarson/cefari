@@ -101,12 +101,15 @@ filesystem access.
 
 1. Run `cargo test -p cefari-core` to rebuild generated Rust IPC glue and check
    `crates/cefari-core/bindings/ipc.ts`.
-2. Copy it to `npm/src/app/ipc.ts`.
+2. Run `deno task ipc:sync` from the repository root to copy the checked-in
+   core binding to `npm/src/app/ipc.ts`.
 3. Update wrapper functions for new commands or result variants.
 4. Update these docs when behavior or supported command status changes.
 5. Run package and template checks.
 
-`pnpm --dir npm build` performs the binding copy before compiling the package.
+Use `deno task ipc:check` in verification to confirm the core binding is fresh
+and the npm copy matches it. `pnpm --dir npm build` compiles the checked-in npm
+copy; it does not run Specta or copy bindings.
 
 Generated IPC declarations should stay exact. Prose docs should explain command
 intent, supported status, failure behavior, and preferred wrappers rather than

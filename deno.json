@@ -1,0 +1,6 @@
+{
+  "tasks": {
+    "ipc:check": "deno run -A scripts/sync-ipc-bindings.ts --check",
+    "ipc:sync": "deno run -A scripts/sync-ipc-bindings.ts"
+  }
+}

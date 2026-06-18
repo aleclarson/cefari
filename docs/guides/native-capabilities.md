@@ -77,6 +77,7 @@ Run these checks after changing IPC contracts:
 ```bash
 cargo fmt --all --check
 cargo test -p cefari-core
+deno task ipc:sync
 cargo test -p cefari-desktop desktop_ipc
 pnpm --dir npm build
 pnpm --dir npm check
@@ -86,8 +87,9 @@ deno test tests/app
 Run `deno test tests/app` from the `npm/` directory. `cargo test -p cefari-core`
 rebuilds the generated Rust IPC glue, rejects duplicate capability names or
 top-level wire tags, and verifies `crates/cefari-core/bindings/ipc.ts` is
-current. `pnpm --dir npm build` refreshes `npm/src/app/ipc.ts` from the checked
-in core binding before TypeScript checks run.
+current. `deno task ipc:sync` copies the checked-in core binding to
+`npm/src/app/ipc.ts`; use `deno task ipc:check` when you only need to verify
+that both checked-in binding files match.
 
 ## Notifications
 
