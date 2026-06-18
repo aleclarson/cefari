@@ -1,12 +1,13 @@
 import { cp, mkdir, readFile, rm, writeFile, copyFile } from "node:fs/promises";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
 import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
-import type { DaemonConfig, ResolvedCefariConfig } from "./config.js";
+import type { DaemonConfig, ResolvedCefariConfig, WorkerConfigInput } from "./config.js";
 import { resolveDesktopRuntime } from "./dev.js";
+import { writeDesktopConfig } from "./desktop-config.js";
 import { generateWorkerRegistryTypes } from "./workers.js";
 
 const CEF_VERSION = "148.4.0";
@@ -35,17 +36,29 @@ export async function runCefariBuild(options: BuildOptions = {}, deps = defaultB
   const frontendOut = join(buildDir, "frontend");
   const desktopOut = join(buildDir, "desktop");
   const configOut = join(buildDir, "config");
+  const workersOut = join(buildDir, "workers");
 
   await generateWorkerRegistryTypes(config);
+  await rm(workersOut, { recursive: true, force: true });
   await mkdir(frontendOut, { recursive: true });
   await mkdir(desktopOut, { recursive: true });
   await mkdir(configOut, { recursive: true });
   if (config.daemon !== undefined) {
     await mkdir(join(buildDir, "daemon"), { recursive: true });
   }
+  await mkdir(workersOut, { recursive: true });
 
   await deps.viteBuild(createViteBuildConfig(config, frontendOut));
-  await writeDesktopConfig(config, configOut);
+  const packagedWorkers = await buildWorkers(config, workersOut);
+  await writeDesktopConfig(config, configOut, {
+    workers: packagedWorkers,
+    daemon:
+      config.daemon === undefined
+        ? undefined
+        : {
+            executable: normalizeResourcePath(join("daemon", daemonExecutableName(config))),
+          },
+  });
   if (config.daemon !== undefined) {
     await buildDaemon(config, config.daemon, join(buildDir, "daemon"), deps);
   }
@@ -103,42 +116,28 @@ function isLocalImportTarget(value: string): boolean {
   return value.startsWith(".") || value.startsWith("/");
 }
 
-async function writeDesktopConfig(config: ResolvedCefariConfig, outputDir: string): Promise<void> {
-  const deepLinkSchemes = config.capabilities
-    .filter((capability) => capability.type === "deepLinks")
-    .flatMap((capability) => capability.schemes);
-  await writeFile(
-    join(outputDir, "cefari.json"),
-    `${JSON.stringify(
-      {
-        app: {
-          identifier: config.app.identifier,
-          display_name: config.app.name,
-          version: config.package.version,
-        },
-        browser: {
-          webgpu: config.browser.webgpu,
-        },
-        deep_links: {
-          schemes: deepLinkSchemes,
-        },
-        daemon:
-          config.daemon === undefined
-            ? {
-                enabled: false,
-              }
-            : {
-                enabled: true,
-                executable: normalizePath(join("daemon", daemonExecutableName(config))),
-              },
-        workers: {
-          entries: config.workers,
-        },
-      },
-      null,
-      2,
-    )}\n`,
-  );
+async function buildWorkers(config: ResolvedCefariConfig, outputDir: string): Promise<Record<string, WorkerConfigInput>> {
+  const workers: Record<string, WorkerConfigInput> = {};
+  for (const [name, worker] of Object.entries(config.workers)) {
+    const source = resolve(config.root, worker.entry);
+    const relativeDir = dirname(worker.entry);
+    const destinationDir = join(outputDir, name);
+    if (relativeDir === ".") {
+      await mkdir(destinationDir, { recursive: true });
+      await copyFile(source, join(destinationDir, basename(worker.entry)));
+    } else {
+      await cp(resolve(config.root, relativeDir), destinationDir, { recursive: true });
+    }
+    workers[name] = {
+      ...worker,
+      entry: normalizeResourcePath(["workers", name, basename(worker.entry)].join("/")),
+    };
+  }
+  return workers;
+}
+
+function normalizeResourcePath(path: string): string {
+  return path.replaceAll("\\", "/");
 }
 
 async function buildDaemon(

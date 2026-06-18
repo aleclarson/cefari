@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { InlineConfig, ViteDevServer } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { CefariCapability, ResolvedCefariConfig } from "./config.js";
+import { CEFARI_CONFIG_FILE_ENV, writeDesktopConfig } from "./desktop-config.js";
 import { generateWorkerRegistryTypes } from "./workers.js";
 
 const CEFARI_DAEMON_LOG_ENV = "CEFARI_DAEMON_LOG";
@@ -92,12 +93,13 @@ export async function startCefariDev(
   validateFixedPort(devtoolsPort, "devtoolsPort");
   const devtoolsUrl = `http://127.0.0.1:${devtoolsPort}`;
   await writeDevtoolsFile(root, devtoolsPort, devtoolsUrl);
+  const desktopConfigFile = await writeDesktopConfig(config, join(root, ".cefari", "config"));
 
   deps.stdout.write(`frontend dev server: ${frontendUrl}\n`);
   deps.stdout.write(`chrome devtools: ${devtoolsUrl}\n`);
   deps.stdout.write(`chrome-devtools start --browserUrl ${devtoolsUrl}\n`);
 
-  const desktop = spawnDesktop(config, frontendUrl, devtoolsPort, deps);
+  const desktop = spawnDesktop(config, frontendUrl, devtoolsPort, desktopConfigFile, deps);
   const session = {
     frontendUrl,
     devtoolsUrl,
@@ -168,6 +170,7 @@ function spawnDesktop(
   config: ResolvedCefariConfig,
   frontendUrl: string,
   devtoolsPort: number,
+  desktopConfigFile: string,
   deps: DevDependencies,
 ): ChildLike {
   const runtime = resolveDesktopRuntime(config.root, deps);
@@ -178,6 +181,7 @@ function spawnDesktop(
       CEFARI_FRONTEND_URL: frontendUrl,
       [CEFARI_DEV_MODE_ENV]: "1",
       [CEFARI_DEVTOOLS_PORT_ENV]: devtoolsPort.toString(),
+      [CEFARI_CONFIG_FILE_ENV]: desktopConfigFile,
       CEFARI_RESOURCE_DIR: config.root,
       ...daemonDevEnv(config),
       ...trayIconEnv(config),

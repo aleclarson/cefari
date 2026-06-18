@@ -172,6 +172,7 @@ function ensureBuildArtifacts(config: ResolvedCefariConfig, buildDir: string, ce
     join(buildDir, "frontend", "index.html"),
     join(buildDir, "config", "cefari.json"),
     join(buildDir, "desktop", desktopExecutableName(config)),
+    join(buildDir, "workers"),
     join(cefResources, "archive.json"),
     ...(config.daemon === undefined ? [] : [join(buildDir, "daemon", daemonExecutableName(config))]),
   ]) {
@@ -215,6 +216,7 @@ async function writePackageMetadata(
     ...resourceToml(join(buildDir, "frontend"), "frontend"),
     ...resourceToml(join(buildDir, "config"), "config"),
     ...(config.daemon === undefined ? [] : resourceToml(join(buildDir, "daemon"), "daemon")),
+    ...resourceToml(join(buildDir, "workers"), "workers"),
     ...resourceToml(cefResources, "cef"),
     ...(tray === undefined ? [] : resourceToml(resolve(config.root, tray.icon), "tray-icon.png")),
     ...deepLinks.flatMap((capability) => deepLinkProtocolToml(capability.schemes)),
@@ -244,6 +246,7 @@ async function writePackageManifest(
           daemon_dir: normalizePath(join(buildDir, "daemon")),
           daemon_executable: normalizePath(join(buildDir, "daemon", daemonExecutableName(config))),
         }),
+    workers_dir: normalizePath(join(buildDir, "workers")),
     cef_resources: normalizePath(cefResources),
     cef_archive_json: normalizePath(join(cefResources, "archive.json")),
   };

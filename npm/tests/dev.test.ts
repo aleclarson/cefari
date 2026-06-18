@@ -158,6 +158,36 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
     await readFile(join(root, ".cefari/workers.d.ts"), "utf8"),
     /"thumbnailer": InferCefariWorker<typeof worker_0>/,
   );
+  assert.deepEqual(JSON.parse(await readFile(join(root, ".cefari/config/cefari.json"), "utf8")), {
+    app: {
+      identifier: "dev.cefari.dev",
+      display_name: "Dev App",
+      version: "0.1.0",
+    },
+    browser: {
+      webgpu: false,
+    },
+    deep_links: {
+      schemes: [],
+    },
+    daemon: {
+      enabled: false,
+    },
+    workers: {
+      entries: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {
+            read: ["$appData/uploads"],
+            write: "none",
+            net: "none",
+            env: "none",
+            run: "none",
+          },
+        },
+      },
+    },
+  });
 
   assert.equal(session.daemon, undefined);
   assert.equal(spawned.length, 1);
@@ -169,6 +199,10 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
   );
   assert.equal(spawned[0].options.env?.CEFARI_DEV_MODE, "1");
   assert.equal(spawned[0].options.env?.CEFARI_DEVTOOLS_PORT, "9222");
+  assert.equal(
+    spawned[0].options.env?.CEFARI_CONFIG_FILE,
+    join(root, ".cefari/config/cefari.json"),
+  );
   assert.equal(spawned[0].options.env?.CEFARI_RESOURCE_DIR, root);
   assert.equal(
     spawned[0].options.env?.CEFARI_DAEMON_DEV_ENTRY,

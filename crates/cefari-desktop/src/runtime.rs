@@ -17,6 +17,7 @@ use crate::desktop_daemon::DaemonProcessConfig;
 
 const CEFARI_DAEMON_DEV_ENTRY_ENV: &str = "CEFARI_DAEMON_DEV_ENTRY";
 const CEFARI_DAEMON_DEV_CWD_ENV: &str = "CEFARI_DAEMON_DEV_CWD";
+const CEFARI_CONFIG_FILE_ENV: &str = "CEFARI_CONFIG_FILE";
 
 pub struct RuntimeOperations {
     config: CefariConfig,
@@ -33,7 +34,10 @@ struct RuntimeUpdateState {
 
 impl RuntimeOperations {
     pub fn load(paths: &RuntimePaths) -> Result<Self> {
-        let config = load_desktop_config(&paths.config_file)?;
+        let config = load_desktop_config(
+            &paths.config_file,
+            std::env::var_os(CEFARI_CONFIG_FILE_ENV).map(PathBuf::from),
+        )?;
         Ok(Self {
             config,
             paths: paths.clone(),
@@ -261,7 +265,11 @@ pub struct AppliedUpdate {
     pub version: String,
 }
 
-fn load_desktop_config(path: &Path) -> Result<CefariConfig> {
+fn load_desktop_config(path: &Path, override_path: Option<PathBuf>) -> Result<CefariConfig> {
+    if let Some(override_path) = override_path {
+        return load_config(override_path).map_err(Into::into);
+    }
+
     if path.exists() {
         return load_config(path).map_err(Into::into);
     }
@@ -312,15 +320,16 @@ fn platform_package_formats() -> &'static [cefari_core::PackageFormat] {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsString;
-    use std::sync::Mutex;
+    use std::{ffi::OsString, fs, path::PathBuf, sync::Mutex};
 
     use cefari_core::{
         AppIdentity, CEFARI_DAEMON_LOG_ENV, CefariConfig, DaemonConfig, RuntimePaths,
         UpdateCheckState,
     };
 
-    use super::{RuntimeOperations, RuntimeUpdateState, daemon_executable_path};
+    use super::{
+        RuntimeOperations, RuntimeUpdateState, daemon_executable_path, load_desktop_config,
+    };
 
     #[test]
     fn defaults_to_unconfigured_updates_without_config_file() {
@@ -335,6 +344,40 @@ mod tests {
             runtime.update_state().expect("unconfigured update check"),
             UpdateCheckState::NotConfigured
         );
+    }
+
+    #[test]
+    fn loads_explicit_desktop_config_override() {
+        let root = temp_dir("config-override");
+        fs::create_dir_all(&root).expect("temp dir should exist");
+        let config_file = root.join("cefari.json");
+        fs::write(
+            &config_file,
+            r#"{
+  "app": {
+    "identifier": "dev.cefari.override",
+    "display_name": "Override App",
+    "version": "1.2.3"
+  },
+  "workers": {
+    "entries": {
+      "thumbnailer": {
+        "entry": "workers/thumbnailer.ts",
+        "permissions": {
+          "read": ["$appData/uploads"]
+        }
+      }
+    }
+  }
+}"#,
+        )
+        .expect("config should be written");
+
+        let config = load_desktop_config(&root.join("missing.json"), Some(config_file))
+            .expect("override config should load");
+
+        assert_eq!(config.app.identifier, "dev.cefari.override");
+        assert!(config.workers.entries.contains_key("thumbnailer"));
     }
 
     #[test]
@@ -415,5 +458,13 @@ mod tests {
             paths: paths.clone(),
             updates: Mutex::<RuntimeUpdateState>::default(),
         }
+    }
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time should be monotonic")
+            .as_nanos();
+        std::env::temp_dir().join(format!("cefari-runtime-{label}-{suffix}"))
     }
 }

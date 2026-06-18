@@ -20,6 +20,7 @@ async function projectWithPackageBuild(options: { daemon?: boolean } = { daemon:
     await writeFile(join(root, "build/daemon/package-app-daemon"), "daemon");
   }
   await mkdir(join(root, "build/desktop"), { recursive: true });
+  await mkdir(join(root, "build/workers"), { recursive: true });
   await mkdir(join(root, "build/cef/resources"), { recursive: true });
   await mkdir(join(root, "assets"), { recursive: true });
   await writeFile(join(root, "assets/app.png"), "app-icon");
@@ -101,6 +102,7 @@ test("package writes metadata and manifest for build artifacts", async () => {
   assert.match(metadata, /name = "dev\.cefari\.package\.notification"/);
   assert.match(metadata, /target = "frontend"/);
   assert.match(metadata, /target = "config"/);
+  assert.match(metadata, /target = "workers"/);
   assert.match(metadata, /target = "tray-icon\.png"/);
   assert.match(metadata, /\[\[deep_link_protocols\]\]/);
   assert.match(metadata, /schemes = \["packageapp", "packageapp\+dev"\]/);
@@ -111,6 +113,7 @@ test("package writes metadata and manifest for build artifacts", async () => {
   assert.equal(manifest.tray_icon, "tray-icon.png");
   assert.match(manifest.config_file, /build\/config\/cefari\.json/);
   assert.match(manifest.daemon_executable, /package-app-daemon/);
+  assert.match(manifest.workers_dir, /build\/workers/);
   assert.deepEqual(spawned[0], {
     command: "cargo-packager",
     args: ["--config", join(root, "dist/package/cargo-packager.toml"), "--out-dir", join(root, "dist/package/output")],
