@@ -19,8 +19,9 @@ Docs were checked against:
   workspace manifests, and template workflows
 - `.github/actions/cefari-release/action.yml` and
   `.github/actions/cefari-release/src/main.ts`
-- `crates/cefari-core/src/ipc.rs` and `crates/cefari-core/bindings/ipc.ts`
-- `crates/cefari-desktop/src/desktop_bridge.rs`, `desktop_ipc.rs`,
+- `crates/cefari-core/src/ipc/`, `crates/cefari-core/src/ipc/capabilities/`,
+  `crates/cefari-core/build.rs`, and `crates/cefari-core/bindings/ipc.ts`
+- `crates/cefari-desktop/src/desktop_bridge.rs`, `desktop_ipc/`,
   `desktop_menu.rs`, `desktop_tray.rs`, `desktop_single_instance.rs`,
   `desktop_notifications.rs`, `desktop_dialogs.rs`, `event_loop.rs`,
   `window.rs`, and `window_state.rs`

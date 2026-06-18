@@ -99,11 +99,14 @@ filesystem access.
 `npm/src/app/ipc.ts` is copied from
 `crates/cefari-core/bindings/ipc.ts`. When Rust IPC types change:
 
-1. Regenerate `crates/cefari-core/bindings/ipc.ts`.
+1. Run `cargo test -p cefari-core` to rebuild generated Rust IPC glue and check
+   `crates/cefari-core/bindings/ipc.ts`.
 2. Copy it to `npm/src/app/ipc.ts`.
 3. Update wrapper functions for new commands or result variants.
 4. Update these docs when behavior or supported command status changes.
 5. Run package and template checks.
+
+`pnpm --dir npm build` performs the binding copy before compiling the package.
 
 Generated IPC declarations should stay exact. Prose docs should explain command
 intent, supported status, failure behavior, and preferred wrappers rather than
