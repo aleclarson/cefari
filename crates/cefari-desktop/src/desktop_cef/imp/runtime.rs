@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use cefari_core::{CefariIpcEvent, DownloadResult};
 use tao::window::Window;
 use tracing::{error, info};
@@ -15,6 +16,7 @@ use cef::wrapper::message_router::{
 use cef::{ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _};
 
 use crate::desktop_bridge::{BridgeOriginPolicy, NavigationPolicy};
+use crate::desktop_daemon::DaemonEvent;
 use crate::{desktop_downloads::SharedDownloadState, external, window::MAIN_WINDOW_ID};
 
 use super::state::{
@@ -402,6 +404,21 @@ impl CefRuntime {
         Ok(())
     }
 
+    pub fn emit_daemon_event(&self, event: &DaemonEvent) -> Result<()> {
+        let event_json = daemon_event_json(event)?;
+        let script = daemon_event_script(&event_json)?;
+        let code = cef::CefString::from(script.as_str());
+        let script_url = cef::CefString::from("cefari://native/daemon-stream-event");
+
+        for browser in self.state.browsers() {
+            if let Some(frame) = browser.main_frame() {
+                frame.execute_java_script(Some(&code), Some(&script_url), 1);
+            }
+        }
+
+        Ok(())
+    }
+
     fn browser_host(&self) -> Result<cef::BrowserHost> {
         let browser = self.state.active_browser()?;
         browser
@@ -433,6 +450,40 @@ fn ipc_event_script(event: &CefariIpcEvent) -> Result<String> {
     ))
 }
 
+fn daemon_event_json(event: &DaemonEvent) -> Result<String> {
+    let value = match event {
+        DaemonEvent::Chunk {
+            connection_id,
+            bytes,
+        } => serde_json::json!({
+            "event": "chunk",
+            "connectionId": connection_id.as_u64(),
+            "chunkBase64": STANDARD.encode(bytes),
+        }),
+        DaemonEvent::Closed { connection_id } => serde_json::json!({
+            "event": "close",
+            "connectionId": connection_id.as_u64(),
+        }),
+        DaemonEvent::Error {
+            connection_id,
+            message,
+        } => serde_json::json!({
+            "event": "error",
+            "connectionId": connection_id.as_u64(),
+            "message": message,
+        }),
+    };
+    serde_json::to_string(&value).context("failed to serialize daemon stream event")
+}
+
+fn daemon_event_script(event_json: &str) -> Result<String> {
+    let event_json_literal = serde_json::to_string(&event_json)
+        .context("failed to serialize daemon stream event literal")?;
+    Ok(format!(
+        "(() => {{ const emit = window.__CEFARI_DAEMON_STREAM_EVENT__; if (typeof emit === \"function\") emit(JSON.parse({event_json_literal})); }})();"
+    ))
+}
+
 impl Drop for CefRuntime {
     fn drop(&mut self) {
         if self.initialized {
@@ -451,7 +502,9 @@ mod tests {
         NotificationResponseEvent,
     };
 
-    use super::{bridge_event_script, ipc_event_script};
+    use crate::desktop_daemon::{DaemonConnectionId, DaemonEvent};
+
+    use super::{bridge_event_script, daemon_event_json, daemon_event_script, ipc_event_script};
 
     #[test]
     fn bridge_event_script_passes_serialized_event_to_bridge_hook() {
@@ -493,6 +546,32 @@ mod tests {
         assert!(script.contains("window.__CEFARI_IPC_EVENT__"));
         assert!(script.contains("JSON.parse"));
         assert!(script.contains("\\\"notification\\\""));
+        assert!(!script.contains("hello ' \" </script>"));
+    }
+
+    #[test]
+    fn daemon_event_json_encodes_chunks_as_base64() {
+        let event = DaemonEvent::Chunk {
+            connection_id: DaemonConnectionId::from_u64(7),
+            bytes: vec![0, 1, 2, 255],
+        };
+
+        let event_json = daemon_event_json(&event).expect("event should serialize");
+
+        assert!(event_json.contains(r#""event":"chunk""#));
+        assert!(event_json.contains(r#""connectionId":7"#));
+        assert!(event_json.contains(r#""chunkBase64":"AAEC/w==""#));
+    }
+
+    #[test]
+    fn daemon_event_script_injects_json_as_data() {
+        let script = daemon_event_script(
+            r#"{"event":"error","connectionId":1,"message":"hello ' \" </script>"}"#,
+        )
+        .expect("event script should serialize");
+
+        assert!(script.contains("window.__CEFARI_DAEMON_STREAM_EVENT__"));
+        assert!(script.contains("JSON.parse"));
         assert!(!script.contains("hello ' \" </script>"));
     }
 }

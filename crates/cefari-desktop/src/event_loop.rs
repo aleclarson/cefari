@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use cefari_core::{
     CefariIpcCommand, CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse,
     DeepLinkOpenEvent, NotificationAction, NotificationEvent, NotificationResponseEvent,
@@ -269,6 +270,25 @@ fn run_event_loop(
                 *control_flow = ControlFlow::Exit;
             }
             Event::UserEvent(UserEvent::BridgeIpc(request)) => {
+                if let Some(daemon_request) =
+                    desktop_bridge::daemon_stream_request(&request.request_json)
+                {
+                    let response_json = match daemon_request {
+                        Ok(daemon_request) => {
+                            handle_daemon_stream_request(&mut daemon_manager, daemon_request)
+                        }
+                        Err(message) => desktop_bridge::daemon_stream_error_response(
+                            &desktop_bridge::request_id(&request.request_json),
+                            "invalidCommand",
+                            &message,
+                        ),
+                    };
+                    if let Ok(callback) = request.callback.lock() {
+                        callback.success_str(&response_json);
+                    }
+                    return;
+                }
+
                 let source_window_id = guards
                     .cef_runtime
                     .window_id_for_browser(request.browser_identifier)
@@ -313,7 +333,7 @@ fn run_event_loop(
                 );
             }
             Event::UserEvent(UserEvent::Daemon(event)) => {
-                handle_daemon_event(&mut daemon_manager, event);
+                handle_daemon_event(&guards.cef_runtime, &mut daemon_manager, event);
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -527,9 +547,14 @@ fn run_event_loop(
 }
 
 fn handle_daemon_event(
+    cef_runtime: &desktop_cef::CefRuntime,
     daemon_manager: &mut desktop_daemon::DaemonManager,
     event: desktop_daemon::DaemonEvent,
 ) {
+    if let Err(error) = cef_runtime.emit_daemon_event(&event) {
+        error!(%error, "failed to emit daemon stream event");
+    }
+
     match event {
         desktop_daemon::DaemonEvent::Chunk {
             connection_id,
@@ -552,6 +577,47 @@ fn handle_daemon_event(
             daemon_manager.clear_closed(connection_id);
             error!(?connection_id, %message, "daemon stream failed");
         }
+    }
+}
+
+fn handle_daemon_stream_request(
+    daemon_manager: &mut desktop_daemon::DaemonManager,
+    request: desktop_bridge::DaemonStreamRequest,
+) -> String {
+    let result = match request.daemon {
+        desktop_bridge::DaemonStreamCommand::Connect => daemon_manager.connect().map(|id| {
+            serde_json::json!({
+                "connectionId": id.as_u64(),
+            })
+        }),
+        desktop_bridge::DaemonStreamCommand::Write {
+            connection_id,
+            chunk_base64,
+        } => STANDARD
+            .decode(chunk_base64)
+            .map_err(|error| anyhow::anyhow!("invalid daemon stream chunk: {error}"))
+            .and_then(|bytes| {
+                daemon_manager.write(
+                    desktop_daemon::DaemonConnectionId::from_u64(connection_id),
+                    &bytes,
+                )
+            })
+            .map(|()| serde_json::json!({})),
+        desktop_bridge::DaemonStreamCommand::CloseWrite { connection_id } => daemon_manager
+            .close_write(desktop_daemon::DaemonConnectionId::from_u64(connection_id))
+            .map(|()| serde_json::json!({})),
+        desktop_bridge::DaemonStreamCommand::Close { connection_id } => daemon_manager
+            .close(desktop_daemon::DaemonConnectionId::from_u64(connection_id))
+            .map(|()| serde_json::json!({})),
+    };
+
+    match result {
+        Ok(payload) => desktop_bridge::daemon_stream_ok_response(&request.id, payload),
+        Err(error) => desktop_bridge::daemon_stream_error_response(
+            &request.id,
+            "unsupported",
+            &error.to_string(),
+        ),
     }
 }
 

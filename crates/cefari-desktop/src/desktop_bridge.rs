@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use cefari_core::{CefariIpcError, CefariIpcOutcome, CefariIpcRequest, CefariIpcResponse};
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::desktop_ipc::{DesktopIpcContext, DesktopIpcDispatcher};
@@ -55,6 +56,8 @@ pub const CEFARI_BRIDGE_SCRIPT: &str = r#"
   let nextId = 1;
   const listeners = new Set();
   const pendingEvents = [];
+  const daemonStreamListeners = new Set();
+  const pendingDaemonStreamEvents = [];
 
   const unsupported = (id, command, reason) => ({
     id,
@@ -128,6 +131,40 @@ pub const CEFARI_BRIDGE_SCRIPT: &str = r#"
     enumerable: false,
     writable: false,
     value: postNativeIpc,
+  });
+
+  Object.defineProperty(window, "__CEFARI_DAEMON_STREAM_POST__", {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value(command) {
+      const id = `cefari-daemon-${nextId++}`;
+      return postNativeIpc({ id, daemon: command });
+    },
+  });
+
+  Object.defineProperty(window, "__CEFARI_DAEMON_STREAM_ON__", {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value(handler) {
+      daemonStreamListeners.add(handler);
+      for (const event of pendingDaemonStreamEvents.splice(0)) handler(event);
+      return () => daemonStreamListeners.delete(handler);
+    },
+  });
+
+  Object.defineProperty(window, "__CEFARI_DAEMON_STREAM_EVENT__", {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value(event) {
+      if (daemonStreamListeners.size === 0) {
+        pendingDaemonStreamEvents.push(event);
+        return;
+      }
+      for (const listener of daemonStreamListeners) listener(event);
+    },
   });
 })();
 "#;
@@ -307,6 +344,68 @@ pub struct CefariBridge {
     origin_policy: BridgeOriginPolicy,
 }
 
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+pub struct DaemonStreamRequest {
+    pub id: String,
+    pub daemon: DaemonStreamCommand,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[serde(tag = "op", rename_all = "camelCase")]
+pub enum DaemonStreamCommand {
+    Connect,
+    Write {
+        #[serde(rename = "connectionId")]
+        connection_id: u64,
+        #[serde(rename = "chunkBase64")]
+        chunk_base64: String,
+    },
+    CloseWrite {
+        #[serde(rename = "connectionId")]
+        connection_id: u64,
+    },
+    Close {
+        #[serde(rename = "connectionId")]
+        connection_id: u64,
+    },
+}
+
+pub fn daemon_stream_request(request_json: &str) -> Option<Result<DaemonStreamRequest, String>> {
+    let value = serde_json::from_str::<Value>(request_json).ok()?;
+    value.get("daemon")?;
+    Some(
+        serde_json::from_value::<DaemonStreamRequest>(value)
+            .map_err(|error| format!("invalid daemon stream request: {error}")),
+    )
+}
+
+pub fn daemon_stream_ok_response(id: &str, payload: Value) -> String {
+    serde_json::json!({
+        "id": id,
+        "outcome": {
+            "status": "ok",
+            "payload": payload,
+        },
+    })
+    .to_string()
+}
+
+pub fn daemon_stream_error_response(id: &str, code: &str, message: &str) -> String {
+    serde_json::json!({
+        "id": id,
+        "outcome": {
+            "status": "err",
+            "payload": {
+                "code": code,
+                "details": {
+                    "message": message,
+                },
+            },
+        },
+    })
+    .to_string()
+}
+
 impl CefariBridge {
     pub fn new(origin_policy: BridgeOriginPolicy) -> Self {
         Self { origin_policy }
@@ -338,7 +437,7 @@ impl CefariBridge {
     }
 }
 
-fn request_id(request_json: &str) -> String {
+pub fn request_id(request_json: &str) -> String {
     serde_json::from_str::<Value>(request_json)
         .ok()
         .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned))
@@ -428,8 +527,9 @@ mod tests {
 
     use super::{
         BridgeOriginPolicy, CEFARI_BRIDGE_SCRIPT, CEFARI_DEFAULT_STYLES, CefariBridge,
-        NavigationDecision, NavigationPolicy, NavigationSurface, origin_from_url,
-        transport_error_response_json,
+        DaemonStreamCommand, NavigationDecision, NavigationPolicy, NavigationSurface,
+        daemon_stream_error_response, daemon_stream_ok_response, daemon_stream_request,
+        origin_from_url, transport_error_response_json,
     };
     use crate::desktop_ipc;
 
@@ -649,6 +749,60 @@ mod tests {
         assert!(CEFARI_BRIDGE_SCRIPT.contains(".cefari-drag button"));
         assert!(!CEFARI_BRIDGE_SCRIPT.contains("header {"));
         assert!(!CEFARI_BRIDGE_SCRIPT.contains("nav {"));
+    }
+
+    #[test]
+    fn bridge_script_installs_daemon_stream_hooks() {
+        assert!(CEFARI_BRIDGE_SCRIPT.contains("__CEFARI_DAEMON_STREAM_POST__"));
+        assert!(CEFARI_BRIDGE_SCRIPT.contains("__CEFARI_DAEMON_STREAM_ON__"));
+        assert!(CEFARI_BRIDGE_SCRIPT.contains("__CEFARI_DAEMON_STREAM_EVENT__"));
+    }
+
+    #[test]
+    fn parses_daemon_stream_requests_separately_from_ipc() {
+        let request = daemon_stream_request(
+            r#"{"id":"daemon-1","daemon":{"op":"write","connectionId":7,"chunkBase64":"cGluZw=="}}"#,
+        )
+        .expect("request should be detected")
+        .expect("request should parse");
+
+        assert_eq!(request.id, "daemon-1");
+        assert_eq!(
+            request.daemon,
+            DaemonStreamCommand::Write {
+                connection_id: 7,
+                chunk_base64: "cGluZw==".to_owned(),
+            }
+        );
+        assert!(
+            daemon_stream_request(r#"{"id":"ipc-1","command":{"command":"appQuit"}}"#).is_none()
+        );
+    }
+
+    #[test]
+    fn daemon_stream_response_helpers_use_outcome_shape() {
+        let ok: serde_json::Value = serde_json::from_str(&daemon_stream_ok_response(
+            "daemon-1",
+            serde_json::json!({"connectionId": 1}),
+        ))
+        .expect("response should parse");
+        assert_eq!(ok["id"], "daemon-1");
+        assert_eq!(ok["outcome"]["status"], "ok");
+        assert_eq!(ok["outcome"]["payload"]["connectionId"], 1);
+
+        let error: serde_json::Value = serde_json::from_str(&daemon_stream_error_response(
+            "daemon-1",
+            "unsupported",
+            "daemon is not configured",
+        ))
+        .expect("response should parse");
+        assert_eq!(error["id"], "daemon-1");
+        assert_eq!(error["outcome"]["status"], "err");
+        assert_eq!(error["outcome"]["payload"]["code"], "unsupported");
+        assert_eq!(
+            error["outcome"]["payload"]["details"]["message"],
+            "daemon is not configured"
+        );
     }
 
     #[test]

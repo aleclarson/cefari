@@ -15,6 +15,14 @@ pub const CEFARI_DAEMON_ENV: &str = "CEFARI_DAEMON";
 pub struct DaemonConnectionId(u64);
 
 impl DaemonConnectionId {
+    pub fn from_u64(id: u64) -> Self {
+        Self(id)
+    }
+
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+
     fn next(next_id: &mut u64) -> Self {
         let id = Self(*next_id);
         *next_id += 1;
