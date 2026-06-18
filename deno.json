@@ -1,6 +1,9 @@
 {
   "tasks": {
     "ipc:check": "deno run -A scripts/sync-ipc-bindings.ts --check",
-    "ipc:sync": "deno run -A scripts/sync-ipc-bindings.ts"
+    "ipc:sync": "deno run -A scripts/sync-ipc-bindings.ts",
+    "package:verify-payload": "deno run -A scripts/verify-native-package-payload.ts",
+    "skills:check": "deno run -A scripts/sync-cefari-skill-docs.ts --check",
+    "skills:sync": "deno run -A scripts/sync-cefari-skill-docs.ts"
   }
 }

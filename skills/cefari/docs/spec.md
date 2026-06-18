@@ -26,6 +26,7 @@ APIs.
   - It sets the app version used by package metadata and update checks.
 - The config can opt into native capabilities.
   - Tray and menu-bar integration is available when configured.
+  - Deep-link URL schemes are available when configured.
   - Native capabilities are disabled unless the app opts in.
 - Config paths are resolved relative to the app project.
   - Path fields must remain inside the project.
@@ -69,6 +70,7 @@ APIs.
 
 - Cefari can build all app runtime pieces.
   - It builds the Vite frontend into `build/frontend/`.
+  - It writes runtime config into `build/config/cefari.json`.
   - It copies the daemon source entry into `build/daemon/main.ts`.
   - It compiles the daemon into a project-named executable.
   - It prepares a desktop runtime executable.
@@ -93,6 +95,8 @@ APIs.
   - It writes package metadata under `dist/package/`.
   - It writes a `cargo-packager` configuration.
   - It writes a package manifest.
+  - It uses `app.identifier` as the native app identifier.
+  - It registers the Cefari notification activation protocol.
 - Cefari can invoke `cargo-packager` when it is available.
   - Native package output is written under `dist/package/output/`.
   - If `cargo-packager` is unavailable, Cefari leaves package metadata in place.
@@ -101,9 +105,11 @@ APIs.
 - Cefari validates package inputs before assembly.
   - It expects build artifacts to already exist.
   - It checks the desktop executable.
+  - It checks runtime config.
   - It checks CEF resource metadata.
   - It checks for locale files.
   - It includes configured tray icons.
+  - It registers configured deep-link URL schemes.
 
 ## Release Tooling
 
@@ -116,6 +122,8 @@ APIs.
 - Cefari can notarize macOS artifacts.
   - It notarizes signed macOS app bundles and disk images.
   - It uses signing configuration when notarization credentials are needed.
+  - Signed, notarized macOS app bundles with real bundle identifiers are the
+    supported path for reliable native notifications.
 - Cefari can generate update metadata.
   - It signs a release archive.
   - It writes the archive signature.
@@ -153,6 +161,10 @@ APIs.
   - The frontend talks to the runtime through `window.cefari`.
   - The runtime exposes a typed IPC contract.
   - The TypeScript package re-exports the generated IPC types.
+- Cefari can receive configured OS deep links.
+  - Configured URL schemes are registered in packaged apps.
+  - Opened deep links are delivered to frontend code as events.
+  - A second process can forward deep links to the already-running app.
 - Cefari separates reusable runtime helpers from desktop concerns.
   - Shared config, paths, resources, logging inputs, services, updates, and IPC
     types live in the core crate.
@@ -174,6 +186,7 @@ APIs.
   - Apps can subscribe to named events.
   - Apps can subscribe to all native events.
   - Event subscriptions return unsubscribe functions.
+  - Apps can subscribe to deep-link open events.
 - Cefari exposes typed errors.
   - Unsupported native calls report a typed unsupported error.
   - Runtime IPC errors are wrapped as `CefariError` values.
@@ -183,14 +196,44 @@ APIs.
 > This section covers app lifecycle and native window controls.
 
 - Apps can ask the native runtime to quit.
-- Apps can show the native window.
-- Apps can focus the native window.
-- Apps can close the native window.
-- Apps can set the native window title.
+- Apps can control the current native window through `cefari.window`.
+  - Apps can read the current window state.
+  - Apps can show the current window.
+  - Apps can focus the current window.
+  - Apps can close the current window.
+  - Apps can set the current window title.
+- Apps can create and manage secondary native windows through `cefari.windows`.
+  - Secondary windows use Cefari string IDs.
+  - The startup window is always `main`.
+  - Apps can list live windows.
+  - Apps can get a window by ID.
+  - Apps can show, focus, close, and retitle a window by ID.
+  - Apps can assign a parent window when creating a secondary window.
+  - Modal windows require a valid parent window.
+  - Closing a parent closes its child windows.
+- Cefari persists native window geometry.
+  - The `main` window geometry persists by default.
+  - Secondary window geometry persists only when the app supplies `persistKey`.
+  - Cefari persists size, position where supported, maximized state, and
+    fullscreen state.
+  - Cefari does not persist secondary window existence, routes, or parent
+    relationships.
+  - Invalid persisted geometry is ignored without blocking app startup.
+- Secondary windows load trusted app frontend content.
+  - Development windows resolve routes against the configured Vite dev URL.
+  - Packaged windows load `cefari://app/index.html` and carry the route in URL
+    metadata.
+  - Arbitrary external URLs are not trusted app windows.
+- Parent and modal behavior is best-effort across platforms.
+  - Windows uses owner windows for dialog-like secondary windows.
+  - macOS uses native parent-window ordering.
+  - Linux uses transient windows where the backend supports it.
+  - Cefari always tracks parent and modal state in `WindowState`.
 - Apps can subscribe to window events.
-  - A window-shown event is available.
-  - A window-focused event is available.
-  - A window-closed event is available.
+  - Window events include the Cefari window ID.
+  - Created, shown, focused, blurred, close-requested, closed, moved, resized,
+    and title-changed events are available.
+  - `cefari.windows` event helpers can filter by window ID.
 
 ## Shell APIs
 
@@ -200,8 +243,61 @@ APIs.
 - Apps can ask the OS to open external URLs.
   - URLs are validated by Rust before opening.
   - String URLs and `URL` objects are accepted by the TypeScript wrapper.
+- Apps can receive configured custom URL schemes from the OS.
+  - Deep links are delivered as typed frontend events.
+  - The event payload includes the opened URL string.
+  - Unconfigured custom schemes are ignored by the runtime.
 - Apps can reload their frontend with the browser-native reload API.
   - Use `window.location.reload()`.
+
+## Native Dialogs
+
+> This section covers native file and folder selection dialogs.
+
+- Apps can open native dialogs from the frontend.
+  - They can choose one file.
+  - They can choose multiple files.
+  - They can choose one folder.
+  - They can choose multiple folders.
+  - They can choose a save path.
+- Native dialogs support common dialog options.
+  - Apps can set a dialog title.
+  - Apps can set file extension filters.
+  - Apps can set a default native directory.
+  - Apps can set a default app-data directory.
+  - Apps can set a default file name.
+  - Apps can request main-window modality.
+  - Apps can request directory creation when the platform supports it.
+- Dialog cancellation is a normal result.
+  - Canceling a dialog does not throw a frontend error.
+  - Invalid dialog requests still report typed Cefari errors.
+- Save dialogs select a path.
+  - They do not write files.
+  - They do not overwrite files.
+- Native dialog paths are separate from app-data filesystem paths.
+  - Selected native paths do not expand `cefari.fs` access.
+  - App-data default directories use app-data path validation.
+  - File filters are user-interface hints, not security boundaries.
+- Native dialog behavior can vary by platform.
+  - Cefari supports macOS, Linux, and Windows native dialogs.
+  - Some option details depend on the operating system dialog backend.
+
+## Downloads
+
+> This section describes browser-initiated download behavior.
+
+- Cefari handles CEF downloads in the native runtime.
+  - Downloads use the OS save dialog before writing files.
+  - HTTP and HTTPS downloads are supported.
+  - Unsupported schemes are denied by the runtime.
+- Apps can observe download lifecycle events.
+  - A download-started event is available.
+  - A download-progress event is available.
+  - Download-completed, download-canceled, and download-failed events are
+    available.
+- Apps can control downloads through the TypeScript API.
+  - Active downloads can be canceled by ID.
+  - Completed downloads can be revealed through the OS shell.
 
 ## Updates
 
@@ -255,17 +351,29 @@ APIs.
   - It does not request permission on startup.
 - Apps can check notification permission state through the TypeScript API.
 - Apps can request notification permission from user-visible flows.
-- Apps can send notifications with a title and optional body.
+- Apps can inspect native notification capability support.
+- Apps can register notification categories with actions.
+- Apps can send notifications with rich native fields.
+  - Requests include a title and optional body.
+  - Requests can include subtitle, image, icon, rounded icon, thread id,
+    category id, user info, and XDG category fields.
+  - Media references are Cefari-controlled app-resource or app-data
+    references, not arbitrary OS paths.
+- Apps can inspect and remove delivered notifications.
 - Apps can subscribe to notification response events.
+  - Response events include the notification id, action, optional reply text,
+    and user info.
+  - Default notification clicks emit a response event and focus the main
+    window.
+  - Dismiss responses emit an event without focusing the main window.
+  - Windows notification activation URLs decode to the same response-event
+    shape as in-process callbacks.
 - Notification requests are validated.
   - Titles must be non-empty.
   - Optional text fields are trimmed.
   - Blank optional text fields are rejected.
-- Current notification IPC is not wired end to end in the desktop dispatcher.
-  - The TypeScript API exists.
-  - The protocol reserves permission and response events.
-  - The desktop dispatcher currently reports notification commands as
-    unsupported.
+- The desktop dispatcher wires notification permission, capability, category,
+  delivery, delivered-notification management, and response-event payloads.
 
 ## App Data Filesystem
 
@@ -293,6 +401,7 @@ APIs.
   - They can get the app-data directory display path.
   - They can read and write text.
   - They can read and write bytes.
+  - They can check whether an app-data path exists.
   - They can read and write JSON.
   - They can convert app-data files into object URLs for frontend use.
 - The app-data filesystem intentionally omits broad OS filesystem features.

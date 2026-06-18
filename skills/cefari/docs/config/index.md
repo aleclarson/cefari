@@ -7,7 +7,7 @@ The config file is TypeScript executed through Vite's module runner. It can
 default-export an object or a factory function, usually through `defineConfig`:
 
 ```ts
-import { defineConfig, tray } from "cefari";
+import { deepLinks, defineConfig, tray } from "cefari";
 
 export default defineConfig({
   app: {
@@ -18,6 +18,9 @@ export default defineConfig({
   capabilities: [
     tray({
       icon: "assets/tray-icon.png",
+    }),
+    deepLinks({
+      schemes: ["my-cefari-app"],
     }),
   ],
   vite: {

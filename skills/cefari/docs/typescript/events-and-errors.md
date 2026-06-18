@@ -19,13 +19,36 @@ unsubscribe();
 
 Available event names:
 
+- `windowCreated`
 - `windowShown`
 - `windowFocused`
+- `windowBlurred`
+- `windowCloseRequested`
 - `windowClosed`
+- `windowMoved`
+- `windowResized`
+- `windowTitleChanged`
+- `deepLinkOpened`
 - `trayRestoreWindow`
 - `updateStateChanged`
 - `serviceStatusChanged`
+- `download.started`
+- `download.progress`
+- `download.completed`
+- `download.canceled`
+- `download.failed`
 - `notification.response`
+
+Subscribe to deep links when the app config registers URL schemes:
+
+```ts
+import { cefari } from "cefari/app";
+
+cefari.on("deepLinkOpened", (event) => {
+  const url = new URL(event.url);
+  console.log(url.protocol, url.pathname);
+});
+```
 
 Namespace helpers call the same event system:
 
@@ -34,11 +57,19 @@ const offFocus = cefari.window.onFocused((state) => {
   console.log(state.title);
 });
 
+const offSettingsFocus = cefari.windows.onFocused(
+  (event) => {
+    console.log(event.state.title);
+  },
+  { windowId: "settings" },
+);
+
 const offUpdate = cefari.updates.onStateChanged((state) => {
   console.log(state.state);
 });
 
 offFocus();
+offSettingsFocus();
 offUpdate();
 ```
 

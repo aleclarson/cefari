@@ -5,4 +5,4 @@ the supported feature inventory or another documentation page.
 
 ## Pending Placement
 
-- None.
+- No pending user-facing behavior is currently tracked here.

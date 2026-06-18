@@ -7,6 +7,7 @@ as named exports.
 import { cefari } from "cefari/app";
 
 await cefari.window.focus();
+await cefari.windows.create({ id: "settings", route: "/settings" });
 ```
 
 ## App
@@ -34,7 +35,7 @@ Current methods:
 
 ## Window
 
-Use `cefari.window` for native window operations:
+Use `cefari.window` for current-window convenience operations:
 
 ```ts
 await cefari.window.show();
@@ -45,7 +46,9 @@ console.log(state.title);
 ```
 
 `show()`, `focus()`, `close()`, and `setTitle()` return the resulting
-`WindowState`.
+`WindowState`. These methods target the current native window by default. They
+also accept an optional target when code needs to use the convenience namespace
+against a specific window.
 
 ```ts
 const closedState = await cefari.window.close();
@@ -54,6 +57,9 @@ console.log(closedState.visible);
 
 Current methods:
 
+- `current(): Promise<WindowState>`
+- `list(): Promise<WindowState[]>`
+- `create(options?: WindowCreateOptions): Promise<WindowState>`
 - `show(): Promise<WindowState>`
 - `focus(): Promise<WindowState>`
 - `close(): Promise<WindowState>`
@@ -61,6 +67,65 @@ Current methods:
 - `onShown(handler): Unsubscribe`
 - `onFocused(handler): Unsubscribe`
 - `onClosed(handler): Unsubscribe`
+
+## Windows
+
+Use `cefari.windows` when code needs to create or target specific native
+windows:
+
+```ts
+const settings = await cefari.windows.create({
+  id: "settings",
+  route: "/settings",
+  title: "Settings",
+  width: 720,
+  height: 560,
+  persistKey: "settings",
+});
+
+await cefari.windows.focus(settings.id);
+await cefari.windows.setTitle("settings", "Preferences");
+```
+
+The startup window is always `main`. Secondary windows load trusted app
+frontend content: Vite dev routes in development and `cefari://app/index.html`
+route metadata in packaged mode. Cefari persists geometry for `main` by
+default and for secondary windows only when `persistKey` is supplied.
+
+Parented and modal windows are supported for secondary windows:
+
+```ts
+await cefari.windows.create({
+  id: "dialog",
+  route: "/dialog",
+  parentId: "main",
+  modal: true,
+});
+```
+
+Modal windows require a valid parent. Closing a parent closes its child
+windows. Native modal behavior varies by platform; Cefari still tracks
+`parentId` and `modal` in `WindowState`.
+
+Current methods:
+
+- `current(): Promise<WindowState>`
+- `list(): Promise<WindowState[]>`
+- `get(target): Promise<WindowState | undefined>`
+- `create(options?: WindowCreateOptions): Promise<WindowState>`
+- `show(target): Promise<WindowState>`
+- `focus(target): Promise<WindowState>`
+- `close(target): Promise<WindowState>`
+- `setTitle(target, title): Promise<WindowState>`
+- `onCreated(handler, filter?): Unsubscribe`
+- `onShown(handler, filter?): Unsubscribe`
+- `onFocused(handler, filter?): Unsubscribe`
+- `onBlurred(handler, filter?): Unsubscribe`
+- `onCloseRequested(handler, filter?): Unsubscribe`
+- `onClosed(handler, filter?): Unsubscribe`
+- `onMoved(handler, filter?): Unsubscribe`
+- `onResized(handler, filter?): Unsubscribe`
+- `onTitleChanged(handler, filter?): Unsubscribe`
 
 ## Shell
 
@@ -240,6 +305,10 @@ console.log(root.displayPath);
 const state = await cefari.files.readJson("state.json");
 await cefari.files.writeJson("state.json", { ...state, openedAt: Date.now() });
 
+if (await cefari.files.exists("assets/icon.png")) {
+  console.log("icon is cached");
+}
+
 const iconUrl = await cefari.files.toObjectUrl("assets/icon.png", {
   type: "image/png",
 });
@@ -268,6 +337,7 @@ Current `cefari.files` methods:
 - `writeText(path, contents): Promise<void>`
 - `readBytes(path): Promise<Uint8Array>`
 - `writeBytes(path, contents): Promise<void>`
+- `exists(path): Promise<boolean>`
 - `readJson(path): Promise<JsonValue>`
 - `writeJson(path, value, options?): Promise<void>`
 - `toObjectUrl(path, options?): Promise<string>`
@@ -296,23 +366,68 @@ Current methods:
 - `restoreWindow(): Promise<TrayResult>`
 - `onRestoreWindow(handler): Unsubscribe`
 
-## Notifications
+## Downloads
 
-Notification commands are typed in the protocol and wrapped by `cefari/app`,
-but the current desktop dispatcher returns `unsupported` until notification IPC
-is wired end to end.
+Use `cefari.downloads` to control browser-initiated downloads that the native
+runtime has already started:
 
 ```ts
+const unsubscribe = cefari.on("download.completed", async (download) => {
+  await cefari.downloads.reveal(download.id);
+});
+```
+
+CEF downloads are native-runtime owned. The runtime validates the download URL,
+shows the OS save dialog, emits lifecycle events, and writes only after the user
+chooses a destination.
+
+Current methods:
+
+- `cancel(id: string): Promise<DownloadResult>`
+- `reveal(id: string): Promise<DownloadResult>`
+
+## Notifications
+
+Notification commands are typed in the protocol, wrapped by `cefari/app`, and
+dispatched by the desktop runtime.
+
+```ts
+const capabilities = await cefari.notifications.capabilities();
 const permission = await cefari.notifications.permissionState();
 
 if (permission.allowed) {
   const sent = await cefari.notifications.send({
     title: "Build complete",
     body: "The package is ready.",
+    subtitle: "Release",
+    image: { source: "appResource", path: "images/build.png" },
+    icon: { source: "appData", path: "icons/build.png" },
+    userInfo: { buildId: "123" },
   });
 
   console.log(sent.id);
 }
+```
+
+Register native categories and actions before sending notifications that use
+them:
+
+```ts
+await cefari.notifications.registerCategories([
+  {
+    id: "message",
+    actions: [
+      { type: "action", id: "open", title: "Open" },
+      {
+        type: "textInput",
+        id: "reply",
+        title: "Reply",
+        inputButtonTitle: "Send",
+        inputPlaceholder: "Message",
+      },
+    ],
+  },
+]);
 ```
 
 Prompt for permission only from an explicit user-visible action:
@@ -328,13 +443,21 @@ Handle notification responses:
 
 ```ts
 const unsubscribe = cefari.notifications.onResponse((event) => {
-  console.log(event.id, event.action);
+  console.log(event.id, event.action, event.userText, event.userInfo);
 });
 ```
+
+Default notification clicks emit a response event and focus the main window.
+Dismiss responses emit an event without focusing the main window.
 
 Current methods:
 
 - `permissionState(): Promise<NotificationPermission>`
 - `requestPermission(): Promise<NotificationPermission>`
+- `capabilities(): Promise<NotificationCapabilities>`
+- `registerCategories(categories): Promise<NotificationCategoriesRegistered>`
 - `send(input): Promise<NotificationSent>`
+- `active(): Promise<ActiveNotification[]>`
+- `removeDelivered(ids): Promise<NotificationRemoved>`
+- `removeAllDelivered(): Promise<NotificationRemoved>`
 - `onResponse(handler): Unsubscribe`
