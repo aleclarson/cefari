@@ -13,8 +13,8 @@ If `PATH` is omitted, Cefari uses the current directory.
 `cefari dev` starts:
 
 - a Vite dev server
-- the Deno daemon entry with watch mode
 - the Rust desktop app
+- daemon stream support when `daemon.entry` is configured
 
 When one child process exits or fails, Cefari stops the remaining processes.
 
@@ -56,7 +56,8 @@ Run it with the installed Cefari CLI:
 cefari dev templates/vite-react-basic
 ```
 
-The example is a Deno workspace with `frontend/` and `daemon/` members.
+The example is a Deno workspace with a `frontend/` member. Add a daemon
+workspace only when the app needs one.
 
 ## Built-In CSS For Custom Titlebars
 

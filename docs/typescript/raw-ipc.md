@@ -55,6 +55,12 @@ arrives as:
 { event: "deepLinkOpened", payload: { url: "myapp://open/item" } }
 ```
 
+Daemon byte streams do not use generated IPC bindings. Use
+`cefari.daemon.connect()` from `cefari/app` for webview-to-daemon and
+daemon-to-webview bytes. The stream bridge is intentionally low-level and
+separate from `CefariIpcCommand` so apps can layer their own framing or RPC
+library on top.
+
 ## Current Command Surface
 
 The generated command union currently includes:
@@ -75,6 +81,9 @@ The generated command union currently includes:
 - `trayRestoreWindow`
 - `notification`
 - `files`
+
+Daemon stream connect/write/close traffic is intentionally not part of this
+generated command union.
 
 Some generated commands are reserved for native shell integrations instead of
 the `cefari/app` namespace APIs. At the moment:

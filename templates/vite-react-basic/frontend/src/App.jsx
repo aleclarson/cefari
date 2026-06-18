@@ -10,7 +10,7 @@ export default function App() {
         <h1>Hello from Cefari</h1>
         <p>
           This template runs Vite as the frontend dev server while Cefari
-          orchestrates the desktop shell and Deno daemon.
+          orchestrates the desktop shell.
         </p>
         <p className="status">Bridge status: {bridgeState}</p>
       </section>

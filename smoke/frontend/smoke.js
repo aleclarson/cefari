@@ -1,3 +1,5 @@
+import { cefari } from "cefari/app";
+
 const statusElement = document.getElementById("status");
 const phaseKey = "cefari.smoke.phase";
 const resultPath = "smoke/result.json";
@@ -85,6 +87,34 @@ async function writeResult(status, details = {}) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function daemonRoundTripSmoke() {
+  record("daemon", "connect");
+  assert(
+    cefari.daemon.isConfigured(),
+    "daemon stream bridge is not configured",
+  );
+
+  const connection = await cefari.daemon.connect();
+  const writer = connection.writable.getWriter();
+  const reader = connection.readable.getReader();
+  const input = new Uint8Array([67, 101, 102, 97, 114, 105]);
+
+  await writer.write(input);
+  const output = await reader.read();
+  assert(output.done === false, "daemon closed before echoing bytes");
+  assert(output.value.length === input.length, "daemon echo length changed");
+  for (let index = 0; index < input.length; index += 1) {
+    assert(output.value[index] === input[index], "daemon echo bytes changed");
+  }
+
+  reader.releaseLock();
+  await writer.close();
+  writer.releaseLock();
+  await connection.close();
+  await connection.closed;
+  record("daemon", "round-trip ok");
 }
 
 async function preReloadSmoke() {
@@ -326,6 +356,7 @@ async function postReloadSmoke() {
   }
 
   await fileSmoke();
+  await daemonRoundTripSmoke();
 
   const title = await invokeOk({
     command: "windowSetTitle",
@@ -345,6 +376,7 @@ async function postReloadSmoke() {
     service: service.outcome.status === "ok"
       ? service.outcome.payload.payload
       : service.outcome.payload,
+    daemonRoundTrip: true,
   });
   await invokeOk({ command: "appQuit" }, "empty");
 }

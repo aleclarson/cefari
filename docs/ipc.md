@@ -20,6 +20,7 @@ The initial command surface reserves typed payloads for:
 - notification permission, capability, category, delivery, management, and
   response commands
 - sandboxed app-data file commands
+- daemon byte streams through a separate low-level bridge path
 
 Update apply commands install the native update cached by the most recent
 successful update check. Frontend code does not pass update URLs, signatures, or
@@ -33,6 +34,10 @@ File commands are rooted in Cefari's managed app-data directory. They support
 text and base64 reads/writes, directory listing, directory creation, removal,
 rename, copy, stat, and access checks. The desktop dispatcher rejects absolute
 paths and parent traversal before invoking the `cap-std` directory capability.
+
+Daemon stream connect/write/close traffic is intentionally separate from the
+generated IPC command union. Frontend code should use `cefari.daemon.connect()`
+for byte streams and layer any framing or RPC protocol on top.
 
 Window creation payloads support app-defined IDs, frontend routes, initial
 geometry, parent/modal options, and opt-in secondary geometry persistence through

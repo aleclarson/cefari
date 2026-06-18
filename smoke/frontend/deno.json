@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "cefari/app": "../../npm/src/app/mod.ts"
+  }
+}

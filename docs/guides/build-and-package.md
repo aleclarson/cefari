@@ -20,8 +20,8 @@ If `PATH` is omitted, Cefari uses the current directory.
 
 - `build/frontend/`
 - `build/config/cefari.json`
-- `build/daemon/main.ts`
-- `build/daemon/<projectName>-daemon`
+- `build/daemon/main.ts`, when `daemon.entry` is configured
+- `build/daemon/<projectName>-daemon`, when `daemon.entry` is configured
 - `build/desktop/<projectName>`
 - `build/cef/resources/`
 - `build/cef/resources/archive.json`
@@ -42,9 +42,10 @@ to `build/frontend/`.
 
 ## Daemon Builds
 
-The daemon entry is configured by `daemon.entry`. Cefari keeps a source copy
-at `build/daemon/main.ts` and compiles the daemon into the project-named daemon
-executable.
+The daemon entry is configured by `daemon.entry`. When configured, Cefari keeps
+a source copy at `build/daemon/main.ts` and compiles the daemon into the
+project-named daemon executable. When omitted, Cefari skips daemon build and
+package artifacts.
 
 ## Desktop Runtime
 
@@ -61,8 +62,8 @@ runtime and skip the Cargo build.
 ## Runtime Config
 
 `cefari build` writes `build/config/cefari.json` for the desktop runtime. The
-file contains the app identity, app version, and configured deep-link schemes
-that the runtime needs after packaging.
+file contains the app identity, app version, configured deep-link schemes, and
+whether a daemon executable is available after packaging.
 
 ## CEF Resources
 

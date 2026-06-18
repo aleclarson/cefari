@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsString,
     path::{Component, Path, PathBuf},
     sync::Mutex,
 };
@@ -12,6 +13,9 @@ use cefari_core::{
 };
 
 use crate::desktop_daemon::DaemonProcessConfig;
+
+const CEFARI_DAEMON_DEV_ENTRY_ENV: &str = "CEFARI_DAEMON_DEV_ENTRY";
+const CEFARI_DAEMON_DEV_CWD_ENV: &str = "CEFARI_DAEMON_DEV_CWD";
 
 pub struct RuntimeOperations {
     config: CefariConfig,
@@ -145,7 +149,7 @@ impl RuntimeOperations {
     }
 
     pub fn daemon_configured(&self) -> bool {
-        self.config.daemon.enabled
+        self.config.daemon.enabled || std::env::var_os(CEFARI_DAEMON_DEV_ENTRY_ENV).is_some()
     }
 
     pub fn daemon_service_spec(&self) -> Result<CefariServiceSpec> {
@@ -157,8 +161,24 @@ impl RuntimeOperations {
     }
 
     pub fn daemon_process_config(&self) -> Result<DaemonProcessConfig> {
+        if let Some(entry) = std::env::var_os(CEFARI_DAEMON_DEV_ENTRY_ENV) {
+            let working_directory = std::env::var_os(CEFARI_DAEMON_DEV_CWD_ENV)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| self.paths.resource_dir.clone());
+            return Ok(DaemonProcessConfig {
+                program: PathBuf::from("deno"),
+                args: vec![OsString::from("run"), OsString::from("-A"), entry],
+                working_directory,
+                environment: vec![(
+                    CEFARI_DAEMON_LOG_ENV.into(),
+                    daemon_log_path(&self.paths).into(),
+                )],
+            });
+        }
+
         Ok(DaemonProcessConfig {
             program: self.daemon_program()?,
+            args: Vec::new(),
             working_directory: self.paths.data_dir.clone(),
             environment: vec![(
                 CEFARI_DAEMON_LOG_ENV.into(),
@@ -283,6 +303,7 @@ fn platform_package_formats() -> &'static [cefari_core::PackageFormat] {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::sync::Mutex;
 
     use cefari_core::{
@@ -345,6 +366,13 @@ mod tests {
                 CEFARI_DAEMON_LOG_ENV.to_owned(),
                 paths.log_dir.join("daemon.log").display().to_string()
             )]
+        );
+        assert_eq!(
+            runtime
+                .daemon_process_config()
+                .expect("daemon process config")
+                .args,
+            Vec::<OsString>::new()
         );
     }
 

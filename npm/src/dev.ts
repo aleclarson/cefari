@@ -10,7 +10,8 @@ import { loadCefariConfig } from "./config.js";
 import type { CefariCapability, ResolvedCefariConfig } from "./config.js";
 
 const CEFARI_DAEMON_LOG_ENV = "CEFARI_DAEMON_LOG";
-const CEFARI_DAEMON_ENV = "CEFARI_DAEMON";
+const CEFARI_DAEMON_DEV_CWD_ENV = "CEFARI_DAEMON_DEV_CWD";
+const CEFARI_DAEMON_DEV_ENTRY_ENV = "CEFARI_DAEMON_DEV_ENTRY";
 const CEFARI_DESKTOP_RUNTIME_ENV = "CEFARI_DESKTOP_RUNTIME";
 const CEFARI_DEV_MODE_ENV = "CEFARI_DEV_MODE";
 const CEFARI_DEVTOOLS_PORT_ENV = "CEFARI_DEVTOOLS_PORT";
@@ -31,14 +32,21 @@ export interface DevSession {
 }
 
 export interface ChildLike {
-  once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
+  once(
+    event: "exit",
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+  ): unknown;
   kill(signal?: NodeJS.Signals): unknown;
 }
 
 export interface DevDependencies {
   createServer(config: InlineConfig): Promise<ViteServerLike>;
   spawn(command: string, args: string[], options: SpawnOptions): ChildLike;
-  spawnSync(command: string, args: string[], options: SpawnOptions): { status: number | null; error?: Error };
+  spawnSync(
+    command: string,
+    args: string[],
+    options: SpawnOptions,
+  ): { status: number | null; error?: Error };
   env: NodeJS.ProcessEnv;
   stdout: Pick<NodeJS.WriteStream, "write">;
   process: {
@@ -53,12 +61,18 @@ export interface ViteServerLike {
   close(): Promise<unknown>;
 }
 
-export async function runCefariDev(options: DevOptions = {}, deps = defaultDevDependencies()): Promise<void> {
+export async function runCefariDev(
+  options: DevOptions = {},
+  deps = defaultDevDependencies(),
+): Promise<void> {
   const session = await startCefariDev(options, deps);
   await waitForDevSession(session, deps);
 }
 
-export async function startCefariDev(options: DevOptions = {}, deps = defaultDevDependencies()): Promise<DevSession> {
+export async function startCefariDev(
+  options: DevOptions = {},
+  deps = defaultDevDependencies(),
+): Promise<DevSession> {
   const root = resolve(options.root ?? process.cwd());
   const config = await loadCefariConfig({
     root,
@@ -81,15 +95,13 @@ export async function startCefariDev(options: DevOptions = {}, deps = defaultDev
   deps.stdout.write(`chrome devtools: ${devtoolsUrl}\n`);
   deps.stdout.write(`chrome-devtools start --browserUrl ${devtoolsUrl}\n`);
 
-  const daemon = config.daemon === undefined ? undefined : spawnDaemon(config, deps);
   const desktop = spawnDesktop(config, frontendUrl, devtoolsPort, deps);
   const session = {
     frontendUrl,
     devtoolsUrl,
-    daemon,
+    daemon: undefined,
     desktop,
     async close() {
-      daemon?.kill("SIGTERM");
       desktop.kill("SIGTERM");
       await server.close();
     },
@@ -102,17 +114,19 @@ export async function startCefariDev(options: DevOptions = {}, deps = defaultDev
   return session;
 }
 
-export function createViteDevConfig(config: ResolvedCefariConfig, port: number): InlineConfig {
+export function createViteDevConfig(
+  config: ResolvedCefariConfig,
+  port: number,
+): InlineConfig {
   const root = resolve(config.root, config.vite.root);
   return {
     root,
     ...viteResolveConfig(root),
-    configFile:
-      config.vite.configFile === false
-        ? false
-        : config.vite.configFile === undefined
-          ? undefined
-          : resolve(config.root, config.vite.configFile),
+    configFile: config.vite.configFile === false
+      ? false
+      : config.vite.configFile === undefined
+      ? undefined
+      : resolve(config.root, config.vite.configFile),
     server: {
       host: "127.0.0.1",
       port,
@@ -126,12 +140,16 @@ function viteResolveConfig(root: string): Pick<InlineConfig, "resolve"> {
   return alias.length === 0 ? {} : { resolve: { alias } };
 }
 
-function denoLocalImportAliases(root: string): Array<{ find: string; replacement: string }> {
+function denoLocalImportAliases(
+  root: string,
+): Array<{ find: string; replacement: string }> {
   const configPath = resolve(root, "deno.json");
   if (!existsSync(configPath)) {
     return [];
   }
-  const config = JSON.parse(readFileSync(configPath, "utf8")) as { imports?: Record<string, string> };
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+    imports?: Record<string, string>;
+  };
   return Object.entries(config.imports ?? {})
     .filter(([, value]) => isLocalImportTarget(value))
     .map(([find, value]) => ({
@@ -142,20 +160,6 @@ function denoLocalImportAliases(root: string): Array<{ find: string; replacement
 
 function isLocalImportTarget(value: string): boolean {
   return value.startsWith(".") || value.startsWith("/");
-}
-
-function spawnDaemon(config: ResolvedCefariConfig, deps: DevDependencies): ChildLike {
-  const cefariDir = join(config.root, ".cefari");
-  const daemonLog = join(cefariDir, "daemon.log");
-  return deps.spawn("deno", ["run", "-A", "--watch", config.daemon!.entry], {
-    cwd: config.root,
-    env: {
-      ...deps.env,
-      [CEFARI_DAEMON_ENV]: "1",
-      [CEFARI_DAEMON_LOG_ENV]: daemonLog,
-    },
-    stdio: ["ignore", "inherit", "inherit"],
-  });
 }
 
 function spawnDesktop(
@@ -173,17 +177,33 @@ function spawnDesktop(
       [CEFARI_DEV_MODE_ENV]: "1",
       [CEFARI_DEVTOOLS_PORT_ENV]: devtoolsPort.toString(),
       CEFARI_RESOURCE_DIR: config.root,
+      ...daemonDevEnv(config),
       ...trayIconEnv(config),
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
 }
 
+function daemonDevEnv(config: ResolvedCefariConfig): Record<string, string> {
+  if (config.daemon === undefined) {
+    return {};
+  }
+  return {
+    [CEFARI_DAEMON_DEV_ENTRY_ENV]: config.daemon.entry,
+    [CEFARI_DAEMON_DEV_CWD_ENV]: config.root,
+    [CEFARI_DAEMON_LOG_ENV]: join(config.root, ".cefari", "daemon.log"),
+  };
+}
+
 function trayIconEnv(config: ResolvedCefariConfig): Record<string, string> {
-  const tray = config.capabilities.find((capability): capability is Extract<CefariCapability, { type: "tray" }> => {
-    return capability.type === "tray";
-  });
-  return tray === undefined ? {} : { CEFARI_TRAY_ICON: resolve(config.root, tray.icon) };
+  const tray = config.capabilities.find(
+    (capability): capability is Extract<CefariCapability, { type: "tray" }> => {
+      return capability.type === "tray";
+    },
+  );
+  return tray === undefined
+    ? {}
+    : { CEFARI_TRAY_ICON: resolve(config.root, tray.icon) };
 }
 
 export function resolveDesktopRuntime(
@@ -194,12 +214,16 @@ export function resolveDesktopRuntime(
   const configured = deps.env[CEFARI_DESKTOP_RUNTIME_ENV];
   if (configured !== undefined && configured !== "") {
     if (!existsSync(configured)) {
-      throw new Error(`${CEFARI_DESKTOP_RUNTIME_ENV} points to missing cefari-desktop runtime ${configured}`);
+      throw new Error(
+        `${CEFARI_DESKTOP_RUNTIME_ENV} points to missing cefari-desktop runtime ${configured}`,
+      );
     }
     return configured;
   }
 
-  const binaryName = process.platform === "win32" ? "cefari-desktop.exe" : "cefari-desktop";
+  const binaryName = process.platform === "win32"
+    ? "cefari-desktop.exe"
+    : "cefari-desktop";
   for (const candidate of bundledRuntimeCandidates(binaryName)) {
     if (existsSync(candidate)) {
       return candidate;
@@ -221,9 +245,16 @@ export function resolveDesktopRuntime(
       throw status.error;
     }
     if (status.status !== 0) {
-      throw new Error(`cargo build -p cefari-desktop failed with status ${status.status}`);
+      throw new Error(
+        `cargo build -p cefari-desktop failed with status ${status.status}`,
+      );
     }
-    const runtime = join(dirname(manifest), "target", release ? "release" : "debug", binaryName);
+    const runtime = join(
+      dirname(manifest),
+      "target",
+      release ? "release" : "debug",
+      binaryName,
+    );
     if (existsSync(runtime)) {
       return runtime;
     }
@@ -270,10 +301,17 @@ function resolveFrontendUrl(server: ViteServerLike, port: number): string {
   return localUrl?.replace(/\/$/, "") ?? `http://127.0.0.1:${port}`;
 }
 
-async function writeDevtoolsFile(root: string, port: number, browserUrl: string): Promise<void> {
+async function writeDevtoolsFile(
+  root: string,
+  port: number,
+  browserUrl: string,
+): Promise<void> {
   const devtoolsDir = join(root, ".cefari");
   await mkdir(devtoolsDir, { recursive: true });
-  await writeFile(join(devtoolsDir, "devtools.json"), `${JSON.stringify({ port, browserUrl }, null, 2)}\n`);
+  await writeFile(
+    join(devtoolsDir, "devtools.json"),
+    `${JSON.stringify({ port, browserUrl }, null, 2)}\n`,
+  );
 }
 
 function validateFixedPort(port: number, name: string): void {
@@ -298,7 +336,10 @@ async function availableLocalPort(): Promise<number> {
   });
 }
 
-async function waitForDevSession(session: DevSession, deps: DevDependencies): Promise<void> {
+async function waitForDevSession(
+  session: DevSession,
+  deps: DevDependencies,
+): Promise<void> {
   let shuttingDown = false;
   const shutdown = async () => {
     if (shuttingDown) {
@@ -345,7 +386,8 @@ function defaultDevDependencies(): DevDependencies {
       const { createServer } = await import("vite");
       return createServer(config);
     },
-    spawn: (command, args, options) => spawn(command, args, options) as ChildProcess,
+    spawn: (command, args, options) =>
+      spawn(command, args, options) as ChildProcess,
     spawnSync: (command, args, options) => spawnSync(command, args, options),
     env: process.env,
     stdout: process.stdout,

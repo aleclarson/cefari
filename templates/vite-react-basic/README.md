@@ -1,8 +1,8 @@
 # Vite React Basic
 
 This is a minimal Cefari project template for a Vite app with a native Cefari
-desktop shell, a Deno daemon, packaging, updater support, and desktop
-capabilities.
+desktop shell, packaging, updater support, and desktop capabilities. It does
+not configure a daemon by default.
 
 The frontend imports `cefari/app` for ergonomic wrappers over `window.cefari`.
 In ordinary browser preview calls reject with a typed unsupported Cefari error;
@@ -37,6 +37,19 @@ Package it with:
 ```bash
 cefari package templates/vite-react-basic
 ```
+
+## Optional Daemon
+
+Add a daemon only when your app needs one:
+
+```ts
+daemon: {
+  entry: "daemon/main.ts",
+}
+```
+
+Daemon stdout is reserved for byte-stream protocol data when frontend code uses
+`cefari.daemon.connect()`. Write daemon logs to stderr.
 
 ## Release Workflows
 

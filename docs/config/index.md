@@ -28,9 +28,6 @@ export default defineConfig({
     configFile: "frontend/vite.config.ts",
     devPort: 5173,
   },
-  daemon: {
-    entry: "daemon/main.ts",
-  },
   package: {
     productName: "My Cefari App",
     version: "0.1.0",
@@ -46,7 +43,7 @@ after evaluating the config. Legacy `frontend` fields are rejected.
 - [`app`](app.md): project name, display name, app identifier, and app icon.
 - [`capabilities`](capabilities.md): opt-in native desktop integrations.
 - [`vite`](frontend.md): Vite root, Vite config file, and development port.
-- [`daemon`](daemon.md): Deno daemon entrypoint.
+- [`daemon`](daemon.md): optional Deno daemon entrypoint and stream contract.
 - [`package`](package.md): packaged product name and app version.
 
 ## Path Rules

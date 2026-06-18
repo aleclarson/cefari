@@ -52,6 +52,7 @@ pub trait DaemonEventSink: Send + Sync {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DaemonProcessConfig {
     pub program: PathBuf,
+    pub args: Vec<OsString>,
     pub working_directory: PathBuf,
     pub environment: Vec<(OsString, OsString)>,
 }
@@ -67,6 +68,7 @@ impl DaemonSpawner for SystemDaemonSpawner {
     fn spawn_daemon(&self, config: &DaemonProcessConfig) -> Result<DaemonChild> {
         let mut command = Command::new(&config.program);
         command
+            .args(&config.args)
             .current_dir(&config.working_directory)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -408,6 +410,7 @@ mod tests {
     fn test_config() -> DaemonProcessConfig {
         DaemonProcessConfig {
             program: PathBuf::from("/tmp/daemon"),
+            args: Vec::new(),
             working_directory: PathBuf::from("/tmp"),
             environment: Vec::new(),
         }

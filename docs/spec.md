@@ -1,8 +1,8 @@
 # Cefari Capability Spec
 
-Cefari builds Vite applications into native desktop apps with a Deno daemon,
-native desktop runtime, package assembly, updater support, and typed frontend
-APIs.
+Cefari builds Vite applications into native desktop apps with an optional Deno
+daemon, native desktop runtime, package assembly, updater support, and typed
+frontend APIs.
 
 ## App Project Model
 
@@ -18,9 +18,10 @@ APIs.
   - It sets the Vite project root.
   - It selects a Vite config file or disables config-file discovery.
   - It sets the fixed development server port.
-- The config can define a Deno daemon entrypoint.
+- The config can optionally define a Deno daemon entrypoint.
   - Dev mode runs the daemon from source.
   - Build mode compiles the daemon into an executable.
+  - Apps without a daemon do not spawn, build, or package daemon artifacts.
 - The config can define package metadata.
   - It sets the packaged product name.
   - It sets the app version used by package metadata and update checks.
@@ -37,9 +38,8 @@ APIs.
 > This section covers the starter app and example release workflows.
 
 - Cefari includes a Vite React starter template.
-  - The template has separate frontend and daemon workspaces.
+  - The template has a frontend workspace.
   - The frontend is a Vite app.
-  - The daemon is a Deno program.
   - The template imports typed Cefari frontend APIs.
 - The template includes release workflow examples.
   - It includes a production release workflow.
@@ -52,7 +52,7 @@ APIs.
 
 - Cefari can run an app in local development mode.
   - It starts the Vite dev server.
-  - It starts the Deno daemon in watch mode.
+  - It makes a configured Deno daemon available to the desktop runtime.
   - It starts the native desktop runtime.
   - It stops the remaining child processes when one process exits or fails.
 - Dev mode uses the app's configured Vite port by default.
@@ -71,8 +71,7 @@ APIs.
 - Cefari can build all app runtime pieces.
   - It builds the Vite frontend into `build/frontend/`.
   - It writes runtime config into `build/config/cefari.json`.
-  - It copies the daemon source entry into `build/daemon/main.ts`.
-  - It compiles the daemon into a project-named executable.
+  - It copies and compiles daemon artifacts only when a daemon is configured.
   - It prepares a desktop runtime executable.
   - It prepares CEF resources and manifest data.
 - Cefari can build with a release profile.
@@ -182,6 +181,13 @@ APIs.
   - Apps can check whether the native bridge is available.
   - Apps can call low-level IPC commands directly when needed.
   - Apps can use throwing APIs or result-style APIs.
+- Cefari exposes daemon stream APIs when an app configures a daemon.
+  - Frontend code can call `cefari.daemon.connect()`.
+  - Frontend code receives daemon-to-webview bytes through `readable`.
+  - Frontend code sends webview-to-daemon bytes through `writable`.
+  - Daemon code can import stdio helpers from `cefari/daemon`.
+  - The v1 daemon stream transport is stdio.
+  - The public TypeScript API does not expose transport selection.
 - Cefari exposes typed event subscriptions.
   - Apps can subscribe to named events.
   - Apps can subscribe to all native events.
@@ -319,13 +325,19 @@ APIs.
 - Apps can apply an update and restart as a single frontend action.
 - Apps can subscribe to updater state changes.
 
-## Daemon Service
+## Daemon Service And Streams
 
-> This section covers the Deno daemon and its frontend status API.
+> This section covers the optional Deno daemon, status API, and byte stream.
 
-- Cefari can run a Deno daemon beside the frontend.
+- Cefari can run a Deno daemon beside the frontend when the app configures one.
+- Apps without a configured daemon do not have a daemon process.
 - Apps can read daemon service status from the frontend.
 - Apps can subscribe to daemon service status changes.
+- Apps can open a low-level byte stream to a configured daemon.
+  - The stream is bidirectional.
+  - The frontend `writable` sends bytes to daemon stdin.
+  - The frontend `readable` receives bytes from daemon stdout.
+  - Daemon stderr remains available for logs.
 - The current frontend wrapper does not expose daemon start, stop, or restart
   commands.
 

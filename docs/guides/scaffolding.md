@@ -13,7 +13,6 @@ The template includes:
 
 - `cefari.config.ts`
 - `frontend/index.html` and React source files
-- `daemon/main.ts`
 - `README.md`
 
 ## Project Name Rules
@@ -24,7 +23,8 @@ must be lowercase and contain only `a-z`, `0-9`, and `-`.
 Cefari uses that value for build outputs:
 
 - desktop executable: `<projectName>` or `<projectName>.exe`
-- daemon executable: `<projectName>-daemon` or `<projectName>-daemon.exe`
+- daemon executable, when configured: `<projectName>-daemon` or
+  `<projectName>-daemon.exe`
 
 ## Project Manifest Shape
 
@@ -44,14 +44,19 @@ export default defineConfig({
     configFile: "frontend/vite.config.ts",
     devPort: 5173,
   },
-  daemon: {
-    entry: "daemon/main.ts",
-  },
   package: {
     productName: "My Cefari App",
     version: "0.1.0",
   },
 });
+```
+
+Add a `daemon` section only when the app needs a Deno daemon:
+
+```ts
+daemon: {
+  entry: "daemon/main.ts",
+}
 ```
 
 Cefari owns the Vite dev and build lifecycle directly. See

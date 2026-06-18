@@ -6,7 +6,7 @@ Cefari keeps shipped runtime code separate from developer and release tooling.
 
 - `cefari-core`: reusable runtime library for config, paths, resources, logging inputs, update helpers, service helpers, and shared IPC contract types.
 - `cefari-desktop`: shipped desktop runtime. It owns windowing, CEF startup, native menus, tray integration, notifications, runtime logging setup, and native action dispatch.
-- `npm`: developer tool distributed separately from Cefari apps. It owns scaffolding, dev orchestration, frontend and daemon builds, desktop builds, package assembly, signing, notarization, update artifact generation, diagnostics, and cleanup.
+- `npm`: developer tool distributed separately from Cefari apps. It owns scaffolding, dev orchestration, frontend and optional daemon builds, desktop builds, package assembly, signing, notarization, update artifact generation, diagnostics, and cleanup.
 
 ## Boundary Rules
 

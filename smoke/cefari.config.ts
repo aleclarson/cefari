@@ -6,8 +6,9 @@ export default defineConfig({
     name: "Cefari Smoke",
     identifier: "dev.cefari.smoke",
   },
-  frontend: {
-    dist: "frontend",
+  vite: {
+    root: "frontend",
+    configFile: false,
     devPort: 5273,
   },
   daemon: {

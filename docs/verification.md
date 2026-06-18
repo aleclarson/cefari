@@ -15,8 +15,8 @@ Docs were checked against:
   Deno execution, and runtime validation
 - `npm/src/build.ts`, `package.ts`, `dev.ts`, and
   `release.rs` for guide behavior
-- `templates/vite-react-basic/cefari.config.ts`, `deno.json`, frontend and daemon
-  workspace manifests, and template workflows
+- `templates/vite-react-basic/cefari.config.ts`, `deno.json`, frontend
+  workspace manifest, and template workflows
 - `.github/actions/cefari-release/action.yml` and
   `.github/actions/cefari-release/src/main.ts`
 - `crates/cefari-core/src/ipc/`, `crates/cefari-core/src/ipc/capabilities/`,

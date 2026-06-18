@@ -1,5 +1,3 @@
-console.log("cefari smoke daemon started");
+console.error("cefari smoke daemon started");
 
-setInterval(() => {
-  console.log(`cefari smoke daemon heartbeat ${new Date().toISOString()}`);
-}, 60_000);
+await Deno.stdin.readable.pipeTo(Deno.stdout.writable);

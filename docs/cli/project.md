@@ -15,13 +15,14 @@ Arguments and options:
 - `PATH`: project directory. Defaults to the current directory.
 - `--vite-port PORT`: override `vite.devPort`.
 
-Dev mode starts Vite through its JavaScript API, the Deno daemon, and the
-desktop runtime together. When one child process exits or fails, Cefari stops
-the remaining processes. The Vite port is strict and fixed.
+Dev mode starts Vite through its JavaScript API and the desktop runtime. When a
+daemon is configured, the desktop runtime can launch it for daemon stream
+connections. When one child process exits or fails, Cefari stops the remaining
+processes. The Vite port is strict and fixed.
 
 ## `cefari build`
 
-Build frontend, daemon, CEF resources, and desktop artifacts:
+Build frontend, optional daemon, CEF resources, and desktop artifacts:
 
 ```bash
 cefari build [PATH] [--release]

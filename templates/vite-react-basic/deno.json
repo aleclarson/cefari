@@ -1,12 +1,10 @@
 {
   "nodeModulesDir": "auto",
   "workspace": [
-    "frontend",
-    "daemon"
+    "frontend"
   ],
   "tasks": {
     "build:frontend": "deno task --cwd frontend build",
-    "dev:frontend": "deno task --cwd frontend dev",
-    "dev:daemon": "deno task --cwd daemon dev"
+    "dev:frontend": "deno task --cwd frontend dev"
   }
 }

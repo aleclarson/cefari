@@ -12,6 +12,7 @@ frontmost_fail="$run_root/frontmost.fail"
 devtools_probe="$run_root/devtools-version.json"
 watchdog_seconds="${CEFARI_SMOKE_WATCHDOG_SECONDS:-60}"
 exit_after_ms="${CEFARI_SMOKE_EXIT_AFTER_MS:-45000}"
+vite_port="${CEFARI_SMOKE_VITE_PORT:-5273}"
 original_home="${HOME:-}"
 
 frontmost_app() {
@@ -74,7 +75,7 @@ env \
   DENO_DIR="$run_root/deno" \
   CEFARI_SMOKE_BACKGROUND=1 \
   CEFARI_SMOKE_EXIT_AFTER_MS="$exit_after_ms" \
-  node "$repo_root/npm/dist/bin/cefari.js" dev "$smoke_dir" --vite-port 0 \
+  node "$repo_root/npm/dist/bin/cefari.js" dev "$smoke_dir" --vite-port "$vite_port" \
   >"$stdout_log" 2>"$stderr_log" &
 smoke_pid=$!
 

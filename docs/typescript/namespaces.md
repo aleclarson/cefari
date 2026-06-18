@@ -256,6 +256,26 @@ Service lifecycle commands are not exposed through the current TypeScript
 wrapper. Add Rust IPC commands first when frontend code needs start, stop, or
 restart actions.
 
+## Daemon
+
+Use `cefari.daemon` when a configured daemon needs a low-level byte stream:
+
+```ts
+const connection = await cefari.daemon.connect();
+const writer = connection.writable.getWriter();
+await writer.write(new TextEncoder().encode("ping"));
+```
+
+Current methods:
+
+- `isConfigured(): boolean`
+- `connect(): Promise<DaemonConnection>`
+
+`DaemonConnection.readable` carries daemon-to-webview bytes.
+`DaemonConnection.writable` carries webview-to-daemon bytes. If the app omits
+`daemon` from `cefari.config.ts`, `connect()` rejects with a typed unsupported
+error.
+
 ## App Data Files
 
 Use `cefari.fs` for files inside Cefari's managed app-data directory. Paths are

@@ -10,11 +10,12 @@ have the native bridge unless a test installs a mock bridge.
 
 ## Package Boundary
 
-`cefari/app` exports two public entrypoints:
+The package exports three public TypeScript entrypoints:
 
 - `cefari/app`: ergonomic wrappers, namespace APIs, bridge helpers, event
   helpers, error helpers, and generated IPC types.
 - `cefari/ipc`: generated IPC types only.
+- `cefari/daemon`: daemon-side stdio helpers for configured daemon programs.
 
 The default app object is `cefari`:
 
@@ -36,6 +37,39 @@ await shell.openExternalUrl("https://example.com");
 const state = await updates.state();
 ```
 
+Configured daemon streams are available through `cefari.daemon`:
+
+```ts
+import { cefari } from "cefari/app";
+
+if (cefari.daemon.isConfigured()) {
+  const connection = await cefari.daemon.connect();
+  const writer = connection.writable.getWriter();
+  await writer.write(new TextEncoder().encode("ping"));
+  await writer.close();
+  await connection.close();
+}
+```
+
+`connection.writable` sends bytes from the webview to the daemon.
+`connection.readable` receives bytes from the daemon. If the app omits the
+`daemon` config section, `connect()` rejects with a typed unsupported
+`CefariError`.
+
+Daemon programs can use `cefari/daemon`:
+
+```ts
+import { connect, isCefariDaemon } from "cefari/daemon";
+
+if (isCefariDaemon()) {
+  const connection = connect();
+  await connection.readable.pipeTo(connection.writable);
+}
+```
+
+The v1 daemon stream transport is stdio. The public API is transport-agnostic
+and does not expose HTTP or WebSocket selection.
+
 Generated IPC types are re-exported for tools, tests, and bridge code:
 
 ```ts
@@ -50,7 +84,8 @@ package source:
 ```json
 {
   "imports": {
-    "cefari/app": "../../../npm/src/app/mod.ts"
+    "cefari/app": "../../../npm/src/app/mod.ts",
+    "cefari/daemon": "../../../npm/src/daemon.ts"
   }
 }
 ```
@@ -79,6 +114,6 @@ whose code is `unsupported`.
 ## Documentation Map
 
 - [Namespace APIs](namespaces.md): `app`, `window`, `windows`, `shell`, `updates`,
-  `service`, `tray`, `notifications`, `fs`, and `files`.
+  `service`, `tray`, `notifications`, `daemon`, `fs`, and `files`.
 - [Events And Errors](events-and-errors.md): typed event subscriptions,
   low-level event logging, thrown errors, and result-style helpers.

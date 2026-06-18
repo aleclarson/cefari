@@ -12,9 +12,6 @@ export default defineConfig(({ mode }) => ({
     configFile: "frontend/vite.config.js",
     devPort: 5111,
   },
-  daemon: {
-    entry: "daemon/main.ts",
-  },
   package: {
     productName: "Vite React Basic",
     version: mode === "production" ? "0.1.0" : "0.1.0-dev",

@@ -1,7 +1,7 @@
 # Getting Started With Cefari
 
-Cefari builds Vite apps with a native desktop shell, a Deno daemon, packaging,
-updater support, and native desktop capabilities.
+Cefari builds Vite apps with a native desktop shell, an optional Deno daemon,
+packaging, updater support, and native desktop capabilities.
 
 Use this page as the entry point. It branches into task-oriented guides under
 `docs/guides/`.
@@ -35,7 +35,7 @@ cp -R templates/vite-react-basic my-cefari-app
 ```
 
 Edit `my-cefari-app/cefari.config.ts` for the app name, identifier, package
-version, Vite settings, and daemon entry.
+version, and Vite settings. Add a daemon entry only when the app needs one.
 
 ## Run In Development
 
@@ -45,7 +45,8 @@ Start the local development environment:
 cefari dev my-cefari-app
 ```
 
-Cefari starts Vite, the Deno daemon, and the desktop app together. Use
+Cefari starts Vite and the desktop app together. When a daemon is configured,
+the desktop runtime can start it for daemon stream connections. Use
 `--vite-port PORT` when a project needs a specific Vite port.
 
 For Vite development details, see [Develop Locally](guides/development.md).
