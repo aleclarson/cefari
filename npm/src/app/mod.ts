@@ -5,12 +5,13 @@ export type { CefariBridge, CefariWindow, Unsubscribe } from "./transport.ts";
 export { invoke, isAvailable, onAnyEvent, tryInvoke } from "./transport.ts";
 export { type CefariEventMap, type CefariEventName, on } from "./events.ts";
 export {
-  dialogs,
   type DialogOptions,
   type DialogOutcome,
+  dialogs,
   type DialogsApi,
 } from "./dialogs.ts";
 export { downloads, type DownloadsApi } from "./downloads.ts";
+export { daemon, type DaemonApi, type DaemonConnection } from "./daemon.ts";
 export { files, type FilesApi, type JsonValue } from "./files.ts";
 export {
   CefariDirent,
@@ -50,6 +51,7 @@ export {
 import { app, type AppApi } from "./app.ts";
 import { dialogs, type DialogsApi } from "./dialogs.ts";
 import { downloads, type DownloadsApi } from "./downloads.ts";
+import { daemon, type DaemonApi } from "./daemon.ts";
 import { type CefariEventMap, on } from "./events.ts";
 import type { CefariResult } from "./errors.ts";
 import { files, type FilesApi } from "./files.ts";
@@ -88,6 +90,7 @@ export type CefariApp = {
   notifications: NotificationsApi;
   dialogs: DialogsApi;
   downloads: DownloadsApi;
+  daemon: DaemonApi;
   fs: FileSystemApi;
   files: FilesApi;
 };
@@ -108,6 +111,7 @@ export const cefari: Readonly<CefariApp> = Object.freeze({
   notifications,
   dialogs,
   downloads,
+  daemon,
   fs,
   files,
 });

@@ -9,11 +9,13 @@ import {
   type WindowKind,
   type WindowState,
 } from "../../src/app/mod.ts";
+import { isCefariDaemon } from "../../src/daemon.ts";
 
 Deno.test("reports unavailable outside the Cefari shell", async () => {
   withBridge(undefined);
 
   assertEquals(cefari.isAvailable(), false);
+  assertEquals(cefari.daemon.isConfigured(), false);
 
   const result = await cefari.tryInvoke({ command: "updateState" });
   assertEquals(result.ok, false);
@@ -25,6 +27,14 @@ Deno.test("reports unavailable outside the Cefari shell", async () => {
     () => cefari.updates.state(),
     "window.cefari is only available",
   );
+  await assertRejectsCefariError(
+    () => cefari.daemon.connect(),
+    "daemon streams are only available",
+  );
+});
+
+Deno.test("reports daemon helper availability outside Cefari daemon", () => {
+  assertEquals(isCefariDaemon(), false);
 });
 
 Deno.test("wraps typed namespace commands", async () => {
@@ -101,7 +111,10 @@ Deno.test("wraps typed namespace commands", async () => {
   assertEquals(await cefari.notifications.requestPermission(), {
     allowed: true,
   });
-  assertEquals(await cefari.notifications.capabilities(), notificationCapabilities());
+  assertEquals(
+    await cefari.notifications.capabilities(),
+    notificationCapabilities(),
+  );
   assertEquals(
     await cefari.notifications.registerCategories([
       {
@@ -585,7 +598,12 @@ Deno.test("filters typed events", () => {
     { windowId: "settings" },
   );
   const unsubscribeNotification = cefari.notifications.onResponse((event) => {
-    notifications.push([event.id, event.action, event.userText, event.userInfo]);
+    notifications.push([
+      event.id,
+      event.action,
+      event.userText,
+      event.userInfo,
+    ]);
   });
 
   for (const handler of handlers) {
@@ -680,13 +698,138 @@ Deno.test("throws typed errors for IPC failures", async () => {
   assertEquals(error.command, "openLogs");
 });
 
+Deno.test("throws typed errors for unconfigured daemon bridge", async () => {
+  withDaemonBridge({
+    post() {
+      return Promise.resolve({
+        outcome: {
+          status: "err",
+          payload: {
+            code: "unsupported",
+            details: {
+              command: "daemon",
+              reason: "daemon is not configured",
+            },
+          },
+        },
+      });
+    },
+    on() {
+      return () => {};
+    },
+  });
+
+  assertEquals(cefari.daemon.isConfigured(), true);
+  const error = await assertRejectsCefariError(
+    () => cefari.daemon.connect(),
+    "daemon is not configured",
+  );
+  assertEquals(error.code, "unsupported");
+  assertEquals(error.command, "daemon");
+});
+
+Deno.test("plumbs daemon stream connect, read, write, and close", async () => {
+  const commands: unknown[] = [];
+  const handlers = new Set<(event: DaemonBridgeEvent) => void>();
+  withDaemonBridge({
+    post(command) {
+      commands.push(command);
+      if (command.op === "connect") {
+        return Promise.resolve(daemonOk({ connectionId: 7 }));
+      }
+      return Promise.resolve(daemonOk({}));
+    },
+    on(handler) {
+      handlers.add(handler);
+      return () => handlers.delete(handler);
+    },
+  });
+
+  const connection = await cefari.daemon.connect();
+  assertEquals(cefari.daemon.isConfigured(), true);
+
+  const reader = connection.readable.getReader();
+  for (const handler of handlers) {
+    handler({ event: "chunk", connectionId: 7, chunkBase64: "AQI=" });
+  }
+  const readResult = await reader.read();
+  assertEquals(readResult.done, false);
+  assertEquals(readResult.value, new Uint8Array([1, 2]));
+
+  const writer = connection.writable.getWriter();
+  await writer.write(new Uint8Array([3, 4]));
+  await writer.close();
+  writer.releaseLock();
+  reader.releaseLock();
+  await connection.close();
+  await connection.closed;
+
+  assertEquals(commands, [
+    { op: "connect" },
+    { op: "write", connectionId: 7, chunkBase64: "AwQ=" },
+    { op: "closeWrite", connectionId: 7 },
+    { op: "close", connectionId: 7 },
+  ]);
+  assertEquals(handlers.size, 0);
+});
+
 function withBridge(bridge: CefariBridge | undefined) {
-  const global = globalThis as { cefari?: CefariBridge };
+  const global = globalThis as {
+    cefari?: CefariBridge;
+    __CEFARI_DAEMON_STREAM_POST__?: DaemonBridgeHooks["post"];
+    __CEFARI_DAEMON_STREAM_ON__?: DaemonBridgeHooks["on"];
+  };
   if (bridge) {
     global.cefari = bridge;
   } else {
     delete global.cefari;
   }
+  delete global.__CEFARI_DAEMON_STREAM_POST__;
+  delete global.__CEFARI_DAEMON_STREAM_ON__;
+}
+
+type DaemonBridgeCommand =
+  | { op: "connect" }
+  | { op: "write"; connectionId: number; chunkBase64: string }
+  | { op: "closeWrite"; connectionId: number }
+  | { op: "close"; connectionId: number };
+
+type DaemonBridgeEvent =
+  | { event: "chunk"; connectionId: number; chunkBase64: string }
+  | { event: "close"; connectionId: number }
+  | { event: "error"; connectionId: number; message: string };
+
+type DaemonBridgeResponse = {
+  outcome:
+    | { status: "ok"; payload: { connectionId?: number } }
+    | {
+      status: "err";
+      payload: Extract<
+        CefariIpcResponse["outcome"],
+        { status: "err" }
+      >["payload"];
+    };
+};
+
+type DaemonBridgeHooks = {
+  post(command: DaemonBridgeCommand): Promise<DaemonBridgeResponse>;
+  on(handler: (event: DaemonBridgeEvent) => void): () => void;
+};
+
+function withDaemonBridge(hooks: DaemonBridgeHooks) {
+  withBridge(undefined);
+  const global = globalThis as {
+    __CEFARI_DAEMON_STREAM_POST__?: DaemonBridgeHooks["post"];
+    __CEFARI_DAEMON_STREAM_ON__?: DaemonBridgeHooks["on"];
+  };
+  global.__CEFARI_DAEMON_STREAM_POST__ = hooks.post;
+  global.__CEFARI_DAEMON_STREAM_ON__ = hooks.on;
+}
+
+function daemonOk(payload: { connectionId?: number }): DaemonBridgeResponse {
+  return {
+    outcome: { status: "ok", payload },
+  };
 }
 
 function mainWindowState(

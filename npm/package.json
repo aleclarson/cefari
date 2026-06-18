@@ -20,6 +20,10 @@
     "./ipc": {
       "types": "./dist/app/ipc.d.ts",
       "import": "./dist/app/ipc.js"
+    },
+    "./daemon": {
+      "types": "./dist/src/daemon.d.ts",
+      "import": "./dist/src/daemon.js"
     }
   },
   "files": [

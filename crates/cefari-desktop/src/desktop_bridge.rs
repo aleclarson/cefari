@@ -391,16 +391,27 @@ pub fn daemon_stream_ok_response(id: &str, payload: Value) -> String {
 }
 
 pub fn daemon_stream_error_response(id: &str, code: &str, message: &str) -> String {
+    let payload = if code == "unsupported" {
+        serde_json::json!({
+            "code": code,
+            "details": {
+                "command": "daemon",
+                "reason": message,
+            },
+        })
+    } else {
+        serde_json::json!({
+            "code": code,
+            "details": {
+                "message": message,
+            },
+        })
+    };
     serde_json::json!({
         "id": id,
         "outcome": {
             "status": "err",
-            "payload": {
-                "code": code,
-                "details": {
-                    "message": message,
-                },
-            },
+            "payload": payload,
         },
     })
     .to_string()
@@ -800,9 +811,10 @@ mod tests {
         assert_eq!(error["outcome"]["status"], "err");
         assert_eq!(error["outcome"]["payload"]["code"], "unsupported");
         assert_eq!(
-            error["outcome"]["payload"]["details"]["message"],
+            error["outcome"]["payload"]["details"]["reason"],
             "daemon is not configured"
         );
+        assert_eq!(error["outcome"]["payload"]["details"]["command"], "daemon");
     }
 
     #[test]
