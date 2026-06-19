@@ -369,32 +369,47 @@ impl DesktopWorkerManager {
         entry: &WorkerEntryConfig,
         input_json: &str,
     ) -> Result<WorkerProcessSpec> {
-        let WorkerTargetConfig::DenoSource(source) = &entry.target else {
-            anyhow::bail!("worker executable targets are not supported by this runtime yet");
-        };
-        let entry_path = safe_resource_path(&self.paths.resource_dir, &source.entry)
-            .context("worker entry must resolve inside the resource directory")?;
-        let mut args = vec![
-            "run".to_owned(),
-            "--no-prompt".to_owned(),
-            format!("--allow-read={}", entry_path.display()),
-        ];
-        args.extend(permission_args(&self.paths, &source.permissions)?);
-        args.push(entry_path.display().to_string());
-        Ok(WorkerProcessSpec {
-            program: "deno".to_owned(),
-            args,
-            cwd: self.paths.resource_dir.clone(),
-            input: serde_json::json!({
-                "type": "start",
-                "id": id,
-                "input": serde_json::from_str::<serde_json::Value>(input_json)
-                    .context("worker inputJson must be valid JSON")?,
-            })
-            .to_string(),
-            id: id.to_owned(),
-            worker: worker.to_owned(),
+        let input = serde_json::json!({
+            "type": "start",
+            "id": id,
+            "input": serde_json::from_str::<serde_json::Value>(input_json)
+                .context("worker inputJson must be valid JSON")?,
         })
+        .to_string();
+
+        match &entry.target {
+            WorkerTargetConfig::DenoSource(source) => {
+                let entry_path = safe_resource_path(&self.paths.resource_dir, &source.entry)
+                    .context("worker entry must resolve inside the resource directory")?;
+                let mut args = vec![
+                    "run".to_owned(),
+                    "--no-prompt".to_owned(),
+                    format!("--allow-read={}", entry_path.display()),
+                ];
+                args.extend(permission_args(&self.paths, &source.permissions)?);
+                args.push(entry_path.display().to_string());
+                Ok(WorkerProcessSpec {
+                    program: "deno".to_owned(),
+                    args,
+                    cwd: self.paths.resource_dir.clone(),
+                    input,
+                    id: id.to_owned(),
+                    worker: worker.to_owned(),
+                })
+            }
+            WorkerTargetConfig::Executable(executable) => {
+                let program = safe_resource_path(&self.paths.resource_dir, &executable.program)
+                    .context("worker executable must resolve inside the resource directory")?;
+                Ok(WorkerProcessSpec {
+                    program: program.display().to_string(),
+                    args: Vec::new(),
+                    cwd: self.paths.resource_dir.clone(),
+                    input,
+                    id: id.to_owned(),
+                    worker: worker.to_owned(),
+                })
+            }
+        }
     }
 }
 
@@ -809,6 +824,64 @@ mod tests {
     }
 
     #[test]
+    fn builds_direct_command_for_executable_worker() {
+        let sink = Arc::new(RecordingSink::default());
+        let spawner = Arc::new(RecordingSpawner::default());
+        let mut manager = DesktopWorkerManager::with_spawner(
+            executable_worker_config("workers/thumbnailer/thumbnailer"),
+            paths(),
+            sink,
+            spawner.clone(),
+        );
+
+        let result = manager
+            .dispatch(&WorkerCommand::Spawn(WorkerSpawnRequest {
+                worker: "thumbnailer".to_owned(),
+                input_json: r#"{"imageId":"abc"}"#.to_owned(),
+            }))
+            .unwrap();
+
+        assert!(matches!(result, WorkerResult::Spawned(_)));
+        let specs = spawner.specs.lock().unwrap();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(
+            specs[0].program,
+            paths()
+                .resource_dir
+                .join("workers/thumbnailer/thumbnailer")
+                .display()
+                .to_string()
+        );
+        assert!(specs[0].args.is_empty());
+        assert_eq!(specs[0].cwd, paths().resource_dir);
+        assert_eq!(
+            specs[0].input,
+            r#"{"id":"thumbnailer-1","input":{"imageId":"abc"},"type":"start"}"#
+        );
+    }
+
+    #[test]
+    fn rejects_executable_worker_path_outside_resource_dir() {
+        let spawner = Arc::new(RecordingSpawner::default());
+        let mut manager = DesktopWorkerManager::with_spawner(
+            executable_worker_config("../thumbnailer"),
+            paths(),
+            Arc::new(RecordingSink::default()),
+            spawner.clone(),
+        );
+
+        let error = manager
+            .dispatch(&WorkerCommand::Spawn(WorkerSpawnRequest {
+                worker: "thumbnailer".to_owned(),
+                input_json: "{}".to_owned(),
+            }))
+            .unwrap_err();
+
+        assert!(matches!(error, CefariIpcError::InvalidCommand { .. }));
+        assert!(spawner.specs.lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn rejects_unknown_worker_without_spawning() {
         let spawner = Arc::new(RecordingSpawner::default());
         let mut manager = DesktopWorkerManager::with_spawner(
@@ -1011,6 +1084,21 @@ mod tests {
                             env: WorkerPermissionConfig::None("none".to_owned()),
                             run: WorkerPermissionConfig::None("none".to_owned()),
                         },
+                    }),
+                },
+            )]),
+        }
+    }
+
+    fn executable_worker_config(program: &str) -> WorkerConfig {
+        use cefari_core::WorkerExecutableConfig;
+
+        WorkerConfig {
+            entries: BTreeMap::from([(
+                "thumbnailer".to_owned(),
+                WorkerEntryConfig {
+                    target: WorkerTargetConfig::Executable(WorkerExecutableConfig {
+                        program: program.to_owned(),
                     }),
                 },
             )]),
