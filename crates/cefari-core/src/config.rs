@@ -69,17 +69,52 @@ pub struct WorkerConfig {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkerEntryConfig {
+    pub target: WorkerTargetConfig,
+}
+
+impl Default for WorkerEntryConfig {
+    fn default() -> Self {
+        Self {
+            target: WorkerTargetConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum WorkerTargetConfig {
+    #[serde(rename = "denoSource")]
+    DenoSource(WorkerDenoSourceConfig),
+    #[serde(rename = "executable")]
+    Executable(WorkerExecutableConfig),
+}
+
+impl Default for WorkerTargetConfig {
+    fn default() -> Self {
+        Self::DenoSource(WorkerDenoSourceConfig::default())
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkerDenoSourceConfig {
     pub entry: String,
     pub permissions: WorkerPermissionsConfig,
 }
 
-impl Default for WorkerEntryConfig {
+impl Default for WorkerDenoSourceConfig {
     fn default() -> Self {
         Self {
             entry: String::new(),
             permissions: WorkerPermissionsConfig::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkerExecutableConfig {
+    pub program: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -167,7 +202,7 @@ pub fn save_config(path: impl AsRef<Path>, config: &CefariConfig) -> Result<()> 
 mod tests {
     use super::{
         AppConfig, BrowserConfig, CefariConfig, DaemonConfig, ServiceConfig,
-        WorkerPermissionConfig,
+        WorkerPermissionConfig, WorkerTargetConfig,
     };
 
     #[test]
@@ -185,9 +220,12 @@ mod tests {
               "workers": {
                 "entries": {
                   "thumbnailer": {
-                    "entry": "workers/thumbnailer.ts",
-                    "permissions": {
-                      "read": ["$appData/uploads"]
+                    "target": {
+                      "kind": "denoSource",
+                      "entry": "workers/thumbnailer.ts",
+                      "permissions": {
+                        "read": ["$appData/uploads"]
+                      }
                     }
                   }
                 }
@@ -209,8 +247,11 @@ mod tests {
         assert_eq!(config.daemon, DaemonConfig::default());
         assert_eq!(config.service, ServiceConfig::default());
         assert_eq!(
-            config.workers.entries["thumbnailer"].permissions.read,
-            WorkerPermissionConfig::Allow(vec!["$appData/uploads".to_owned()])
+            match &config.workers.entries["thumbnailer"].target {
+                WorkerTargetConfig::DenoSource(source) => &source.permissions.read,
+                WorkerTargetConfig::Executable(_) => panic!("expected source worker target"),
+            },
+            &WorkerPermissionConfig::Allow(vec!["$appData/uploads".to_owned()])
         );
     }
 
@@ -247,6 +288,56 @@ mod tests {
                 executable: Some("daemon/example-daemon".to_owned()),
             }
         );
+    }
+
+    #[test]
+    fn parses_executable_worker_target() {
+        let config: CefariConfig = serde_json::from_str(
+            r#"{
+              "workers": {
+                "entries": {
+                  "thumbnailer": {
+                    "target": {
+                      "kind": "executable",
+                      "program": "workers/thumbnailer/thumbnailer"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(
+            match &config.workers.entries["thumbnailer"].target {
+                WorkerTargetConfig::Executable(executable) => executable.program.as_str(),
+                WorkerTargetConfig::DenoSource(_) => panic!("expected executable worker target"),
+            },
+            "workers/thumbnailer/thumbnailer"
+        );
+    }
+
+    #[test]
+    fn rejects_ambiguous_worker_target_config() {
+        let error = serde_json::from_str::<CefariConfig>(
+            r#"{
+              "workers": {
+                "entries": {
+                  "thumbnailer": {
+                    "target": {
+                      "kind": "executable",
+                      "entry": "workers/thumbnailer.ts",
+                      "permissions": {},
+                      "program": "workers/thumbnailer/thumbnailer"
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect_err("ambiguous worker target should be rejected");
+
+        assert!(error.to_string().contains("unknown field"));
     }
 
     #[test]

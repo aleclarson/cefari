@@ -362,9 +362,12 @@ mod tests {
   "workers": {
     "entries": {
       "thumbnailer": {
-        "entry": "workers/thumbnailer.ts",
-        "permissions": {
-          "read": ["$appData/uploads"]
+        "target": {
+          "kind": "denoSource",
+          "entry": "workers/thumbnailer.ts",
+          "permissions": {
+            "read": ["$appData/uploads"]
+          }
         }
       }
     }

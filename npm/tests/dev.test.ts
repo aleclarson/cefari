@@ -176,13 +176,16 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
     workers: {
       entries: {
         thumbnailer: {
-          entry: "workers/thumbnailer.ts",
-          permissions: {
-            read: ["$appData/uploads"],
-            write: "none",
-            net: "none",
-            env: "none",
-            run: "none",
+          target: {
+            kind: "denoSource",
+            entry: "workers/thumbnailer.ts",
+            permissions: {
+              read: ["$appData/uploads"],
+              write: "none",
+              net: "none",
+              env: "none",
+              run: "none",
+            },
           },
         },
       },

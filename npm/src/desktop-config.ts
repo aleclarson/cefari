@@ -48,7 +48,22 @@ function desktopConfigJson(config: ResolvedCefariConfig, options: DesktopConfigO
             executable: options.daemon.executable,
           },
     workers: {
-      entries: options.workers ?? config.workers,
+      entries: sourceWorkerEntries(options.workers ?? config.workers),
     },
   };
+}
+
+function sourceWorkerEntries(workers: Record<string, WorkerConfigInput>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(workers).map(([id, worker]) => [
+      id,
+      {
+        target: {
+          kind: "denoSource",
+          entry: worker.entry,
+          permissions: worker.permissions,
+        },
+      },
+    ]),
+  );
 }

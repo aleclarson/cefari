@@ -13,7 +13,7 @@ use cefari_core::{
     CefariIpcError, CefariIpcEvent, RuntimePaths, WorkerCommand, WorkerConfig, WorkerEntryConfig,
     WorkerErrorEvent, WorkerEvent, WorkerExitEvent, WorkerInvokeRequest, WorkerInvokeResult,
     WorkerListResult, WorkerMessageEvent, WorkerPermissionConfig, WorkerResult, WorkerSpawnRequest,
-    WorkerSpawnResult, WorkerState, WorkerStatus,
+    WorkerSpawnResult, WorkerState, WorkerStatus, WorkerTargetConfig,
 };
 use serde::Deserialize;
 use tracing::{debug, error};
@@ -369,14 +369,17 @@ impl DesktopWorkerManager {
         entry: &WorkerEntryConfig,
         input_json: &str,
     ) -> Result<WorkerProcessSpec> {
-        let entry_path = safe_resource_path(&self.paths.resource_dir, &entry.entry)
+        let WorkerTargetConfig::DenoSource(source) = &entry.target else {
+            anyhow::bail!("worker executable targets are not supported by this runtime yet");
+        };
+        let entry_path = safe_resource_path(&self.paths.resource_dir, &source.entry)
             .context("worker entry must resolve inside the resource directory")?;
         let mut args = vec![
             "run".to_owned(),
             "--no-prompt".to_owned(),
             format!("--allow-read={}", entry_path.display()),
         ];
-        args.extend(permission_args(&self.paths, &entry.permissions)?);
+        args.extend(permission_args(&self.paths, &source.permissions)?);
         args.push(entry_path.display().to_string());
         Ok(WorkerProcessSpec {
             program: "deno".to_owned(),
@@ -991,18 +994,24 @@ mod tests {
     }
 
     fn worker_config() -> WorkerConfig {
+        use cefari_core::WorkerDenoSourceConfig;
+
         WorkerConfig {
             entries: BTreeMap::from([(
                 "thumbnailer".to_owned(),
                 WorkerEntryConfig {
-                    entry: "workers/thumbnailer.ts".to_owned(),
-                    permissions: WorkerPermissionsConfig {
-                        read: WorkerPermissionConfig::Allow(vec!["$appData/uploads".to_owned()]),
-                        write: WorkerPermissionConfig::Allow(vec!["$appData/cache".to_owned()]),
-                        net: WorkerPermissionConfig::None("none".to_owned()),
-                        env: WorkerPermissionConfig::None("none".to_owned()),
-                        run: WorkerPermissionConfig::None("none".to_owned()),
-                    },
+                    target: WorkerTargetConfig::DenoSource(WorkerDenoSourceConfig {
+                        entry: "workers/thumbnailer.ts".to_owned(),
+                        permissions: WorkerPermissionsConfig {
+                            read: WorkerPermissionConfig::Allow(vec![
+                                "$appData/uploads".to_owned(),
+                            ]),
+                            write: WorkerPermissionConfig::Allow(vec!["$appData/cache".to_owned()]),
+                            net: WorkerPermissionConfig::None("none".to_owned()),
+                            env: WorkerPermissionConfig::None("none".to_owned()),
+                            run: WorkerPermissionConfig::None("none".to_owned()),
+                        },
+                    }),
                 },
             )]),
         }
