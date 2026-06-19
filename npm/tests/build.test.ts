@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { runCefariBuild } from "../src/index.js";
-import type { BuildDependencies } from "../src/index.js";
+import { withPlatformForTest } from "../src/platform.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
@@ -82,36 +82,40 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
   const { root, runtime, cefResources } = await projectWithBuildConfig();
   const viteConfigs: unknown[] = [];
   const spawned: Array<{ command: string; args: string[] }> = [];
-  const deps: BuildDependencies = {
-    async viteBuild(config) {
-      viteConfigs.push(config);
-      await mkdir(join(root, "build/frontend"), { recursive: true });
-      await writeFile(join(root, "build/frontend/index.html"), "<!doctype html>");
-    },
-    spawnSync(command, args) {
-      spawned.push({ command, args });
-      const outputIndex = args.indexOf("--output");
-      if (outputIndex !== -1) {
-        const output = args[outputIndex + 1];
-        if (typeof output === "string") {
-          // The mock models `deno compile` producing its executable.
-          writeFileSync(output, "daemon-executable");
+
+  await withPlatformForTest(
+    {
+      async viteBuild(config) {
+        viteConfigs.push(config);
+        await mkdir(join(root, "build/frontend"), { recursive: true });
+        await writeFile(join(root, "build/frontend/index.html"), "<!doctype html>");
+      },
+      spawnSync(command, args) {
+        spawned.push({ command, args });
+        const outputIndex = args.indexOf("--output");
+        if (outputIndex !== -1) {
+          const output = args[outputIndex + 1];
+          if (typeof output === "string") {
+            // The mock models `deno compile` producing its executable.
+            writeFileSync(output, "daemon-executable");
+          }
         }
-      }
-      return { status: 0 };
-    },
-    env: {
-      CEFARI_DESKTOP_RUNTIME: runtime,
-      CEFARI_CEF_RESOURCES_DIR: cefResources,
-    },
-    stdout: {
-      write() {
-        return true;
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME: runtime,
+        CEFARI_CEF_RESOURCES_DIR: cefResources,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
       },
     },
-  };
-
-  await runCefariBuild({ root, release: true }, deps);
+    async () => {
+      await runCefariBuild({ root, release: true });
+    },
+  );
 
   assert.match(
     await readFile(join(root, ".cefari/workers.d.ts"), "utf8"),
@@ -200,29 +204,53 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
 test("builds frontend, desktop, and CEF outputs without daemon artifacts when daemon is omitted", async () => {
   const { root, runtime, cefResources } = await projectWithBuildConfig({ daemon: false });
   const spawned: Array<{ command: string; args: string[] }> = [];
-  const deps: BuildDependencies = {
-    async viteBuild() {
-      await mkdir(join(root, "build/frontend"), { recursive: true });
-      await writeFile(join(root, "build/frontend/index.html"), "<!doctype html>");
-    },
-    spawnSync(command, args) {
-      spawned.push({ command, args });
-      return { status: 0 };
-    },
-    env: {
-      CEFARI_DESKTOP_RUNTIME: runtime,
-      CEFARI_CEF_RESOURCES_DIR: cefResources,
-    },
-    stdout: {
-      write() {
-        return true;
+
+  await withPlatformForTest(
+    {
+      async viteBuild() {
+        await mkdir(join(root, "build/frontend"), { recursive: true });
+        await writeFile(join(root, "build/frontend/index.html"), "<!doctype html>");
+      },
+      spawnSync(command, args) {
+        spawned.push({ command, args });
+        const outputIndex = args.indexOf("--output");
+        if (outputIndex !== -1) {
+          const output = args[outputIndex + 1];
+          if (typeof output === "string") {
+            writeFileSync(output, "worker-executable");
+          }
+        }
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME: runtime,
+        CEFARI_CEF_RESOURCES_DIR: cefResources,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
       },
     },
-  };
+    async () => {
+      await runCefariBuild({ root, release: true });
+    },
+  );
 
-  await runCefariBuild({ root, release: true }, deps);
-
-  assert.deepEqual(spawned, []);
+  assert.deepEqual(spawned, [
+    {
+      command: "deno",
+      args: [
+        "compile",
+        "--config",
+        join(root, "deno.json"),
+        "--allow-read",
+        "--output",
+        join(root, "build/workers/thumbnailer/thumbnailer"),
+        join(root, "workers/thumbnailer.ts"),
+      ],
+    },
+  ]);
   assert.deepEqual(JSON.parse(await readFile(join(root, "build/config/cefari.json"), "utf8")).daemon, {
     enabled: false,
   });

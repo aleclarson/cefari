@@ -1,14 +1,13 @@
 import { cp, mkdir, readFile, rm, writeFile, copyFile } from "node:fs/promises";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
-import type { SpawnOptions } from "node:child_process";
 import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { DaemonConfig, ResolvedCefariConfig, WorkerConfig, WorkerPermissionValue } from "./config.js";
 import { resolveDesktopRuntime } from "./dev.js";
 import type { DesktopWorkerExecutableEntry } from "./desktop-config.js";
 import { writeDesktopConfig } from "./desktop-config.js";
+import { currentPlatform } from "./platform.js";
 import { generateWorkerRegistryTypes } from "./workers.js";
 
 const CEF_VERSION = "148.4.0";
@@ -19,14 +18,8 @@ export interface BuildOptions {
   release?: boolean;
 }
 
-export interface BuildDependencies {
-  viteBuild(config: InlineConfig): Promise<unknown>;
-  spawnSync(command: string, args: string[], options: SpawnOptions): { status: number | null; error?: Error };
-  env: NodeJS.ProcessEnv;
-  stdout: Pick<NodeJS.WriteStream, "write">;
-}
-
-export async function runCefariBuild(options: BuildOptions = {}, deps = defaultBuildDependencies()): Promise<void> {
+export async function runCefariBuild(options: BuildOptions = {}): Promise<void> {
+  const { stdout, viteBuild } = currentPlatform();
   const root = resolve(options.root ?? process.cwd());
   const config = await loadCefariConfig({
     root,
@@ -49,8 +42,8 @@ export async function runCefariBuild(options: BuildOptions = {}, deps = defaultB
   }
   await mkdir(workersOut, { recursive: true });
 
-  await deps.viteBuild(createViteBuildConfig(config, frontendOut));
-  const packagedWorkers = await buildWorkers(config, workersOut, deps);
+  await viteBuild(createViteBuildConfig(config, frontendOut));
+  const packagedWorkers = await buildWorkers(config, workersOut);
   await writeDesktopConfig(config, configOut, {
     workers: packagedWorkers,
     daemon:
@@ -61,12 +54,12 @@ export async function runCefariBuild(options: BuildOptions = {}, deps = defaultB
           },
   });
   if (config.daemon !== undefined) {
-    await buildDaemon(config, config.daemon, join(buildDir, "daemon"), deps);
+    await buildDaemon(config, config.daemon, join(buildDir, "daemon"));
   }
-  await prepareCefResources(root, deps);
-  await buildDesktop(config, desktopOut, Boolean(options.release), deps);
+  await prepareCefResources(root);
+  await buildDesktop(config, desktopOut, Boolean(options.release));
 
-  deps.stdout.write(`built Cefari project at ${root}\n`);
+  stdout.write(`built Cefari project at ${root}\n`);
 }
 
 export function createViteBuildConfig(config: ResolvedCefariConfig, outDir: string): InlineConfig {
@@ -120,7 +113,6 @@ function isLocalImportTarget(value: string): boolean {
 async function buildWorkers(
   config: ResolvedCefariConfig,
   outputDir: string,
-  deps: BuildDependencies,
 ): Promise<Record<string, DesktopWorkerExecutableEntry>> {
   const workers: Record<string, DesktopWorkerExecutableEntry> = {};
   for (const [name, worker] of Object.entries(config.workers)) {
@@ -138,7 +130,6 @@ async function buildWorkers(
         source,
       ],
       config.root,
-      deps,
     );
     workers[name] = {
       target: {
@@ -189,11 +180,12 @@ function namePermissionArgs(name: string, value: WorkerPermissionValue): string[
   return [`--allow-${name}=${value.join(",")}`];
 }
 
-function runDenoCompile(args: string[], cwd: string, deps: BuildDependencies): void {
-  const status = deps.spawnSync("deno", ["compile", ...args], {
+function runDenoCompile(args: string[], cwd: string): void {
+  const { env, spawnSync } = currentPlatform();
+  const status = spawnSync("deno", ["compile", ...args], {
     cwd,
     stdio: "inherit",
-    env: deps.env,
+    env,
   });
   if (status.error !== undefined) {
     throw status.error;
@@ -216,31 +208,31 @@ async function buildDaemon(
   config: ResolvedCefariConfig,
   daemon: DaemonConfig,
   outputDir: string,
-  deps: BuildDependencies,
 ): Promise<void> {
   const source = resolve(config.root, daemon.entry);
   const sourceCopy = join(outputDir, "main.ts");
   await copyFile(source, sourceCopy);
 
   const executable = join(outputDir, daemonExecutableName(config));
-  runDenoCompile([...denoConfigArgs(config), "--allow-read", "--allow-net", "--output", executable, source], config.root, deps);
+  runDenoCompile([...denoConfigArgs(config), "--allow-read", "--allow-net", "--output", executable, source], config.root);
 }
 
 async function buildDesktop(
   config: ResolvedCefariConfig,
   outputDir: string,
   release: boolean,
-  deps: BuildDependencies,
 ): Promise<void> {
-  const source = resolveDesktopRuntime(config.root, deps, release);
+  const { env, spawnSync } = currentPlatform();
+  const source = resolveDesktopRuntime(config.root, { env, spawnSync }, release);
   await copyFile(source, join(outputDir, desktopExecutableName(config)));
 }
 
-async function prepareCefResources(root: string, deps: BuildDependencies): Promise<void> {
+async function prepareCefResources(root: string): Promise<void> {
+  const { env } = currentPlatform();
   const cefDir = join(root, "build", "cef");
   const resourcesDir = join(cefDir, "resources");
   const cacheDir = join(root, "build", "cef-cache");
-  const override = deps.env.CEFARI_CEF_RESOURCES_DIR;
+  const override = env.CEFARI_CEF_RESOURCES_DIR;
 
   if (override !== undefined && override !== "") {
     await rm(resourcesDir, { recursive: true, force: true });
@@ -288,20 +280,4 @@ function desktopExecutableName(config: ResolvedCefariConfig): string {
 
 function platformExecutableName(stem: string): string {
   return process.platform === "win32" ? `${stem}.exe` : stem;
-}
-
-function normalizePath(path: string): string {
-  return path.replaceAll("\\", "/");
-}
-
-function defaultBuildDependencies(): BuildDependencies {
-  return {
-    async viteBuild(config) {
-      const { build } = await import("vite");
-      return build(config);
-    },
-    spawnSync: (command, args, options) => spawnSync(command, args, options),
-    env: process.env,
-    stdout: process.stdout,
-  };
 }
