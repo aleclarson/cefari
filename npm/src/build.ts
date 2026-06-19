@@ -1,12 +1,13 @@
 import { cp, mkdir, readFile, rm, writeFile, copyFile } from "node:fs/promises";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
 import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
-import type { DaemonConfig, ResolvedCefariConfig, WorkerConfigInput } from "./config.js";
+import type { DaemonConfig, ResolvedCefariConfig, WorkerConfig, WorkerPermissionValue } from "./config.js";
 import { resolveDesktopRuntime } from "./dev.js";
+import type { DesktopWorkerExecutableEntry } from "./desktop-config.js";
 import { writeDesktopConfig } from "./desktop-config.js";
 import { generateWorkerRegistryTypes } from "./workers.js";
 
@@ -49,7 +50,7 @@ export async function runCefariBuild(options: BuildOptions = {}, deps = defaultB
   await mkdir(workersOut, { recursive: true });
 
   await deps.viteBuild(createViteBuildConfig(config, frontendOut));
-  const packagedWorkers = await buildWorkers(config, workersOut);
+  const packagedWorkers = await buildWorkers(config, workersOut, deps);
   await writeDesktopConfig(config, configOut, {
     workers: packagedWorkers,
     daemon:
@@ -116,24 +117,95 @@ function isLocalImportTarget(value: string): boolean {
   return value.startsWith(".") || value.startsWith("/");
 }
 
-async function buildWorkers(config: ResolvedCefariConfig, outputDir: string): Promise<Record<string, WorkerConfigInput>> {
-  const workers: Record<string, WorkerConfigInput> = {};
+async function buildWorkers(
+  config: ResolvedCefariConfig,
+  outputDir: string,
+  deps: BuildDependencies,
+): Promise<Record<string, DesktopWorkerExecutableEntry>> {
+  const workers: Record<string, DesktopWorkerExecutableEntry> = {};
   for (const [name, worker] of Object.entries(config.workers)) {
     const source = resolve(config.root, worker.entry);
-    const relativeDir = dirname(worker.entry);
     const destinationDir = join(outputDir, name);
-    if (relativeDir === ".") {
-      await mkdir(destinationDir, { recursive: true });
-      await copyFile(source, join(destinationDir, basename(worker.entry)));
-    } else {
-      await cp(resolve(config.root, relativeDir), destinationDir, { recursive: true });
-    }
+    const executableName = platformExecutableName(name);
+    const executable = join(destinationDir, executableName);
+    await mkdir(destinationDir, { recursive: true });
+    runDenoCompile(
+      [
+        ...denoConfigArgs(config),
+        ...workerPermissionArgs(config.root, worker),
+        "--output",
+        executable,
+        source,
+      ],
+      config.root,
+      deps,
+    );
     workers[name] = {
-      ...worker,
-      entry: normalizeResourcePath(["workers", name, basename(worker.entry)].join("/")),
+      target: {
+        kind: "executable",
+        program: normalizeResourcePath(["workers", name, executableName].join("/")),
+      },
     };
   }
   return workers;
+}
+
+function workerPermissionArgs(root: string, worker: WorkerConfig): string[] {
+  return [
+    ...pathPermissionArgs(root, "read", worker.permissions.read),
+    ...pathPermissionArgs(root, "write", worker.permissions.write),
+    ...namePermissionArgs("net", worker.permissions.net),
+    ...namePermissionArgs("env", worker.permissions.env),
+    ...pathPermissionArgs(root, "run", worker.permissions.run),
+  ];
+}
+
+function pathPermissionArgs(root: string, name: string, value: WorkerPermissionValue): string[] {
+  if (value === "none") {
+    return [];
+  }
+
+  const paths = value.map((entry) => compilePermissionPath(root, entry));
+  if (paths.some((path) => path === null)) {
+    return [`--allow-${name}`];
+  }
+  return [`--allow-${name}=${paths.join(",")}`];
+}
+
+function compilePermissionPath(root: string, value: string): string | null {
+  if (value.startsWith("$appData") || value.startsWith("$cache") || value.startsWith("$resource")) {
+    return null;
+  }
+  return resolve(root, value);
+}
+
+function namePermissionArgs(name: string, value: WorkerPermissionValue): string[] {
+  if (value === "none") {
+    return [];
+  }
+  if (value.length === 0) {
+    return [`--allow-${name}`];
+  }
+  return [`--allow-${name}=${value.join(",")}`];
+}
+
+function runDenoCompile(args: string[], cwd: string, deps: BuildDependencies): void {
+  const status = deps.spawnSync("deno", ["compile", ...args], {
+    cwd,
+    stdio: "inherit",
+    env: deps.env,
+  });
+  if (status.error !== undefined) {
+    throw status.error;
+  }
+  if (status.status !== 0) {
+    throw new Error(`deno compile failed with status ${status.status}`);
+  }
+}
+
+function denoConfigArgs(config: ResolvedCefariConfig): string[] {
+  const configPath = resolve(config.root, "deno.json");
+  return existsSync(configPath) ? ["--config", configPath] : [];
 }
 
 function normalizeResourcePath(path: string): string {
@@ -151,17 +223,7 @@ async function buildDaemon(
   await copyFile(source, sourceCopy);
 
   const executable = join(outputDir, daemonExecutableName(config));
-  const status = deps.spawnSync("deno", ["compile", "--allow-read", "--allow-net", "--output", executable, source], {
-    cwd: config.root,
-    stdio: "inherit",
-    env: deps.env,
-  });
-  if (status.error !== undefined) {
-    throw status.error;
-  }
-  if (status.status !== 0) {
-    throw new Error(`deno compile failed with status ${status.status}`);
-  }
+  runDenoCompile([...denoConfigArgs(config), "--allow-read", "--allow-net", "--output", executable, source], config.root, deps);
 }
 
 async function buildDesktop(

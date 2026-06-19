@@ -24,6 +24,7 @@ async function projectWithBuildConfig(
   }
   await mkdir(join(root, "workers"), { recursive: true });
   await mkdir(cefResources, { recursive: true });
+  await writeFile(join(root, "deno.json"), JSON.stringify({ imports: { "cefari/worker": "./.cefari/worker.ts" } }));
   await writeFile(join(root, "ui/deno.json"), JSON.stringify({ imports: { "local/app": "../src/app.ts" } }));
   await writeFile(join(root, "workers/thumbnailer.ts"), "console.log('thumbnailer');\n");
   await writeFile(runtime, "desktop-runtime");
@@ -140,6 +141,20 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
     command: "deno",
     args: [
       "compile",
+      "--config",
+      join(root, "deno.json"),
+      "--allow-read",
+      "--output",
+      join(root, "build/workers/thumbnailer/thumbnailer"),
+      join(root, "workers/thumbnailer.ts"),
+    ],
+  });
+  assert.deepEqual(spawned[1], {
+    command: "deno",
+    args: [
+      "compile",
+      "--config",
+      join(root, "deno.json"),
       "--allow-read",
       "--allow-net",
       "--output",
@@ -167,19 +182,15 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
     workers: {
       entries: {
         thumbnailer: {
-          entry: "workers/thumbnailer/thumbnailer.ts",
-          permissions: {
-            read: ["$appData/uploads"],
-            write: "none",
-            net: "none",
-            env: "none",
-            run: "none",
+          target: {
+            kind: "executable",
+            program: "workers/thumbnailer/thumbnailer",
           },
         },
       },
     },
   });
-  assert.equal(await readFile(join(root, "build/workers/thumbnailer/thumbnailer.ts"), "utf8"), "console.log('thumbnailer');\n");
+  assert.equal(await readFile(join(root, "build/workers/thumbnailer/thumbnailer"), "utf8"), "daemon-executable");
   assert.equal(await readFile(join(root, "build/desktop/build-app"), "utf8"), "desktop-runtime");
   assert.equal(existsSync(join(root, "build/cef/resources/archive.json")), true);
   assert.equal(existsSync(join(root, "build/cef/resources/libcef.dylib")), true);

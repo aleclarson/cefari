@@ -8,7 +8,26 @@ export interface DesktopConfigOptions {
   daemon?: {
     executable: string;
   };
-  workers?: Record<string, WorkerConfigInput>;
+  workers?: Record<string, DesktopWorkerEntryInput>;
+}
+
+export type DesktopWorkerEntryInput = WorkerConfigInput | DesktopWorkerRuntimeEntry;
+
+export type DesktopWorkerRuntimeEntry = DesktopWorkerDenoSourceEntry | DesktopWorkerExecutableEntry;
+
+export interface DesktopWorkerDenoSourceEntry {
+  target: {
+    kind: "denoSource";
+    entry: string;
+    permissions: WorkerConfigInput["permissions"];
+  };
+}
+
+export interface DesktopWorkerExecutableEntry {
+  target: {
+    kind: "executable";
+    program: string;
+  };
 }
 
 export async function writeDesktopConfig(
@@ -48,22 +67,24 @@ function desktopConfigJson(config: ResolvedCefariConfig, options: DesktopConfigO
             executable: options.daemon.executable,
           },
     workers: {
-      entries: sourceWorkerEntries(options.workers ?? config.workers),
+      entries: workerEntries(options.workers ?? config.workers),
     },
   };
 }
 
-function sourceWorkerEntries(workers: Record<string, WorkerConfigInput>): Record<string, unknown> {
+function workerEntries(workers: Record<string, DesktopWorkerEntryInput>): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(workers).map(([id, worker]) => [
       id,
-      {
-        target: {
-          kind: "denoSource",
-          entry: worker.entry,
-          permissions: worker.permissions,
-        },
-      },
+      "target" in worker
+        ? worker
+        : {
+            target: {
+              kind: "denoSource",
+              entry: worker.entry,
+              permissions: worker.permissions,
+            },
+          },
     ]),
   );
 }
