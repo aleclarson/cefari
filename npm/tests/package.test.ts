@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { runCefariPackage, runPackageSign, runPackageUpdate } from "../src/index.js";
-import type { PackageDependencies } from "../src/index.js";
+import { withPlatformForTest } from "../src/platform.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
@@ -70,33 +70,41 @@ export default defineConfig({
   return root;
 }
 
-function packageDeps(spawned: Array<{ command: string; args: string[] }> = []): PackageDependencies {
-  return {
-    spawnSync(command, args) {
-      spawned.push({ command, args });
-      const outputIndex = args.indexOf("--output");
-      if (outputIndex !== -1) {
-        const output = args[outputIndex + 1];
-        if (typeof output === "string") {
-          writeFileSync(output, "signature");
+async function withPackagePlatform<T>(
+  spawned: Array<{ command: string; args: string[] }>,
+  fn: () => T | Promise<T>,
+): Promise<Awaited<T>> {
+  return withPlatformForTest(
+    {
+      spawnSync(command, args) {
+        spawned.push({ command, args });
+        const outputIndex = args.indexOf("--output");
+        if (outputIndex !== -1) {
+          const output = args[outputIndex + 1];
+          if (typeof output === "string") {
+            writeFileSync(output, "signature");
+          }
         }
-      }
-      return { status: 0 };
-    },
-    env: {},
-    stdout: {
-      write() {
-        return true;
+        return { status: 0 };
+      },
+      env: {},
+      stdout: {
+        write() {
+          return true;
+        },
       },
     },
-  };
+    fn,
+  );
 }
 
 test("package writes metadata and manifest for build artifacts", async () => {
   const root = await projectWithPackageBuild();
   const spawned: Array<{ command: string; args: string[] }> = [];
 
-  await runCefariPackage({ root, releaseVersion: "1.2.3" }, packageDeps(spawned));
+  await withPackagePlatform(spawned, async () => {
+    await runCefariPackage({ root, releaseVersion: "1.2.3" });
+  });
 
   const metadata = await readFile(join(root, "dist/package/cargo-packager.toml"), "utf8");
   const packageFormat = process.platform === "darwin" ? "dmg" : process.platform === "win32" ? "nsis" : "deb";
@@ -144,10 +152,12 @@ test("package rejects missing configured worker executables", async () => {
   const root = await projectWithPackageBuild();
   await rm(join(root, "build/workers/thumbnailer/thumbnailer"));
 
-  await assert.rejects(
-    runCefariPackage({ root }, packageDeps()),
-    /artifact does not exist: .*build\/workers\/thumbnailer\/thumbnailer/,
-  );
+  await withPackagePlatform([], async () => {
+    await assert.rejects(
+      runCefariPackage({ root }),
+      /artifact does not exist: .*build\/workers\/thumbnailer\/thumbnailer/,
+    );
+  });
 });
 
 test("package sign maps to cargo-codesign macos args", async () => {
@@ -156,7 +166,9 @@ test("package sign maps to cargo-codesign macos args", async () => {
   await writeFile(artifact, "dmg");
   const spawned: Array<{ command: string; args: string[] }> = [];
 
-  runPackageSign({ artifact, platform: "macos", config: "sign.toml" }, packageDeps(spawned));
+  await withPackagePlatform(spawned, () => {
+    runPackageSign({ artifact, platform: "macos", config: "sign.toml" });
+  });
 
   assert.deepEqual(spawned[0], {
     command: "cargo-codesign",
@@ -171,17 +183,16 @@ test("package update writes update manifest", async () => {
   await writeFile(archive, "archive");
   const spawned: Array<{ command: string; args: string[] }> = [];
 
-  await runPackageUpdate(
-    {
+  await withPackagePlatform(spawned, async () => {
+    await runPackageUpdate({
       archive,
       url: "https://downloads.example.test/release.tar.gz",
       version: "1.2.3",
       target: "darwin-aarch64",
       format: "app",
       outputDir,
-    },
-    packageDeps(spawned),
-  );
+    });
+  });
 
   assert.equal(spawned[0].command, "cargo-codesign");
   const update = JSON.parse(await readFile(join(outputDir, "update.json"), "utf8"));

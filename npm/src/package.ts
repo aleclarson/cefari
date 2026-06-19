@@ -1,11 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
-import type { SpawnOptions } from "node:child_process";
 import { loadCefariConfig } from "./config.js";
 import type { ResolvedCefariConfig } from "./config.js";
 import { runCefariBuild } from "./build.js";
+import { currentPlatform } from "./platform.js";
 
 export type SignPlatform = "macos" | "windows" | "linux";
 export type UpdatePackageFormat = "app" | "appimage" | "nsis" | "wix";
@@ -54,13 +53,7 @@ export interface ReleaseOptions extends PackageOptions {
   dryRun?: boolean;
 }
 
-export interface PackageDependencies {
-  spawnSync(command: string, args: string[], options: SpawnOptions): { status: number | null; error?: Error };
-  env: NodeJS.ProcessEnv;
-  stdout: Pick<NodeJS.WriteStream, "write">;
-}
-
-export async function runCefariPackage(options: PackageOptions = {}, deps = defaultPackageDependencies()): Promise<void> {
+export async function runCefariPackage(options: PackageOptions = {}): Promise<void> {
   const root = resolve(options.root ?? process.cwd());
   const config = await loadCefariConfig({
     root,
@@ -76,11 +69,11 @@ export async function runCefariPackage(options: PackageOptions = {}, deps = defa
   await mkdir(packageDir, { recursive: true });
   await writePackageMetadata(config, packageDir, buildDir, cefResources, options.releaseVersion);
   await writePackageManifest(config, packageDir, buildDir, cefResources);
-  deps.stdout.write(`prepared package assembly at ${packageDir}\n`);
-  runCargoPackager(packageDir, deps);
+  currentPlatform().stdout.write(`prepared package assembly at ${packageDir}\n`);
+  runCargoPackager(packageDir);
 }
 
-export function runPackageSign(options: SignOptions, deps = defaultPackageDependencies()): void {
+export function runPackageSign(options: SignOptions): void {
   const platform = options.platform ?? currentSignPlatform();
   validateSignPlatform(platform);
   ensureArtifact(options.artifact);
@@ -95,21 +88,21 @@ export function runPackageSign(options: SignOptions, deps = defaultPackageDepend
   } else {
     args.push("linux", "--archive", options.artifact);
   }
-  runCommand("cargo-codesign", args, deps, "cargo-codesign codesign");
-  deps.stdout.write(`signed artifact at ${options.artifact}\n`);
+  runCommand("cargo-codesign", args, "cargo-codesign codesign");
+  currentPlatform().stdout.write(`signed artifact at ${options.artifact}\n`);
 }
 
-export function runPackageNotarize(options: NotarizeOptions, deps = defaultPackageDependencies()): void {
+export function runPackageNotarize(options: NotarizeOptions): void {
   ensureArtifact(options.artifact);
   const args = ["codesign"];
   pushConfig(args, options.config);
   args.push("macos");
   pushMacosArtifact(args, options.artifact);
-  runCommand("cargo-codesign", args, deps, "cargo-codesign notarize");
-  deps.stdout.write(`notarized artifact at ${options.artifact}\n`);
+  runCommand("cargo-codesign", args, "cargo-codesign notarize");
+  currentPlatform().stdout.write(`notarized artifact at ${options.artifact}\n`);
 }
 
-export async function runPackageUpdate(options: UpdateOptions, deps = defaultPackageDependencies()): Promise<void> {
+export async function runPackageUpdate(options: UpdateOptions): Promise<void> {
   ensureArtifact(options.archive);
   const target = options.target ?? defaultUpdateTarget();
   const format = options.format ?? defaultUpdateFormat(target);
@@ -121,7 +114,6 @@ export async function runPackageUpdate(options: UpdateOptions, deps = defaultPac
   runCommand(
     "cargo-codesign",
     ["codesign", "update", "--archive", options.archive, "--output", signaturePath, "--key-env", keyEnv],
-    deps,
     "cargo-codesign update",
   );
   const signature = (await readFile(signaturePath, "utf8")).trim();
@@ -142,10 +134,10 @@ export async function runPackageUpdate(options: UpdateOptions, deps = defaultPac
       2,
     )}\n`,
   );
-  deps.stdout.write(`generated update artifacts at ${outputDir}\n`);
+  currentPlatform().stdout.write(`generated update artifacts at ${outputDir}\n`);
 }
 
-export async function runPackageRelease(options: ReleaseOptions = {}, deps = defaultPackageDependencies()): Promise<void> {
+export async function runPackageRelease(options: ReleaseOptions = {}): Promise<void> {
   const root = resolve(options.root ?? process.cwd());
   const mode = options.mode ?? "release";
   if (mode !== "release" && mode !== "prerelease") {
@@ -158,13 +150,13 @@ export async function runPackageRelease(options: ReleaseOptions = {}, deps = def
     mode: "production",
   });
   const version = options.version ?? config.package.version;
-  deps.stdout.write(`Cefari release plan\n  mode: ${mode}\n  version: ${version}\n`);
+  currentPlatform().stdout.write(`Cefari release plan\n  mode: ${mode}\n  version: ${version}\n`);
   if (options.dryRun) {
-    deps.stdout.write("dry-run: build, package, signing, update, and GitHub release steps skipped\n");
+    currentPlatform().stdout.write("dry-run: build, package, signing, update, and GitHub release steps skipped\n");
     return;
   }
   await runCefariBuild({ root, release: true });
-  await runCefariPackage({ root, release: true, releaseVersion: version }, deps);
+  await runCefariPackage({ root, release: true, releaseVersion: version });
 }
 
 function ensureBuildArtifacts(config: ResolvedCefariConfig, buildDir: string, cefResources: string): void {
@@ -262,16 +254,17 @@ async function writePackageManifest(
   await writeFile(join(packageDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-function runCargoPackager(packageDir: string, deps: PackageDependencies): void {
+function runCargoPackager(packageDir: string): void {
+  const platform = currentPlatform();
   const config = join(packageDir, "cargo-packager.toml");
   const output = join(packageDir, "output");
-  const command = deps.spawnSync("cargo-packager", ["--config", config, "--out-dir", output], {
+  const command = platform.spawnSync("cargo-packager", ["--config", config, "--out-dir", output], {
     cwd: packageDir,
-    env: deps.env,
+    env: platform.env,
     stdio: "inherit",
   });
   if (command.error !== undefined && command.error.message.includes("ENOENT")) {
-    deps.stdout.write("cargo-packager not found; skipped native package invocation\n");
+    platform.stdout.write("cargo-packager not found; skipped native package invocation\n");
     return;
   }
   if (command.error !== undefined) {
@@ -287,8 +280,9 @@ function notificationProtocol(identifier: string): string {
   return `cefari-notification-${slug || "app"}`;
 }
 
-function runCommand(command: string, args: string[], deps: PackageDependencies, description: string): void {
-  const result = deps.spawnSync(command, args, { env: deps.env, stdio: "inherit" });
+function runCommand(command: string, args: string[], description: string): void {
+  const platform = currentPlatform();
+  const result = platform.spawnSync(command, args, { env: platform.env, stdio: "inherit" });
   if (result.error !== undefined) {
     throw result.error;
   }
@@ -391,12 +385,4 @@ function tomlString(value: string): string {
 
 function normalizePath(path: string): string {
   return path.replaceAll("\\", "/");
-}
-
-function defaultPackageDependencies(): PackageDependencies {
-  return {
-    spawnSync: (command, args, options) => spawnSync(command, args, options),
-    env: process.env,
-    stdout: process.stdout,
-  };
 }

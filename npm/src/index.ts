@@ -5,7 +5,6 @@ export {
   runPackageSign,
   runPackageUpdate,
   type NotarizeOptions,
-  type PackageDependencies,
   type PackageOptions,
   type ReleaseMode,
   type ReleaseOptions,
