@@ -31,7 +31,7 @@ pub(crate) fn run() -> Result<()> {
             instance,
             startup_deep_links,
         } => {
-            let cef_runtime = desktop_cef::initialize(&paths)?;
+            let cef_runtime = desktop_cef::initialize(&paths, runtime_operations.browser_config())?;
             (instance, startup_deep_links, cef_runtime)
         }
         desktop_single_instance::InstanceStartup::Forwarded => {

@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use cefari_core::{CefariIpcEvent, DownloadResult};
+use cefari_core::{BrowserConfig, CefariIpcEvent, DownloadResult};
 use tao::window::Window;
 use tracing::{error, info};
 
@@ -130,7 +130,10 @@ fn load_cef_library(runtime_paths: &CefRuntimePathConfig) -> Result<CefLibraryLo
 
 #[allow(dead_code)]
 impl CefRuntime {
-    pub fn initialize(paths: &cefari_core::RuntimePaths) -> Result<Self> {
+    pub fn initialize(
+        paths: &cefari_core::RuntimePaths,
+        browser_config: &BrowserConfig,
+    ) -> Result<Self> {
         let args = cef::args::Args::new();
         let runtime_paths = resolve_cef_runtime_paths(paths);
         prepare_cef_runtime_dirs(&runtime_paths)?;
@@ -139,7 +142,11 @@ impl CefRuntime {
         configure_cef_api_version()?;
         let router_config = bridge_router_config();
         let message_pump = SharedMessagePumpState::default();
-        let mut app = CefariApp::build(router_config.clone(), message_pump.clone());
+        let mut app = CefariApp::build(
+            browser_config.clone(),
+            router_config.clone(),
+            message_pump.clone(),
+        );
         let subprocess_exit =
             cef::execute_process(Some(args.as_main_args()), Some(&mut app), ptr::null_mut());
 

@@ -48,6 +48,9 @@ export default defineConfig({
     configFile: false,
     devPort: 4444,
   },
+  browser: {
+    webgpu: true,
+  },
   capabilities: [
     deepLinks({ schemes: ["buildapp"] }),
   ],
@@ -136,6 +139,9 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
       identifier: "dev.cefari.build",
       display_name: "Build App",
       version: "0.1.0",
+    },
+    browser: {
+      webgpu: true,
     },
     deep_links: {
       schemes: ["buildapp"],

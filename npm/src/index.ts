@@ -45,6 +45,8 @@ export {
   tray,
   type AppConfigInput,
   type AppConfig,
+  type BrowserConfigInput,
+  type BrowserConfig,
   type CefariCapability,
   type CefariConfigContext,
   type CefariConfigExport,

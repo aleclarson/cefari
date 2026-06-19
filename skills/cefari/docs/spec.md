@@ -18,6 +18,8 @@ APIs.
   - It sets the Vite project root.
   - It selects a Vite config file or disables config-file discovery.
   - It sets the fixed development server port.
+- The config can opt into embedded browser features.
+  - WebGPU can be enabled for apps that use the browser WebGPU API.
 - The config can define a Deno daemon entrypoint.
   - Dev mode runs the daemon from source.
   - Build mode compiles the daemon into an executable.
@@ -157,6 +159,10 @@ APIs.
   - It owns notification setup.
   - It owns native action dispatch.
   - It owns runtime logging setup.
+- Cefari can enable WebGPU for the embedded browser.
+  - Apps opt in through project config.
+  - WebGPU availability still depends on Chromium, the operating system, GPU,
+    and driver support.
 - Cefari embeds the app frontend in a native desktop shell.
   - The frontend talks to the runtime through `window.cefari`.
   - The runtime exposes a typed IPC contract.

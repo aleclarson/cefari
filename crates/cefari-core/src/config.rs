@@ -8,6 +8,7 @@ use crate::{Error, Result};
 #[serde(default, deny_unknown_fields)]
 pub struct CefariConfig {
     pub app: AppConfig,
+    pub browser: BrowserConfig,
     pub daemon: DaemonConfig,
     pub deep_links: DeepLinkConfig,
     pub updates: UpdateConfig,
@@ -30,6 +31,12 @@ impl Default for AppConfig {
             version: "0.0.0".to_owned(),
         }
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct BrowserConfig {
+    pub webgpu: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
@@ -100,7 +107,7 @@ pub fn save_config(path: impl AsRef<Path>, config: &CefariConfig) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, CefariConfig, DaemonConfig, ServiceConfig};
+    use super::{AppConfig, BrowserConfig, CefariConfig, DaemonConfig, ServiceConfig};
 
     #[test]
     fn parses_defaultable_config() {
@@ -127,8 +134,23 @@ mod tests {
             }
         );
         assert_eq!(config.deep_links.schemes, vec!["testapp"]);
+        assert_eq!(config.browser, BrowserConfig::default());
         assert_eq!(config.daemon, DaemonConfig::default());
         assert_eq!(config.service, ServiceConfig::default());
+    }
+
+    #[test]
+    fn parses_browser_config() {
+        let config: CefariConfig = serde_json::from_str(
+            r#"{
+              "browser": {
+                "webgpu": true
+              }
+            }"#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(config.browser, BrowserConfig { webgpu: true });
     }
 
     #[test]

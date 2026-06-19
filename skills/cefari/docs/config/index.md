@@ -28,6 +28,9 @@ export default defineConfig({
     configFile: "frontend/vite.config.ts",
     devPort: 5173,
   },
+  browser: {
+    webgpu: true,
+  },
   daemon: {
     entry: "daemon/main.ts",
   },
@@ -44,6 +47,7 @@ after evaluating the config. Legacy `frontend` fields are rejected.
 ## Sections
 
 - [`app`](app.md): project name, display name, app identifier, and app icon.
+- [`browser`](browser.md): embedded browser feature opt-ins.
 - [`capabilities`](capabilities.md): opt-in native desktop integrations.
 - [`vite`](frontend.md): Vite root, Vite config file, and development port.
 - [`daemon`](daemon.md): Deno daemon entrypoint.

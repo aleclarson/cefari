@@ -114,6 +114,9 @@ async function writeDesktopConfig(config: ResolvedCefariConfig, outputDir: strin
           display_name: config.app.name,
           version: config.package.version,
         },
+        browser: {
+          webgpu: config.browser.webgpu,
+        },
         deep_links: {
           schemes: deepLinkSchemes,
         },

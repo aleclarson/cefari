@@ -14,6 +14,7 @@ export interface CefariConfigContext {
 
 export interface CefariConfigInput {
   app: AppConfigInput;
+  browser?: BrowserConfigInput;
   capabilities?: CefariCapability[];
   vite?: ViteConfigInput;
   daemon?: DaemonConfigInput;
@@ -47,6 +48,10 @@ export interface PackageConfigInput {
   version: string;
 }
 
+export interface BrowserConfigInput {
+  webgpu?: boolean;
+}
+
 export interface TrayCapabilityOptions {
   icon: string;
 }
@@ -77,10 +82,15 @@ export interface DaemonConfig extends DaemonConfigInput {}
 
 export interface PackageConfig extends PackageConfigInput {}
 
+export interface BrowserConfig {
+  webgpu: boolean;
+}
+
 export interface ResolvedCefariConfig {
   root: string;
   configPath: string;
   app: AppConfig;
+  browser: BrowserConfig;
   capabilities: CefariCapability[];
   vite: ViteConfig;
   daemon?: DaemonConfig;
@@ -89,6 +99,7 @@ export interface ResolvedCefariConfig {
 
 export interface SerializableProjectConfig {
   app: AppConfig;
+  browser: BrowserConfig;
   capabilities: CefariCapability[];
   vite: ViteConfig;
   daemon?: DaemonConfig;
@@ -154,6 +165,7 @@ export async function loadCefariConfig(options: LoadCefariConfigOptions = {}): P
 export function toSerializableProjectConfig(config: ResolvedCefariConfig): SerializableProjectConfig {
   return {
     app: { ...config.app },
+    browser: { ...config.browser },
     capabilities: config.capabilities.map((capability) => ({ ...capability })),
     vite: { ...config.vite },
     ...(config.daemon === undefined ? {} : { daemon: { ...config.daemon } }),
@@ -168,6 +180,7 @@ function normalizeConfig(config: unknown, paths: { root: string; configPath: str
   }
 
   const app = normalizeApp(input.app);
+  const browser = normalizeBrowser(input.browser);
   const capabilities = normalizeCapabilities(input.capabilities);
   const vite = normalizeVite(input.vite);
   const daemon = normalizeDaemon(input.daemon);
@@ -177,6 +190,7 @@ function normalizeConfig(config: unknown, paths: { root: string; configPath: str
     root: paths.root,
     configPath: paths.configPath,
     app,
+    browser,
     capabilities,
     vite,
     daemon,
@@ -195,6 +209,18 @@ function normalizeApp(value: unknown): AppConfig {
     name: requiredString(app.name, "app.name"),
     identifier: requiredString(app.identifier, "app.identifier"),
     ...(app.icon === undefined ? {} : { icon: relativePath(app.icon, "app.icon") }),
+  };
+}
+
+function normalizeBrowser(value: unknown): BrowserConfig {
+  if (value === undefined) {
+    return {
+      webgpu: false,
+    };
+  }
+  const browser = asRecord(value, "browser");
+  return {
+    webgpu: optionalBoolean(browser.webgpu, "browser.webgpu", false),
   };
 }
 
@@ -320,6 +346,16 @@ function asRecord(value: unknown, field: string): Record<string, unknown> {
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+function optionalBoolean(value: unknown, field: string, defaultValue: boolean): boolean {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(`${field} must be a boolean`);
   }
   return value;
 }

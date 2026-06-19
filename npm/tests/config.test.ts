@@ -110,9 +110,26 @@ test("applies Vite defaults", async () => {
 
   const config = await loadCefariConfig({ root });
 
+  assert.deepEqual(config.browser, {
+    webgpu: false,
+  });
   assert.deepEqual(config.vite, {
     root: "frontend",
     devPort: 5173,
+  });
+});
+
+test("supports browser WebGPU opt-in", async () => {
+  const root = await projectWithConfig(baseConfig(`browser: { webgpu: true },`));
+
+  const config = await loadCefariConfig({ root });
+  const serializable = toSerializableProjectConfig(config);
+
+  assert.deepEqual(config.browser, {
+    webgpu: true,
+  });
+  assert.deepEqual(serializable.browser, {
+    webgpu: true,
   });
 });
 
@@ -232,6 +249,12 @@ test("reports clear validation errors", async () => {
   await assert.rejects(loadCefariConfig({ root }), /vite\.devPort must be an integer from 1 to 65535/);
 });
 
+test("reports clear browser validation errors", async () => {
+  const root = await projectWithConfig(baseConfig(`browser: { webgpu: "yes" },`));
+
+  await assert.rejects(loadCefariConfig({ root }), /browser\.webgpu must be a boolean/);
+});
+
 test("reports clear daemon validation errors when daemon is configured", async () => {
   await assert.rejects(
     loadCefariConfig({
@@ -247,6 +270,9 @@ test("creates a serializable projection", async () => {
   const config = await loadCefariConfig({ root });
   const serializable = toSerializableProjectConfig(config);
 
+  assert.deepEqual(serializable.browser, {
+    webgpu: false,
+  });
   assert.deepEqual(serializable.vite, {
     root: "ui",
     configFile: false,

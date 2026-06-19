@@ -31,6 +31,7 @@ documentation.
   [cli/diagnostics.md](docs/cli/diagnostics.md)
 - `cefari.config.ts`: [config/index.md](docs/config/index.md),
   [config/app.md](docs/config/app.md),
+  [config/browser.md](docs/config/browser.md),
   [config/frontend.md](docs/config/frontend.md),
   [config/daemon.md](docs/config/daemon.md),
   [config/package.md](docs/config/package.md)

@@ -6,10 +6,10 @@ use std::{
 
 use anyhow::Result;
 use cefari_core::{
-    AppConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, DaemonConfig, PendingUpdate,
-    RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState, check_for_update,
-    install_service, install_update, load_config, packaged_resources_dir, resolve_resource,
-    service_manager, service_status, start_service, stop_service, update_id,
+    AppConfig, BrowserConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, DaemonConfig,
+    PendingUpdate, RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
+    check_for_update, install_service, install_update, load_config, packaged_resources_dir,
+    resolve_resource, service_manager, service_status, start_service, stop_service, update_id,
 };
 
 use crate::desktop_daemon::DaemonProcessConfig;
@@ -142,6 +142,10 @@ impl RuntimeOperations {
 
     pub fn app_config(&self) -> &AppConfig {
         &self.config.app
+    }
+
+    pub fn browser_config(&self) -> &BrowserConfig {
+        &self.config.browser
     }
 
     pub fn deep_link_schemes(&self) -> &[String] {

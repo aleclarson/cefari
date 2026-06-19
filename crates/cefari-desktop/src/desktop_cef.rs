@@ -17,7 +17,7 @@ mod imp {
     use std::{fs, path::PathBuf, sync::Arc};
 
     use anyhow::{Context, Result};
-    use cefari_core::CefariIpcEvent;
+    use cefari_core::{BrowserConfig, CefariIpcEvent};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use tao::dpi::PhysicalSize;
     use tao::window::Window;
@@ -161,6 +161,7 @@ mod imp {
 
     wrap_app! {
         struct CefariApp {
+            browser_config: BrowserConfig,
             browser_process_handler: cef::BrowserProcessHandler,
             render_process_handler: cef::RenderProcessHandler,
         }
@@ -171,7 +172,7 @@ mod imp {
                 process_type: Option<&cef::CefString>,
                 command_line: Option<&mut cef::CommandLine>,
             ) {
-                configure_development_chromium_command_line(process_type, command_line);
+                configure_chromium_command_line(&self.browser_config, process_type, command_line);
             }
 
             fn browser_process_handler(&self) -> Option<cef::BrowserProcessHandler> {
@@ -191,27 +192,38 @@ mod imp {
         }
     }
 
-    fn configure_development_chromium_command_line(
+    fn configure_chromium_command_line(
+        browser_config: &BrowserConfig,
         process_type: Option<&cef::CefString>,
         command_line: Option<&mut cef::CommandLine>,
     ) {
-        if !development_chromium_switches_requested() {
-            return;
-        }
         let Some(command_line) = command_line else {
             return;
         };
 
-        append_chromium_switch(command_line, "use-mock-keychain");
-        append_chromium_switch_with_value(command_line, "password-store", "basic");
-        append_chromium_switch(command_line, "disable-save-password-bubble");
-        append_chromium_switch(command_line, "disable-notifications");
-        append_chromium_switch(command_line, "deny-permission-prompts");
+        if browser_config.webgpu {
+            append_webgpu_chromium_switches(command_line);
+        }
+
+        if development_chromium_switches_requested() {
+            append_chromium_switch(command_line, "use-mock-keychain");
+            append_chromium_switch_with_value(command_line, "password-store", "basic");
+            append_chromium_switch(command_line, "disable-save-password-bubble");
+            append_chromium_switch(command_line, "disable-notifications");
+            append_chromium_switch(command_line, "deny-permission-prompts");
+        }
 
         debug!(
             process_type = %display_cef_process_type(process_type),
-            "configured development Chromium command line"
+            webgpu = browser_config.webgpu,
+            "configured Chromium command line"
         );
+    }
+
+    fn append_webgpu_chromium_switches(command_line: &cef::CommandLine) {
+        append_chromium_switch(command_line, "enable-unsafe-webgpu");
+        #[cfg(target_os = "linux")]
+        append_chromium_feature(command_line, "Vulkan");
     }
 
     fn development_chromium_switches_requested() -> bool {
@@ -239,6 +251,28 @@ mod imp {
         command_line.append_switch_with_value(Some(&name), Some(&value));
     }
 
+    #[cfg(target_os = "linux")]
+    fn append_chromium_feature(command_line: &cef::CommandLine, feature: &str) {
+        let name = cef::CefString::from("enable-features");
+        let existing = cef_userfree_string(&command_line.switch_value(Some(&name)));
+        let value = append_chromium_feature_value(&existing, feature);
+        let value = cef::CefString::from(value.as_str());
+        command_line.append_switch_with_value(Some(&name), Some(&value));
+    }
+
+    #[cfg(any(test, target_os = "linux"))]
+    fn append_chromium_feature_value(existing: &str, feature: &str) -> String {
+        let mut features = existing
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>();
+        if !features.contains(&feature) {
+            features.push(feature);
+        }
+        features.join(",")
+    }
+
     fn display_cef_process_type(process_type: Option<&cef::CefString>) -> String {
         process_type
             .and_then(cef::CefString::as_slice)
@@ -249,10 +283,12 @@ mod imp {
 
     impl CefariApp {
         fn build(
+            browser_config: BrowserConfig,
             router_config: MessageRouterConfig,
             message_pump: SharedMessagePumpState,
         ) -> cef::App {
             Self::new(
+                browser_config,
                 CefariBrowserProcessHandler::new(message_pump),
                 CefariRenderProcessHandler::build(router_config),
             )
@@ -902,8 +938,11 @@ mod imp {
         }
     }
 
-    pub fn initialize(paths: &cefari_core::RuntimePaths) -> Result<CefRuntime> {
-        CefRuntime::initialize(paths).context("failed to initialize CEF")
+    pub fn initialize(
+        paths: &cefari_core::RuntimePaths,
+        browser_config: &cefari_core::BrowserConfig,
+    ) -> Result<CefRuntime> {
+        CefRuntime::initialize(paths, browser_config).context("failed to initialize CEF")
     }
 
     fn native_window_handle(window: &Window) -> Result<cef::sys::cef_window_handle_t> {
@@ -959,7 +998,7 @@ mod imp {
         use tao::dpi::PhysicalSize;
 
         use super::{
-            SharedBrowserState, browser_bounds_for_size,
+            SharedBrowserState, append_chromium_feature_value, browser_bounds_for_size,
             development_chromium_switches_requested_from, parse_devtools_port,
         };
 
@@ -1021,13 +1060,29 @@ mod imp {
             assert!(development_chromium_switches_requested_from(false, true));
             assert!(!development_chromium_switches_requested_from(false, false));
         }
+
+        #[test]
+        fn chromium_feature_append_preserves_existing_features() {
+            assert_eq!(append_chromium_feature_value("", "Vulkan"), "Vulkan");
+            assert_eq!(
+                append_chromium_feature_value("Foo, Vulkan,Bar", "Vulkan"),
+                "Foo,Vulkan,Bar"
+            );
+            assert_eq!(
+                append_chromium_feature_value("Foo,Bar", "Vulkan"),
+                "Foo,Bar,Vulkan"
+            );
+        }
     }
 }
 
 pub use imp::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime, MessagePumpScheduler};
 
-pub fn initialize(paths: &cefari_core::RuntimePaths) -> anyhow::Result<CefRuntime> {
-    let runtime = imp::initialize(paths)?;
+pub fn initialize(
+    paths: &cefari_core::RuntimePaths,
+    browser_config: &cefari_core::BrowserConfig,
+) -> anyhow::Result<CefRuntime> {
+    let runtime = imp::initialize(paths, browser_config)?;
     tracing::info!("CEF runtime prepared");
     Ok(runtime)
 }
