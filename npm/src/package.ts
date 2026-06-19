@@ -54,6 +54,7 @@ export interface ReleaseOptions extends PackageOptions {
 }
 
 export async function runCefariPackage(options: PackageOptions = {}): Promise<void> {
+  const { stdout } = currentPlatform();
   const root = resolve(options.root ?? process.cwd());
   const config = await loadCefariConfig({
     root,
@@ -69,11 +70,12 @@ export async function runCefariPackage(options: PackageOptions = {}): Promise<vo
   await mkdir(packageDir, { recursive: true });
   await writePackageMetadata(config, packageDir, buildDir, cefResources, options.releaseVersion);
   await writePackageManifest(config, packageDir, buildDir, cefResources);
-  currentPlatform().stdout.write(`prepared package assembly at ${packageDir}\n`);
+  stdout.write(`prepared package assembly at ${packageDir}\n`);
   runCargoPackager(packageDir);
 }
 
 export function runPackageSign(options: SignOptions): void {
+  const { stdout } = currentPlatform();
   const platform = options.platform ?? currentSignPlatform();
   validateSignPlatform(platform);
   ensureArtifact(options.artifact);
@@ -89,20 +91,22 @@ export function runPackageSign(options: SignOptions): void {
     args.push("linux", "--archive", options.artifact);
   }
   runCommand("cargo-codesign", args, "cargo-codesign codesign");
-  currentPlatform().stdout.write(`signed artifact at ${options.artifact}\n`);
+  stdout.write(`signed artifact at ${options.artifact}\n`);
 }
 
 export function runPackageNotarize(options: NotarizeOptions): void {
+  const { stdout } = currentPlatform();
   ensureArtifact(options.artifact);
   const args = ["codesign"];
   pushConfig(args, options.config);
   args.push("macos");
   pushMacosArtifact(args, options.artifact);
   runCommand("cargo-codesign", args, "cargo-codesign notarize");
-  currentPlatform().stdout.write(`notarized artifact at ${options.artifact}\n`);
+  stdout.write(`notarized artifact at ${options.artifact}\n`);
 }
 
 export async function runPackageUpdate(options: UpdateOptions): Promise<void> {
+  const { stdout } = currentPlatform();
   ensureArtifact(options.archive);
   const target = options.target ?? defaultUpdateTarget();
   const format = options.format ?? defaultUpdateFormat(target);
@@ -134,10 +138,11 @@ export async function runPackageUpdate(options: UpdateOptions): Promise<void> {
       2,
     )}\n`,
   );
-  currentPlatform().stdout.write(`generated update artifacts at ${outputDir}\n`);
+  stdout.write(`generated update artifacts at ${outputDir}\n`);
 }
 
 export async function runPackageRelease(options: ReleaseOptions = {}): Promise<void> {
+  const { stdout } = currentPlatform();
   const root = resolve(options.root ?? process.cwd());
   const mode = options.mode ?? "release";
   if (mode !== "release" && mode !== "prerelease") {
@@ -150,9 +155,9 @@ export async function runPackageRelease(options: ReleaseOptions = {}): Promise<v
     mode: "production",
   });
   const version = options.version ?? config.package.version;
-  currentPlatform().stdout.write(`Cefari release plan\n  mode: ${mode}\n  version: ${version}\n`);
+  stdout.write(`Cefari release plan\n  mode: ${mode}\n  version: ${version}\n`);
   if (options.dryRun) {
-    currentPlatform().stdout.write("dry-run: build, package, signing, update, and GitHub release steps skipped\n");
+    stdout.write("dry-run: build, package, signing, update, and GitHub release steps skipped\n");
     return;
   }
   await runCefariBuild({ root, release: true });
@@ -255,16 +260,16 @@ async function writePackageManifest(
 }
 
 function runCargoPackager(packageDir: string): void {
-  const platform = currentPlatform();
+  const { env, spawnSync, stdout } = currentPlatform();
   const config = join(packageDir, "cargo-packager.toml");
   const output = join(packageDir, "output");
-  const command = platform.spawnSync("cargo-packager", ["--config", config, "--out-dir", output], {
+  const command = spawnSync("cargo-packager", ["--config", config, "--out-dir", output], {
     cwd: packageDir,
-    env: platform.env,
+    env,
     stdio: "inherit",
   });
   if (command.error !== undefined && command.error.message.includes("ENOENT")) {
-    platform.stdout.write("cargo-packager not found; skipped native package invocation\n");
+    stdout.write("cargo-packager not found; skipped native package invocation\n");
     return;
   }
   if (command.error !== undefined) {
@@ -281,8 +286,8 @@ function notificationProtocol(identifier: string): string {
 }
 
 function runCommand(command: string, args: string[], description: string): void {
-  const platform = currentPlatform();
-  const result = platform.spawnSync(command, args, { env: platform.env, stdio: "inherit" });
+  const { env, spawnSync } = currentPlatform();
+  const result = spawnSync(command, args, { env, stdio: "inherit" });
   if (result.error !== undefined) {
     throw result.error;
   }
