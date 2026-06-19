@@ -178,6 +178,9 @@ function ensureBuildArtifacts(config: ResolvedCefariConfig, buildDir: string, ce
   ]) {
     ensureArtifact(path);
   }
+  for (const worker of Object.keys(config.workers)) {
+    ensureArtifact(join(buildDir, "workers", worker, platformExecutableName(worker)));
+  }
 }
 
 async function writePackageMetadata(
@@ -247,6 +250,12 @@ async function writePackageManifest(
           daemon_executable: normalizePath(join(buildDir, "daemon", daemonExecutableName(config))),
         }),
     workers_dir: normalizePath(join(buildDir, "workers")),
+    worker_executables: Object.fromEntries(
+      Object.keys(config.workers).map((worker) => [
+        worker,
+        normalizePath(join(buildDir, "workers", worker, platformExecutableName(worker))),
+      ]),
+    ),
     cef_resources: normalizePath(cefResources),
     cef_archive_json: normalizePath(join(cefResources, "archive.json")),
   };

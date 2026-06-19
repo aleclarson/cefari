@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -20,7 +20,7 @@ async function projectWithPackageBuild(options: { daemon?: boolean } = { daemon:
     await writeFile(join(root, "build/daemon/package-app-daemon"), "daemon");
   }
   await mkdir(join(root, "build/desktop"), { recursive: true });
-  await mkdir(join(root, "build/workers"), { recursive: true });
+  await mkdir(join(root, "build/workers/thumbnailer"), { recursive: true });
   await mkdir(join(root, "build/cef/resources"), { recursive: true });
   await mkdir(join(root, "assets"), { recursive: true });
   await writeFile(join(root, "assets/app.png"), "app-icon");
@@ -31,6 +31,7 @@ async function projectWithPackageBuild(options: { daemon?: boolean } = { daemon:
     JSON.stringify({ app: { identifier: "dev.cefari.package" }, deep_links: { schemes: ["packageapp"] } }),
   );
   await writeFile(join(root, "build/desktop/package-app"), "desktop");
+  await writeFile(join(root, "build/workers/thumbnailer/thumbnailer"), "worker");
   await writeFile(
     join(root, "build/cef/resources/archive.json"),
     JSON.stringify({ name: "cef.tar.bz2", sha1: "fixture-sha1" }),
@@ -50,6 +51,12 @@ export default defineConfig({
     tray({ icon: "assets/tray.png" }),
     deepLinks({ schemes: ["packageapp", "packageapp+dev"] }),
   ],
+  workers: {
+    thumbnailer: {
+      entry: "workers/thumbnailer.ts",
+      permissions: {},
+    },
+  },
   ${options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
   },`}
@@ -114,6 +121,7 @@ test("package writes metadata and manifest for build artifacts", async () => {
   assert.match(manifest.config_file, /build\/config\/cefari\.json/);
   assert.match(manifest.daemon_executable, /package-app-daemon/);
   assert.match(manifest.workers_dir, /build\/workers/);
+  assert.match(manifest.worker_executables.thumbnailer, /build\/workers\/thumbnailer\/thumbnailer/);
   assert.deepEqual(spawned[0], {
     command: "cargo-packager",
     args: ["--config", join(root, "dist/package/cargo-packager.toml"), "--out-dir", join(root, "dist/package/output")],
@@ -130,6 +138,16 @@ test("package omits daemon artifacts when daemon is not configured", async () =>
   const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
   assert.equal(Object.hasOwn(manifest, "daemon_dir"), false);
   assert.equal(Object.hasOwn(manifest, "daemon_executable"), false);
+});
+
+test("package rejects missing configured worker executables", async () => {
+  const root = await projectWithPackageBuild();
+  await rm(join(root, "build/workers/thumbnailer/thumbnailer"));
+
+  await assert.rejects(
+    runCefariPackage({ root }, packageDeps()),
+    /artifact does not exist: .*build\/workers\/thumbnailer\/thumbnailer/,
+  );
 });
 
 test("package sign maps to cargo-codesign macos args", async () => {
