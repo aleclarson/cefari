@@ -15,8 +15,14 @@ If `PATH` is omitted, Cefari uses the current directory.
 - a Vite dev server
 - the Deno daemon entry with watch mode
 - the Rust desktop app
+- configured Deno workers on demand when frontend code calls
+  `cefari.workers.spawn()`
 
 When one child process exits or fails, Cefari stops the remaining processes.
+
+Dev mode writes desktop runtime config to `.cefari/config/cefari.json` so the
+native runtime can resolve configured workers while loading frontend code from
+the Vite dev server.
 
 ## Vite Dev Server
 

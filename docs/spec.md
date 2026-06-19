@@ -84,7 +84,7 @@ frontend APIs.
   - It writes runtime config into `build/config/cefari.json`.
   - It copies and compiles daemon artifacts only when a daemon is configured.
   - It prepares a desktop runtime executable.
-  - It copies configured worker source directories into `build/workers/`.
+  - It compiles configured workers into executables under `build/workers/`.
   - It prepares CEF resources and manifest data.
 - Cefari can build with a release profile.
   - Release builds use Cargo's release profile when the desktop runtime is built
@@ -118,6 +118,7 @@ frontend APIs.
   - It checks the desktop executable.
   - It checks runtime config.
   - It checks worker resource output.
+  - It checks configured worker executables.
   - It checks CEF resource metadata.
   - It checks for locale files.
   - It includes configured tray icons.
@@ -178,8 +179,10 @@ frontend APIs.
   - The runtime exposes a typed IPC contract.
   - The TypeScript package re-exports the generated IPC types.
 - Cefari can spawn configured workers from trusted frontend IPC.
-  - Workers run as Deno scripts.
-  - Worker permissions are converted to Deno CLI permission flags.
+  - Dev workers run as Deno source scripts.
+  - Packaged workers run as compiled worker executables.
+  - Worker permissions are passed to Deno in dev and baked into packaged worker
+    executables during build.
   - Workers emit typed messages, errors, and exit events.
   - Frontend code can terminate a running worker.
 - Cefari can receive configured OS deep links.
@@ -233,7 +236,7 @@ frontend APIs.
     the generated registry types.
 - Apps can spawn workers through `cefari.workers`.
   - The runtime rejects unknown worker IDs.
-  - The runtime starts a separate Deno process for each spawn.
+  - The runtime starts a separate process for each spawn.
   - The runtime sends the configured init input as JSON.
 - Apps can invoke worker methods through a worker handle.
   - Method invocation targets one concrete worker process instance.
@@ -475,7 +478,7 @@ frontend APIs.
 - Cefari targets desktop app distribution on macOS, Linux, and Windows.
 - Cefari uses CEF for the embedded browser runtime.
 - Cefari uses Vite for frontend development and builds.
-- Cefari uses Deno for daemon development and compilation.
+- Cefari uses Deno for daemon and worker development and compilation.
 - Cefari uses Rust for the native runtime.
 - Cefari uses `cargo-packager` for native package generation when available.
 - Cefari uses `cargo-codesign`-style tooling for signing, notarization, and

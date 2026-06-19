@@ -152,8 +152,10 @@ Worker names, init input, method names, method inputs, method messages, and
 method outputs come from the generated `.cefari/workers.d.ts` registry. A
 worker must be listed in `cefari.config.ts` before frontend code can spawn it.
 
-Workers run as Deno scripts with the permissions configured for that worker.
-They are separate from the app daemon and have their own process lifecycle.
+In development, workers run as Deno source scripts with the permissions
+configured for that worker. In packaged apps, workers run as compiled
+executables produced during `cefari build`. They are separate from the app
+daemon and have their own process lifecycle.
 
 `worker.invoke()` targets one concrete worker process instance. This keeps
 multiple instances of the same configured worker unambiguous.
