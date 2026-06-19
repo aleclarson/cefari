@@ -2,14 +2,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createServer as createNetServer } from "node:net";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { InlineConfig, ViteDevServer } from "vite";
+import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { CefariCapability, ResolvedCefariConfig } from "./config.js";
 import { CEFARI_CONFIG_FILE_ENV, writeDesktopConfig } from "./desktop-config.js";
+import { currentPlatform } from "./platform.js";
+import type { ChildLike, ViteServerLike } from "./platform.js";
 import { generateWorkerRegistryTypes } from "./workers.js";
+
+export type { ChildLike, ViteServerLike };
 
 const CEFARI_DAEMON_LOG_ENV = "CEFARI_DAEMON_LOG";
 const CEFARI_DAEMON_DEV_CWD_ENV = "CEFARI_DAEMON_DEV_CWD";
@@ -33,48 +35,13 @@ export interface DevSession {
   close(): Promise<void>;
 }
 
-export interface ChildLike {
-  once(
-    event: "exit",
-    listener: (code: number | null, signal: NodeJS.Signals | null) => void,
-  ): unknown;
-  kill(signal?: NodeJS.Signals): unknown;
+export async function runCefariDev(options: DevOptions = {}): Promise<void> {
+  const session = await startCefariDev(options);
+  await waitForDevSession(session);
 }
 
-export interface DevDependencies {
-  createServer(config: InlineConfig): Promise<ViteServerLike>;
-  spawn(command: string, args: string[], options: SpawnOptions): ChildLike;
-  spawnSync(
-    command: string,
-    args: string[],
-    options: SpawnOptions,
-  ): { status: number | null; error?: Error };
-  env: NodeJS.ProcessEnv;
-  stdout: Pick<NodeJS.WriteStream, "write">;
-  process: {
-    once(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
-    off(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
-  };
-}
-
-export interface ViteServerLike {
-  resolvedUrls?: ViteDevServer["resolvedUrls"];
-  listen(): Promise<unknown>;
-  close(): Promise<unknown>;
-}
-
-export async function runCefariDev(
-  options: DevOptions = {},
-  deps = defaultDevDependencies(),
-): Promise<void> {
-  const session = await startCefariDev(options, deps);
-  await waitForDevSession(session, deps);
-}
-
-export async function startCefariDev(
-  options: DevOptions = {},
-  deps = defaultDevDependencies(),
-): Promise<DevSession> {
+export async function startCefariDev(options: DevOptions = {}): Promise<DevSession> {
+  const { createViteServer, stdout } = currentPlatform();
   const root = resolve(options.root ?? process.cwd());
   const config = await loadCefariConfig({
     root,
@@ -85,7 +52,7 @@ export async function startCefariDev(
   validateFixedPort(vitePort, "vitePort");
   await generateWorkerRegistryTypes(config);
 
-  const server = await deps.createServer(createViteDevConfig(config, vitePort));
+  const server = await createViteServer(createViteDevConfig(config, vitePort));
   await server.listen();
   const frontendUrl = resolveFrontendUrl(server, vitePort);
 
@@ -95,11 +62,11 @@ export async function startCefariDev(
   await writeDevtoolsFile(root, devtoolsPort, devtoolsUrl);
   const desktopConfigFile = await writeDesktopConfig(config, join(root, ".cefari", "config"));
 
-  deps.stdout.write(`frontend dev server: ${frontendUrl}\n`);
-  deps.stdout.write(`chrome devtools: ${devtoolsUrl}\n`);
-  deps.stdout.write(`chrome-devtools start --browserUrl ${devtoolsUrl}\n`);
+  stdout.write(`frontend dev server: ${frontendUrl}\n`);
+  stdout.write(`chrome devtools: ${devtoolsUrl}\n`);
+  stdout.write(`chrome-devtools start --browserUrl ${devtoolsUrl}\n`);
 
-  const desktop = spawnDesktop(config, frontendUrl, devtoolsPort, desktopConfigFile, deps);
+  const desktop = spawnDesktop(config, frontendUrl, devtoolsPort, desktopConfigFile);
   const session = {
     frontendUrl,
     devtoolsUrl,
@@ -112,7 +79,7 @@ export async function startCefariDev(
   };
 
   if (options.waitForExit) {
-    await waitForDevSession(session, deps);
+    await waitForDevSession(session);
   }
 
   return session;
@@ -171,13 +138,13 @@ function spawnDesktop(
   frontendUrl: string,
   devtoolsPort: number,
   desktopConfigFile: string,
-  deps: DevDependencies,
 ): ChildLike {
-  const runtime = resolveDesktopRuntime(config.root, deps);
-  return deps.spawn(runtime, [], {
+  const { env, spawn } = currentPlatform();
+  const runtime = resolveDesktopRuntime(config.root);
+  return spawn(runtime, [], {
     cwd: config.root,
     env: {
-      ...deps.env,
+      ...env,
       CEFARI_FRONTEND_URL: frontendUrl,
       [CEFARI_DEV_MODE_ENV]: "1",
       [CEFARI_DEVTOOLS_PORT_ENV]: devtoolsPort.toString(),
@@ -212,12 +179,9 @@ function trayIconEnv(config: ResolvedCefariConfig): Record<string, string> {
     : { CEFARI_TRAY_ICON: resolve(config.root, tray.icon) };
 }
 
-export function resolveDesktopRuntime(
-  root: string,
-  deps: Pick<DevDependencies, "env" | "spawnSync">,
-  release = false,
-): string {
-  const configured = deps.env[CEFARI_DESKTOP_RUNTIME_ENV];
+export function resolveDesktopRuntime(root: string, release = false): string {
+  const { env, spawnSync } = currentPlatform();
+  const configured = env[CEFARI_DESKTOP_RUNTIME_ENV];
   if (configured !== undefined && configured !== "") {
     if (!existsSync(configured)) {
       throw new Error(
@@ -242,10 +206,10 @@ export function resolveDesktopRuntime(
     if (release) {
       args.push("--release");
     }
-    const status = deps.spawnSync("cargo", args, {
+    const status = spawnSync("cargo", args, {
       cwd: dirname(manifest),
       stdio: "inherit",
-      env: deps.env,
+      env,
     });
     if (status.error !== undefined) {
       throw status.error;
@@ -342,10 +306,8 @@ async function availableLocalPort(): Promise<number> {
   });
 }
 
-async function waitForDevSession(
-  session: DevSession,
-  deps: DevDependencies,
-): Promise<void> {
+async function waitForDevSession(session: DevSession): Promise<void> {
+  const { process: processHooks } = currentPlatform();
   let shuttingDown = false;
   const shutdown = async () => {
     if (shuttingDown) {
@@ -358,8 +320,8 @@ async function waitForDevSession(
   const interrupt = () => {
     void shutdown();
   };
-  deps.process.once("SIGINT", interrupt);
-  deps.process.once("SIGTERM", interrupt);
+  processHooks.once("SIGINT", interrupt);
+  processHooks.once("SIGTERM", interrupt);
 
   try {
     const exits = [childExit("cefari desktop app", session.desktop)];
@@ -368,8 +330,8 @@ async function waitForDevSession(
     }
     await Promise.race(exits);
   } finally {
-    deps.process.off("SIGINT", interrupt);
-    deps.process.off("SIGTERM", interrupt);
+    processHooks.off("SIGINT", interrupt);
+    processHooks.off("SIGTERM", interrupt);
     await shutdown();
   }
 }
@@ -384,19 +346,4 @@ async function childExit(description: string, child: ChildLike): Promise<void> {
       }
     });
   });
-}
-
-function defaultDevDependencies(): DevDependencies {
-  return {
-    async createServer(config) {
-      const { createServer } = await import("vite");
-      return createServer(config);
-    },
-    spawn: (command, args, options) =>
-      spawn(command, args, options) as ChildProcess,
-    spawnSync: (command, args, options) => spawnSync(command, args, options),
-    env: process.env,
-    stdout: process.stdout,
-    process,
-  };
 }

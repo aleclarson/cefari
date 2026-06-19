@@ -222,8 +222,7 @@ async function buildDesktop(
   outputDir: string,
   release: boolean,
 ): Promise<void> {
-  const { env, spawnSync } = currentPlatform();
-  const source = resolveDesktopRuntime(config.root, { env, spawnSync }, release);
+  const source = resolveDesktopRuntime(config.root, release);
   await copyFile(source, join(outputDir, desktopExecutableName(config)));
 }
 

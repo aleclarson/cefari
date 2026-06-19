@@ -4,13 +4,11 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type { SpawnOptions } from "node:child_process";
 import test from "node:test";
-import { startCefariDev } from "../src/index.js";
-import type {
-  ChildLike,
-  DevDependencies,
-  ViteServerLike,
-} from "../src/index.js";
+import { runCefariDev, startCefariDev } from "../src/index.js";
+import type { ChildLike, ViteServerLike } from "../src/index.js";
+import { withPlatformForTest } from "../src/platform.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
@@ -78,14 +76,7 @@ export default defineConfig({
 
 test("starts Vite and desktop with daemon stream dev inputs", async () => {
   const { root, runtime } = await projectWithDevConfig();
-  const spawned: Array<
-    {
-      command: string;
-      args: string[];
-      options: Parameters<DevDependencies["spawn"]>[2];
-      child: FakeChild;
-    }
-  > = [];
+  const spawned: Array<{ command: string; args: string[]; options: SpawnOptions; child: FakeChild }> = [];
   const viteConfigs: unknown[] = [];
   let closed = false;
   const server: ViteServerLike = {
@@ -98,42 +89,39 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
       closed = true;
     },
   };
-  const deps: DevDependencies = {
-    async createServer(config) {
-      viteConfigs.push(config);
-      return server;
-    },
-    spawn(command, args, options) {
-      const child = new FakeChild();
-      spawned.push({ command, args, options, child });
-      return child;
-    },
-    spawnSync() {
-      return { status: 0 };
-    },
-    env: {
-      CEFARI_DESKTOP_RUNTIME: runtime,
-    },
-    stdout: {
-      write() {
-        return true;
+  const session = await withPlatformForTest(
+    {
+      async createViteServer(config) {
+        viteConfigs.push(config);
+        return server;
+      },
+      spawn(command, args, options) {
+        const child = new FakeChild();
+        spawned.push({ command, args, options, child });
+        return child;
+      },
+      spawnSync() {
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME: runtime,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
+      },
+      process: {
+        once() {
+          return undefined;
+        },
+        off() {
+          return undefined;
+        },
       },
     },
-    process: {
-      once() {
-        return undefined;
-      },
-      off() {
-        return undefined;
-      },
-    },
-  };
-
-  const session = await startCefariDev({
-    root,
-    vitePort: 5555,
-    devtoolsPort: 9222,
-  }, deps);
+    async () => await startCefariDev({ root, vitePort: 5555, devtoolsPort: 9222 }),
+  );
 
   assert.deepEqual(viteConfigs[0], {
     root: join(root, "ui"),
@@ -229,59 +217,50 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
 
 test("starts Vite and desktop without a daemon when daemon is omitted", async () => {
   const { root, runtime } = await projectWithDevConfig({ daemon: false });
-  const spawned: Array<
-    {
-      command: string;
-      args: string[];
-      options: Parameters<DevDependencies["spawn"]>[2];
-      child: FakeChild;
-    }
-  > = [];
+  const spawned: Array<{ command: string; args: string[]; options: SpawnOptions; child: FakeChild }> = [];
   let closed = false;
-  const deps: DevDependencies = {
-    async createServer() {
-      return {
-        resolvedUrls: {
-          local: ["http://127.0.0.1:5555/"],
-          network: [],
-        },
-        async listen() {},
-        async close() {
-          closed = true;
-        },
-      };
-    },
-    spawn(command, args, options) {
-      const child = new FakeChild();
-      spawned.push({ command, args, options, child });
-      return child;
-    },
-    spawnSync() {
-      return { status: 0 };
-    },
-    env: {
-      CEFARI_DESKTOP_RUNTIME: runtime,
-    },
-    stdout: {
-      write() {
-        return true;
-      },
-    },
-    process: {
-      once() {
-        return undefined;
-      },
-      off() {
-        return undefined;
-      },
-    },
-  };
 
-  const session = await startCefariDev({
-    root,
-    vitePort: 5555,
-    devtoolsPort: 9222,
-  }, deps);
+  const session = await withPlatformForTest(
+    {
+      async createViteServer() {
+        return {
+          resolvedUrls: {
+            local: ["http://127.0.0.1:5555/"],
+            network: [],
+          },
+          async listen() {},
+          async close() {
+            closed = true;
+          },
+        };
+      },
+      spawn(command, args, options) {
+        const child = new FakeChild();
+        spawned.push({ command, args, options, child });
+        return child;
+      },
+      spawnSync() {
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME: runtime,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
+      },
+      process: {
+        once() {
+          return undefined;
+        },
+        off() {
+          return undefined;
+        },
+      },
+    },
+    async () => await startCefariDev({ root, vitePort: 5555, devtoolsPort: 9222 }),
+  );
 
   assert.equal(session.daemon, undefined);
   assert.equal(spawned.length, 1);
@@ -290,5 +269,64 @@ test("starts Vite and desktop without a daemon when daemon is omitted", async ()
   await session.close();
 
   assert.equal(spawned[0].child.killedWith, "SIGTERM");
+  assert.equal(closed, true);
+});
+
+test("dev wait path subscribes to signals and cleans up spawned processes", async () => {
+  const { root, runtime } = await projectWithDevConfig();
+  const spawned: FakeChild[] = [];
+  const signalEvents: string[] = [];
+  let closed = false;
+  const server: ViteServerLike = {
+    resolvedUrls: {
+      local: ["http://127.0.0.1:5555/"],
+      network: [],
+    },
+    async listen() {},
+    async close() {
+      closed = true;
+    },
+  };
+
+  await withPlatformForTest(
+    {
+      async createViteServer() {
+        return server;
+      },
+      spawn() {
+        const child = new FakeChild();
+        spawned.push(child);
+        if (spawned.length === 1) {
+          setImmediate(() => child.emit("exit", 0, null));
+        }
+        return child;
+      },
+      spawnSync() {
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME: runtime,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
+      },
+      process: {
+        once(event) {
+          signalEvents.push(`once:${event}`);
+          return undefined;
+        },
+        off(event) {
+          signalEvents.push(`off:${event}`);
+          return undefined;
+        },
+      },
+    },
+    async () => await runCefariDev({ root, vitePort: 5555, devtoolsPort: 9222 }),
+  );
+
+  assert.deepEqual(signalEvents, ["once:SIGINT", "once:SIGTERM", "off:SIGINT", "off:SIGTERM"]);
+  assert.equal(spawned[0].killedWith, "SIGTERM");
   assert.equal(closed, true);
 });

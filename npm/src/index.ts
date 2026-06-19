@@ -30,7 +30,6 @@ export {
   runCefariDev,
   startCefariDev,
   type ChildLike,
-  type DevDependencies,
   type DevOptions,
   type DevSession,
   type ViteServerLike,
