@@ -136,6 +136,10 @@ frontend code:
 import { cefari } from "cefari/app";
 
 const worker = await cefari.workers.spawn("thumbnailer", {
+  cacheDir: "cache/thumbnails",
+});
+
+const result = await worker.invoke("thumbnail", {
   inputPath: "uploads/photo.jpg",
 });
 
@@ -144,25 +148,32 @@ const unsubscribe = worker.onMessage((message) => {
 });
 ```
 
-Worker names, input, message, and output types come from the generated
-`.cefari/workers.d.ts` registry. A worker must be listed in `cefari.config.ts`
-before frontend code can spawn it.
+Worker names, init input, method names, method inputs, method messages, and
+method outputs come from the generated `.cefari/workers.d.ts` registry. A
+worker must be listed in `cefari.config.ts` before frontend code can spawn it.
 
 Workers run as Deno scripts with the permissions configured for that worker.
 They are separate from the app daemon and have their own process lifecycle.
 
-`worker.onMessage()` receives messages posted with `context.postMessage()` and
-the final value returned by the worker's `run()` function. Use `onExit()` and
-`onError()` to observe lifecycle and protocol failures.
+`worker.invoke()` targets one concrete worker process instance. This keeps
+multiple instances of the same configured worker unambiguous.
+
+`worker.onMessage()` receives messages posted with `context.postMessage()`. Use
+`onExit()` and `onError()` to observe lifecycle and protocol failures.
+
+Use `cefari.workers.run()` for explicit one-shot work. It spawns a worker,
+invokes one method, and terminates the handle.
 
 Current methods:
 
-- `spawn(name, input): Promise<CefariWorkerHandle>`
+- `spawn(name, init): Promise<CefariWorkerHandle>`
+- `run(name, init, method, input): Promise<output>`
 - `terminate(id): Promise<void>`
 - `list(): Promise<WorkerState[]>`
 
 Current handle methods:
 
+- `invoke(method, input): Promise<output>`
 - `terminate(): Promise<void>`
 - `onMessage(handler): Unsubscribe`
 - `onExit(handler): Unsubscribe`

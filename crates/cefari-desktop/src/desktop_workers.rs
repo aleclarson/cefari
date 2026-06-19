@@ -3,16 +3,17 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Arc,
+    sync::{Arc, Mutex, mpsc},
     thread,
+    time::Duration,
 };
 
 use anyhow::{Context, Result};
 use cefari_core::{
     CefariIpcError, CefariIpcEvent, RuntimePaths, WorkerCommand, WorkerConfig, WorkerEntryConfig,
-    WorkerErrorEvent, WorkerEvent, WorkerExitEvent, WorkerListResult, WorkerMessageEvent,
-    WorkerPermissionConfig, WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState,
-    WorkerStatus,
+    WorkerErrorEvent, WorkerEvent, WorkerExitEvent, WorkerInvokeRequest, WorkerInvokeResult,
+    WorkerListResult, WorkerMessageEvent, WorkerPermissionConfig, WorkerResult, WorkerSpawnRequest,
+    WorkerSpawnResult, WorkerState, WorkerStatus,
 };
 use serde::Deserialize;
 use tracing::{debug, error};
@@ -24,7 +25,9 @@ pub(crate) struct DesktopWorkerManager {
     spawner: Arc<dyn WorkerProcessSpawner>,
     events: Arc<dyn WorkerEventSink>,
     processes: BTreeMap<String, ManagedWorkerProcess>,
+    pending: PendingWorkerRequests,
     next_id: u64,
+    next_request_id: u64,
 }
 
 #[derive(Clone)]
@@ -47,6 +50,7 @@ pub(crate) trait WorkerProcessSpawner: Send + Sync {
 
 pub(crate) trait WorkerChild: Send {
     fn take_stdout(&mut self) -> Option<Box<dyn BufRead + Send>>;
+    fn write_stdin(&mut self, line: &str) -> std::io::Result<()>;
     fn kill(&mut self) -> std::io::Result<()>;
     fn has_exited(&mut self) -> std::io::Result<bool>;
 }
@@ -64,14 +68,37 @@ pub(crate) struct WorkerProcessSpec {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 enum WorkerStdoutEnvelope {
-    Message { payload: serde_json::Value },
-    Result { payload: serde_json::Value },
-    Error { error: WorkerStdoutError },
+    Message {
+        #[serde(rename = "requestId")]
+        request_id: Option<String>,
+        method: Option<String>,
+        payload: serde_json::Value,
+    },
+    Result {
+        #[serde(rename = "requestId")]
+        request_id: String,
+        method: String,
+        payload: serde_json::Value,
+    },
+    Error {
+        #[serde(rename = "requestId")]
+        request_id: Option<String>,
+        method: Option<String>,
+        error: WorkerStdoutError,
+    },
 }
 
 #[derive(Debug, Deserialize)]
 struct WorkerStdoutError {
     message: String,
+}
+
+type PendingWorkerRequests = Arc<Mutex<BTreeMap<String, mpsc::Sender<WorkerInvokeOutcome>>>>;
+
+#[derive(Debug)]
+enum WorkerInvokeOutcome {
+    Output { method: String, output_json: String },
+    Error { message: String },
 }
 
 impl DesktopWorkerManager {
@@ -95,7 +122,9 @@ impl DesktopWorkerManager {
             spawner,
             events,
             processes: BTreeMap::new(),
+            pending: Arc::new(Mutex::new(BTreeMap::new())),
             next_id: 0,
+            next_request_id: 0,
         }
     }
 
@@ -105,6 +134,7 @@ impl DesktopWorkerManager {
     ) -> Result<WorkerResult, CefariIpcError> {
         match command {
             WorkerCommand::Spawn(request) => self.spawn(request),
+            WorkerCommand::Invoke(request) => self.invoke(request),
             WorkerCommand::Terminate(request) => self.terminate(&request.id),
             WorkerCommand::List => Ok(WorkerResult::List(self.list())),
         }
@@ -135,6 +165,7 @@ impl DesktopWorkerManager {
         if let Some(stdout) = child.take_stdout() {
             spawn_stdout_reader(
                 self.events.clone(),
+                self.pending.clone(),
                 id.clone(),
                 request.worker.clone(),
                 stdout,
@@ -155,6 +186,94 @@ impl DesktopWorkerManager {
             worker: request.worker.clone(),
             status: WorkerStatus::Running,
         }))
+    }
+
+    fn invoke(&mut self, request: &WorkerInvokeRequest) -> Result<WorkerResult, CefariIpcError> {
+        let process_status = self
+            .processes
+            .get(&request.id)
+            .ok_or_else(|| CefariIpcError::InvalidCommand {
+                message: format!("worker.invoke: unknown worker id {}", request.id),
+            })?
+            .status
+            .clone();
+        if matches!(process_status, WorkerStatus::Exited) {
+            return Err(CefariIpcError::InvalidCommand {
+                message: format!("worker.invoke: worker id {} has exited", request.id),
+            });
+        }
+        let input =
+            serde_json::from_str::<serde_json::Value>(&request.input_json).map_err(|error| {
+                CefariIpcError::InvalidCommand {
+                    message: format!("worker.invoke: inputJson must be valid JSON: {error}"),
+                }
+            })?;
+        let request_id = self.next_request_id(&request.id);
+        let (sender, receiver) = mpsc::channel();
+        self.pending
+            .lock()
+            .map_err(|error| CefariIpcError::Unsupported {
+                command: "worker.invoke".to_owned(),
+                reason: format!("worker pending map lock poisoned: {error}"),
+            })?
+            .insert(request_id.clone(), sender);
+        let line = serde_json::json!({
+            "type": "request",
+            "requestId": request_id,
+            "method": request.method,
+            "input": input,
+        })
+        .to_string();
+        let process =
+            self.processes
+                .get_mut(&request.id)
+                .ok_or_else(|| CefariIpcError::InvalidCommand {
+                    message: format!("worker.invoke: unknown worker id {}", request.id),
+                })?;
+        let write_result = process
+            .child
+            .lock()
+            .map_err(|error| CefariIpcError::Unsupported {
+                command: "worker.invoke".to_owned(),
+                reason: format!("worker process lock poisoned: {error}"),
+            })
+            .and_then(|mut child| {
+                child
+                    .write_stdin(&line)
+                    .map_err(|error| CefariIpcError::Unsupported {
+                        command: "worker.invoke".to_owned(),
+                        reason: error.to_string(),
+                    })
+            });
+        if let Err(error) = write_result {
+            self.remove_pending(&request_id);
+            return Err(error);
+        }
+        match receiver.recv_timeout(Duration::from_secs(30)) {
+            Ok(WorkerInvokeOutcome::Output {
+                method,
+                output_json,
+            }) => Ok(WorkerResult::Invoked(WorkerInvokeResult {
+                id: request.id.clone(),
+                method,
+                output_json,
+            })),
+            Ok(WorkerInvokeOutcome::Error { message }) => Err(CefariIpcError::Unsupported {
+                command: "worker.invoke".to_owned(),
+                reason: message,
+            }),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                self.remove_pending(&request_id);
+                Err(CefariIpcError::Unsupported {
+                    command: "worker.invoke".to_owned(),
+                    reason: format!("worker method {} timed out", request.method),
+                })
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(CefariIpcError::Unsupported {
+                command: "worker.invoke".to_owned(),
+                reason: "worker result channel disconnected".to_owned(),
+            }),
+        }
     }
 
     fn terminate(&mut self, id: &str) -> Result<WorkerResult, CefariIpcError> {
@@ -230,6 +349,17 @@ impl DesktopWorkerManager {
     fn next_worker_id(&mut self, worker: &str) -> String {
         self.next_id += 1;
         format!("{worker}-{}", self.next_id)
+    }
+
+    fn next_request_id(&mut self, worker_id: &str) -> String {
+        self.next_request_id += 1;
+        format!("{worker_id}-request-{}", self.next_request_id)
+    }
+
+    fn remove_pending(&self, request_id: &str) {
+        if let Ok(mut pending) = self.pending.lock() {
+            pending.remove(request_id);
+        }
     }
 
     fn process_spec(
@@ -358,6 +488,7 @@ fn safe_resource_path(root: &Path, value: &str) -> Result<PathBuf> {
 
 fn spawn_stdout_reader(
     events: Arc<dyn WorkerEventSink>,
+    pending: PendingWorkerRequests,
     id: String,
     worker: String,
     stdout: Box<dyn BufRead + Send>,
@@ -366,7 +497,13 @@ fn spawn_stdout_reader(
         for line in stdout.lines() {
             match line {
                 Ok(line) if line.trim().is_empty() => {}
-                Ok(line) => handle_worker_stdout_line(events.as_ref(), &id, &worker, &line),
+                Ok(line) => handle_worker_stdout_line(
+                    events.as_ref(),
+                    pending.as_ref(),
+                    &id,
+                    &worker,
+                    &line,
+                ),
                 Err(error) => {
                     error!(%error, %id, %worker, "failed to read worker stdout");
                     break;
@@ -376,41 +513,91 @@ fn spawn_stdout_reader(
     });
 }
 
-fn handle_worker_stdout_line(events: &dyn WorkerEventSink, id: &str, worker: &str, line: &str) {
+fn handle_worker_stdout_line(
+    events: &dyn WorkerEventSink,
+    pending: &Mutex<BTreeMap<String, mpsc::Sender<WorkerInvokeOutcome>>>,
+    id: &str,
+    worker: &str,
+    line: &str,
+) {
     match serde_json::from_str::<WorkerStdoutEnvelope>(line) {
-        Ok(WorkerStdoutEnvelope::Message { payload }) => emit_worker_event(
+        Ok(WorkerStdoutEnvelope::Message {
+            request_id,
+            method,
+            payload,
+        }) => emit_worker_event(
             events,
             CefariIpcEvent::Worker(WorkerEvent::Message(WorkerMessageEvent {
                 id: id.to_owned(),
                 worker: worker.to_owned(),
+                request_id,
+                method,
                 message_json: payload.to_string(),
             })),
         ),
-        Ok(WorkerStdoutEnvelope::Result { payload }) => emit_worker_event(
-            events,
-            CefariIpcEvent::Worker(WorkerEvent::Message(WorkerMessageEvent {
-                id: id.to_owned(),
-                worker: worker.to_owned(),
-                message_json: payload.to_string(),
-            })),
+        Ok(WorkerStdoutEnvelope::Result {
+            request_id,
+            method,
+            payload,
+        }) => resolve_pending(
+            pending,
+            &request_id,
+            WorkerInvokeOutcome::Output {
+                method,
+                output_json: payload.to_string(),
+            },
         ),
-        Ok(WorkerStdoutEnvelope::Error { error }) => emit_worker_event(
-            events,
-            CefariIpcEvent::Worker(WorkerEvent::Error(WorkerErrorEvent {
-                id: id.to_owned(),
-                worker: worker.to_owned(),
-                message: error.message,
-            })),
-        ),
+        Ok(WorkerStdoutEnvelope::Error {
+            request_id,
+            method,
+            error,
+        }) => {
+            if let Some(request_id) = &request_id {
+                resolve_pending(
+                    pending,
+                    request_id,
+                    WorkerInvokeOutcome::Error {
+                        message: error.message.clone(),
+                    },
+                );
+            }
+            emit_worker_event(
+                events,
+                CefariIpcEvent::Worker(WorkerEvent::Error(WorkerErrorEvent {
+                    id: id.to_owned(),
+                    worker: worker.to_owned(),
+                    request_id,
+                    method,
+                    message: error.message,
+                })),
+            );
+        }
         Err(error) => emit_worker_event(
             events,
             CefariIpcEvent::Worker(WorkerEvent::Error(WorkerErrorEvent {
                 id: id.to_owned(),
                 worker: worker.to_owned(),
+                request_id: None,
+                method: None,
                 message: format!("worker stdout protocol error: {error}"),
             })),
         ),
     }
+}
+
+fn resolve_pending(
+    pending: &Mutex<BTreeMap<String, mpsc::Sender<WorkerInvokeOutcome>>>,
+    request_id: &str,
+    outcome: WorkerInvokeOutcome,
+) {
+    let Some(sender) = pending
+        .lock()
+        .ok()
+        .and_then(|mut pending| pending.remove(request_id))
+    else {
+        return;
+    };
+    let _ = sender.send(outcome);
 }
 
 fn emit_worker_event(events: &dyn WorkerEventSink, event: CefariIpcEvent) {
@@ -436,6 +623,10 @@ impl WorkerProcessSpawner for DenoWorkerProcessSpawner {
             stdin
                 .write_all(spec.input.as_bytes())
                 .context("failed to write worker input")?;
+            stdin
+                .write_all(b"\n")
+                .context("failed to finish worker input")?;
+            stdin.flush().context("failed to flush worker input")?;
         }
         Ok(Box::new(StdWorkerChild { child }))
     }
@@ -451,6 +642,18 @@ impl WorkerChild for StdWorkerChild {
             .stdout
             .take()
             .map(|stdout| Box::new(BufReader::new(stdout)) as Box<dyn BufRead + Send>)
+    }
+
+    fn write_stdin(&mut self, line: &str) -> std::io::Result<()> {
+        let Some(stdin) = self.child.stdin.as_mut() else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "worker stdin is unavailable",
+            ));
+        };
+        stdin.write_all(line.as_bytes())?;
+        stdin.write_all(b"\n")?;
+        stdin.flush()
     }
 
     fn kill(&mut self) -> std::io::Result<()> {
@@ -493,10 +696,11 @@ mod tests {
             self.specs.lock().unwrap().push(spec);
             Ok(Box::new(FakeWorkerChild {
                 stdout: Some(Box::new(Cursor::new(
-                    br#"{"type":"message","payload":{"progress":0.5}}
+                    br#"{"type":"message","requestId":"thumbnailer-1-request-1","method":"render","payload":{"progress":0.5}}
 "#
                     .to_vec(),
                 ))),
+                stdin: Vec::new(),
                 killed: false,
                 exited: false,
             }))
@@ -505,6 +709,7 @@ mod tests {
 
     struct FakeWorkerChild {
         stdout: Option<Box<dyn BufRead + Send>>,
+        stdin: Vec<String>,
         killed: bool,
         exited: bool,
     }
@@ -512,6 +717,11 @@ mod tests {
     impl WorkerChild for FakeWorkerChild {
         fn take_stdout(&mut self) -> Option<Box<dyn BufRead + Send>> {
             self.stdout.take()
+        }
+
+        fn write_stdin(&mut self, line: &str) -> std::io::Result<()> {
+            self.stdin.push(line.to_owned());
+            Ok(())
         }
 
         fn kill(&mut self) -> std::io::Result<()> {
@@ -522,6 +732,46 @@ mod tests {
 
         fn has_exited(&mut self) -> std::io::Result<bool> {
             Ok(self.exited)
+        }
+    }
+
+    #[derive(Default)]
+    struct InvokeSpawner {
+        child: Arc<Mutex<Option<SharedFakeWorkerChild>>>,
+    }
+
+    type SharedFakeWorkerChild = Arc<Mutex<FakeWorkerChild>>;
+
+    impl WorkerProcessSpawner for InvokeSpawner {
+        fn spawn(&self, _spec: WorkerProcessSpec) -> Result<Box<dyn WorkerChild>> {
+            let child = Arc::new(Mutex::new(FakeWorkerChild {
+                stdout: None,
+                stdin: Vec::new(),
+                killed: false,
+                exited: false,
+            }));
+            *self.child.lock().unwrap() = Some(child.clone());
+            Ok(Box::new(SharedFakeChild(child)))
+        }
+    }
+
+    struct SharedFakeChild(SharedFakeWorkerChild);
+
+    impl WorkerChild for SharedFakeChild {
+        fn take_stdout(&mut self) -> Option<Box<dyn BufRead + Send>> {
+            self.0.lock().unwrap().take_stdout()
+        }
+
+        fn write_stdin(&mut self, line: &str) -> std::io::Result<()> {
+            self.0.lock().unwrap().write_stdin(line)
+        }
+
+        fn kill(&mut self) -> std::io::Result<()> {
+            self.0.lock().unwrap().kill()
+        }
+
+        fn has_exited(&mut self) -> std::io::Result<bool> {
+            self.0.lock().unwrap().has_exited()
         }
     }
 
@@ -574,6 +824,69 @@ mod tests {
 
         assert!(matches!(error, CefariIpcError::InvalidCommand { .. }));
         assert!(spawner.specs.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn invokes_method_on_existing_worker_process() {
+        let spawner = Arc::new(InvokeSpawner::default());
+        let mut manager = DesktopWorkerManager::with_spawner(
+            worker_config(),
+            paths(),
+            Arc::new(RecordingSink::default()),
+            spawner.clone(),
+        );
+        let spawned = manager
+            .dispatch(&WorkerCommand::Spawn(WorkerSpawnRequest {
+                worker: "thumbnailer".to_owned(),
+                input_json: "{}".to_owned(),
+            }))
+            .unwrap();
+        let id = match spawned {
+            WorkerResult::Spawned(result) => result.id,
+            _ => panic!("expected spawned"),
+        };
+        let pending = manager.pending.clone();
+        let request_id = format!("{id}-request-1");
+        thread::spawn(move || {
+            loop {
+                if pending.lock().unwrap().contains_key(&request_id) {
+                    resolve_pending(
+                        pending.as_ref(),
+                        &request_id,
+                        WorkerInvokeOutcome::Output {
+                            method: "render".to_owned(),
+                            output_json: r#"{"ok":true}"#.to_owned(),
+                        },
+                    );
+                    break;
+                }
+                thread::yield_now();
+            }
+        });
+
+        let result = manager
+            .dispatch(&WorkerCommand::Invoke(WorkerInvokeRequest {
+                id: id.clone(),
+                method: "render".to_owned(),
+                input_json: r#"{"imageId":"abc"}"#.to_owned(),
+            }))
+            .unwrap();
+
+        assert_eq!(
+            result,
+            WorkerResult::Invoked(WorkerInvokeResult {
+                id,
+                method: "render".to_owned(),
+                output_json: r#"{"ok":true}"#.to_owned(),
+            })
+        );
+        let child = spawner.child.lock().unwrap().as_ref().unwrap().clone();
+        assert_eq!(
+            child.lock().unwrap().stdin,
+            vec![
+                r#"{"input":{"imageId":"abc"},"method":"render","requestId":"thumbnailer-1-request-1","type":"request"}"#
+            ]
+        );
     }
 
     #[test]
@@ -660,9 +973,10 @@ mod tests {
 
         handle_worker_stdout_line(
             &sink,
+            &Mutex::new(BTreeMap::new()),
             "worker-1",
             "thumbnailer",
-            r#"{"type":"message","payload":{"progress":0.5}}"#,
+            r#"{"type":"message","requestId":"request-1","method":"render","payload":{"progress":0.5}}"#,
         );
 
         assert!(matches!(
@@ -670,6 +984,8 @@ mod tests {
             [CefariIpcEvent::Worker(WorkerEvent::Message(event))]
                 if event.id == "worker-1"
                     && event.worker == "thumbnailer"
+                    && event.request_id.as_deref() == Some("request-1")
+                    && event.method.as_deref() == Some("render")
                     && event.message_json == r#"{"progress":0.5}"#
         ));
     }
@@ -698,6 +1014,7 @@ mod tests {
         fn spawn(&self, _spec: WorkerProcessSpec) -> Result<Box<dyn WorkerChild>> {
             Ok(Box::new(FakeWorkerChild {
                 stdout: None,
+                stdin: Vec::new(),
                 killed: false,
                 exited: true,
             }))

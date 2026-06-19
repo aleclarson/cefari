@@ -17,8 +17,8 @@ type SmokeWorkerMessage =
   | { phase: "permission-denied"; message: string }
   | { phase: "holding"; holdMs: number };
 
-const worker = defineWorker<SmokeWorkerInput, SmokeWorkerOutput, SmokeWorkerMessage>({
-  async run(input, context) {
+const worker = defineWorker((_init: null) => ({
+  async transform(input: SmokeWorkerInput, context: { postMessage(message: SmokeWorkerMessage): Promise<void> }): Promise<SmokeWorkerOutput> {
     await context.postMessage({ phase: "started" });
 
     const contents = await Deno.readTextFile(input.inputPath);
@@ -43,7 +43,7 @@ const worker = defineWorker<SmokeWorkerInput, SmokeWorkerOutput, SmokeWorkerMess
 
     return { uppercased, denied };
   },
-});
+}));
 
 if (import.meta.main) {
   Deno.exit(await runCefariWorker(worker));

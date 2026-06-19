@@ -14,9 +14,14 @@ import { isCefariDaemon } from "../../src/daemon.ts";
 declare module "../../src/app/workers.ts" {
   interface CefariWorkerRegistry {
     thumbnailer: {
-      input: { imageId: string };
-      output: { outputPath: string };
-      message: { progress: number };
+      init: { cacheDir: string };
+      methods: {
+        render: {
+          input: { imageId: string };
+          output: { ok: boolean };
+          message: { progress: number };
+        };
+      };
     };
   }
 }
@@ -118,11 +123,14 @@ Deno.test("wraps typed namespace commands", async () => {
     payload: { id: "cef-1" },
   });
   const worker = await cefari.workers.spawn("thumbnailer", {
-    imageId: "abc",
+    cacheDir: "cache",
   });
   assertEquals(worker.id, "worker-1");
   assertEquals(worker.worker, "thumbnailer");
   assertEquals(worker.status, "running");
+  assertEquals(await worker.invoke("render", { imageId: "abc" }), {
+    ok: true,
+  });
   assertEquals(await cefari.workers.list(), [
     { id: "worker-1", worker: "thumbnailer", status: "running" },
   ]);
@@ -264,6 +272,17 @@ Deno.test("wraps typed namespace commands", async () => {
         worker: "spawn",
         payload: {
           worker: "thumbnailer",
+          inputJson: '{"cacheDir":"cache"}',
+        },
+      },
+    },
+    {
+      command: "worker",
+      payload: {
+        worker: "invoke",
+        payload: {
+          id: "worker-1",
+          method: "render",
           inputJson: '{"imageId":"abc"}',
         },
       },
@@ -709,6 +728,8 @@ Deno.test("filters typed events", () => {
         payload: {
           id: "worker-1",
           worker: "thumbnailer",
+          requestId: "request-1",
+          method: "render",
           messageJson: '{"progress":0.5}',
         },
       },
@@ -1018,6 +1039,18 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
                 id: "worker-1",
                 worker: command.payload.payload.worker,
                 status: "running",
+              },
+            },
+          });
+        case "invoke":
+          return ok({
+            result: "worker",
+            payload: {
+              result: "invoked",
+              payload: {
+                id: command.payload.payload.id,
+                method: command.payload.payload.method,
+                outputJson: '{"ok":true}',
               },
             },
           });

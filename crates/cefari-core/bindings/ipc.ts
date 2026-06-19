@@ -383,11 +383,13 @@ export type WindowTargetRequest = {
 	target: WindowTarget | null,
 };
 
-export type WorkerCommand = { worker: "spawn"; payload: WorkerSpawnRequest } | { worker: "terminate"; payload: WorkerIdRequest } | { worker: "list" };
+export type WorkerCommand = { worker: "spawn"; payload: WorkerSpawnRequest } | { worker: "invoke"; payload: WorkerInvokeRequest } | { worker: "terminate"; payload: WorkerIdRequest } | { worker: "list" };
 
 export type WorkerErrorEvent = {
 	id: string,
 	worker: string,
+	requestId: string | null,
+	method: string | null,
 	message: string,
 };
 
@@ -408,6 +410,18 @@ export type WorkerIdResult = {
 	id: string,
 };
 
+export type WorkerInvokeRequest = {
+	id: string,
+	method: string,
+	inputJson: string,
+};
+
+export type WorkerInvokeResult = {
+	id: string,
+	method: string,
+	outputJson: string,
+};
+
 export type WorkerListResult = {
 	workers: WorkerState[],
 };
@@ -415,10 +429,12 @@ export type WorkerListResult = {
 export type WorkerMessageEvent = {
 	id: string,
 	worker: string,
+	requestId: string | null,
+	method: string | null,
 	messageJson: string,
 };
 
-export type WorkerResult = { result: "spawned"; payload: WorkerSpawnResult } | { result: "terminated"; payload: WorkerIdResult } | { result: "list"; payload: WorkerListResult };
+export type WorkerResult = { result: "spawned"; payload: WorkerSpawnResult } | { result: "invoked"; payload: WorkerInvokeResult } | { result: "terminated"; payload: WorkerIdResult } | { result: "list"; payload: WorkerListResult };
 
 export type WorkerSpawnRequest = {
 	worker: string,

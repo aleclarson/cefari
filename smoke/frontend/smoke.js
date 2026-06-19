@@ -348,33 +348,38 @@ async function workerSmoke() {
 
   const spawned = await invokeWorkerOk("spawn", {
     worker: "smoke-worker",
-    inputJson: JSON.stringify({ inputPath, outputPath, deniedPath }),
+    inputJson: JSON.stringify(null),
   }, "spawned");
   assert(spawned.worker === "smoke-worker", "spawned the wrong worker");
 
-  const started = parseWorkerMessage(
-    await waitForWorkerEvent(spawned.id, "worker.message", (event) =>
-      parseWorkerMessage(event).phase === "started"
-    ),
+  const startedPromise = waitForWorkerEvent(spawned.id, "worker.message", (event) =>
+    parseWorkerMessage(event).phase === "started"
   );
+  const deniedPromise = waitForWorkerEvent(spawned.id, "worker.message", (event) =>
+    parseWorkerMessage(event).phase === "permission-denied"
+  );
+  const invoked = await invokeWorkerOk("invoke", {
+    id: spawned.id,
+    method: "transform",
+    inputJson: JSON.stringify({ inputPath, outputPath, deniedPath }),
+  }, "invoked");
+
+  const started = parseWorkerMessage(await startedPromise);
   assert(started.phase === "started", "worker did not report start");
 
-  const denied = parseWorkerMessage(
-    await waitForWorkerEvent(spawned.id, "worker.message", (event) =>
-      parseWorkerMessage(event).phase === "permission-denied"
-    ),
-  );
+  const denied = parseWorkerMessage(await deniedPromise);
   assert(
     denied.phase === "permission-denied",
     "worker did not report denied read",
   );
 
-  const result = parseWorkerMessage(
-    await waitForWorkerEvent(spawned.id, "worker.message", (event) =>
-      parseWorkerMessage(event).uppercased === "CEFARI SMOKE TEXT\n"
-    ),
-  );
+  const result = JSON.parse(invoked.outputJson);
+  assert(invoked.method === "transform", "worker invoke method mismatch");
   assert(result.denied === true, "worker denied read was not enforced");
+  assert(
+    result.uppercased === "CEFARI SMOKE TEXT\n",
+    "worker result changed",
+  );
 
   const workerOutput = await invokeOk(
     commandFile("readFile", {
@@ -388,6 +393,8 @@ async function workerSmoke() {
     "worker output file contents changed",
   );
 
+  const firstTerminated = await invokeWorkerOk("terminate", { id: spawned.id }, "terminated");
+  assert(firstTerminated.id === spawned.id, "terminated first worker id mismatch");
   await waitForWorkerEvent(spawned.id, "worker.exited");
   const listAfterExit = await invokeWorkerOk("list", undefined, "list");
   assert(
@@ -399,16 +406,8 @@ async function workerSmoke() {
 
   const held = await invokeWorkerOk("spawn", {
     worker: "smoke-worker",
-    inputJson: JSON.stringify({
-      inputPath,
-      outputPath,
-      deniedPath,
-      holdMs: 30_000,
-    }),
+    inputJson: JSON.stringify(null),
   }, "spawned");
-  await waitForWorkerEvent(held.id, "worker.message", (event) =>
-    parseWorkerMessage(event).phase === "holding"
-  );
   const terminated = await invokeWorkerOk("terminate", { id: held.id }, "terminated");
   assert(terminated.id === held.id, "terminated worker id mismatch");
   await waitForWorkerEvent(held.id, "worker.exited");

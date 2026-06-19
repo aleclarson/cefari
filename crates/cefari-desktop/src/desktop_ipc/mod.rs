@@ -407,6 +407,14 @@ mod tests {
                         status: WorkerStatus::Running,
                     }))
                 }
+                WorkerCommand::Invoke(request) => {
+                    self.calls.push("worker_invoke");
+                    Ok(WorkerResult::Invoked(cefari_core::WorkerInvokeResult {
+                        id: request.id.clone(),
+                        method: request.method.clone(),
+                        output_json: r#"{"ok":true}"#.to_owned(),
+                    }))
+                }
                 WorkerCommand::Terminate(request) => {
                     self.calls.push("worker_terminate");
                     Ok(WorkerResult::Terminated(WorkerIdResult {

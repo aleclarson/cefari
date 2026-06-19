@@ -18,7 +18,7 @@ export default defineConfig({
 ```
 
 Worker IDs must match `^[a-z][a-z0-9-]*$`. Frontend code uses the ID with
-`cefari.workers.spawn()`.
+`cefari.workers.spawn()` or `cefari.workers.run()`.
 
 ## Entry
 
@@ -60,18 +60,21 @@ Worker scripts should use `cefari/worker`:
 ```ts
 import { defineWorker, runCefariWorker } from "cefari/worker";
 
-const worker = defineWorker<{ path: string }, { ok: true }, { phase: string }>({
-  async run(input, context) {
+const worker = defineWorker((init: { cacheDir: string }) => ({
+  async thumbnail(
+    input: { path: string },
+    context: { postMessage(message: { phase: string }): Promise<void> },
+  ) {
     await context.postMessage({ phase: "started" });
     await Deno.readTextFile(input.path);
-    return { ok: true };
+    return { outputPath: `${init.cacheDir}/thumbnail.png` };
   },
-});
+}));
 
 if (import.meta.main) {
   Deno.exit(await runCefariWorker(worker));
 }
 ```
 
-`defineWorker()` provides the type contract used by generated frontend worker
-registry types.
+`defineWorker()` infers the worker init input, method inputs, method outputs,
+and method messages used by generated frontend worker registry types.

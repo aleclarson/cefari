@@ -229,13 +229,17 @@ frontend APIs.
 - Cefari generates worker registry types during dev and build.
   - Generated types live under `.cefari/workers.d.ts`.
   - `cefari.workers.spawn()` only accepts configured worker names.
-  - Worker input and message handlers use the generated registry types.
+  - Worker init input, method input, method output, and message handlers use
+    the generated registry types.
 - Apps can spawn workers through `cefari.workers`.
   - The runtime rejects unknown worker IDs.
   - The runtime starts a separate Deno process for each spawn.
-  - The runtime sends the configured input as JSON.
+  - The runtime sends the configured init input as JSON.
+- Apps can invoke worker methods through a worker handle.
+  - Method invocation targets one concrete worker process instance.
+  - Method requests and responses are correlated by request ID.
+  - Method outputs are returned to the caller.
   - Worker messages are delivered as frontend events.
-  - The worker return value is delivered as a final worker message.
   - Worker errors are delivered as worker error events.
   - Worker exits are delivered as worker exit events.
 

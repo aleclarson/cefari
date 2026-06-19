@@ -7,19 +7,50 @@ export interface CefariWorkerRegistry {}
 
 export type CefariWorkerName = Extract<keyof CefariWorkerRegistry, string>;
 
-export type CefariWorkerInput<Name extends CefariWorkerName> =
-  CefariWorkerRegistry[Name]["input"];
+export type CefariWorkerInit<Name extends CefariWorkerName> =
+  CefariWorkerRegistry[Name] extends { init: infer Init } ? Init : never;
 
-export type CefariWorkerOutput<Name extends CefariWorkerName> =
-  CefariWorkerRegistry[Name]["output"];
+export type CefariWorkerMethodName<Name extends CefariWorkerName> =
+  CefariWorkerRegistry[Name] extends { methods: infer Methods }
+    ? Extract<keyof Methods, string>
+    : never;
 
-export type CefariWorkerMessage<Name extends CefariWorkerName> =
-  CefariWorkerRegistry[Name]["message"];
+export type CefariWorkerMethodContract<
+  Name extends CefariWorkerName,
+  Method extends CefariWorkerMethodName<Name>,
+> = CefariWorkerRegistry[Name] extends { methods: infer Methods }
+  ? Method extends keyof Methods
+    ? Methods[Method]
+    : never
+  : never;
+
+export type CefariWorkerMethodInput<
+  Name extends CefariWorkerName,
+  Method extends CefariWorkerMethodName<Name>,
+> = CefariWorkerMethodContract<Name, Method> extends { input: infer Input } ? Input : never;
+
+export type CefariWorkerMethodOutput<
+  Name extends CefariWorkerName,
+  Method extends CefariWorkerMethodName<Name>,
+> = CefariWorkerMethodContract<Name, Method> extends { output: infer Output } ? Output : never;
+
+export type CefariWorkerMethodMessage<
+  Name extends CefariWorkerName,
+  Method extends CefariWorkerMethodName<Name>,
+> = CefariWorkerMethodContract<Name, Method> extends { message: infer Message } ? Message : never;
+
+export type CefariWorkerMessage<Name extends CefariWorkerName> = {
+  [Method in CefariWorkerMethodName<Name>]: CefariWorkerMethodMessage<Name, Method>;
+}[CefariWorkerMethodName<Name>];
 
 export type CefariWorkerHandle<Name extends CefariWorkerName> = {
   id: string;
   worker: Name;
   status: "running" | "exited";
+  invoke<Method extends CefariWorkerMethodName<Name>>(
+    method: Method,
+    input: CefariWorkerMethodInput<Name, Method>,
+  ): Promise<CefariWorkerMethodOutput<Name, Method>>;
   terminate(): Promise<void>;
   onMessage(handler: (message: CefariWorkerMessage<Name>) => void): Unsubscribe;
   onExit(handler: (event: CefariWorkerExitEvent<Name>) => void): Unsubscribe;
@@ -43,21 +74,27 @@ export type CefariWorkerErrorEvent<Name extends CefariWorkerName> = Omit<
 export type WorkersApi = {
   spawn<Name extends CefariWorkerName>(
     worker: Name,
-    input: CefariWorkerInput<Name>,
+    init: CefariWorkerInit<Name>,
   ): Promise<CefariWorkerHandle<Name>>;
+  run<Name extends CefariWorkerName, Method extends CefariWorkerMethodName<Name>>(
+    worker: Name,
+    init: CefariWorkerInit<Name>,
+    method: Method,
+    input: CefariWorkerMethodInput<Name, Method>,
+  ): Promise<CefariWorkerMethodOutput<Name, Method>>;
   terminate(id: string): Promise<void>;
   list(): Promise<WorkerState[]>;
 };
 
 export const workers: WorkersApi = {
-  async spawn(worker, input) {
+  async spawn(worker, init) {
     const result = await invokeWorker({
       command: "worker",
       payload: {
         worker: "spawn",
         payload: {
           worker,
-          inputJson: JSON.stringify(input),
+          inputJson: JSON.stringify(init),
         },
       },
     });
@@ -65,6 +102,14 @@ export const workers: WorkersApi = {
       throw new Error(`expected spawned worker result, received ${result.result}`);
     }
     return workerHandle(worker, result.payload.id, result.payload.status);
+  },
+  async run(worker, init, method, input) {
+    const handle = await workers.spawn(worker, init);
+    try {
+      return await handle.invoke(method, input);
+    } finally {
+      await handle.terminate();
+    }
   },
   async terminate(id) {
     const result = await invokeWorker({
@@ -99,6 +144,23 @@ function workerHandle<Name extends CefariWorkerName>(
     id,
     worker,
     status,
+    async invoke(method, input) {
+      const result = await invokeWorker({
+        command: "worker",
+        payload: {
+          worker: "invoke",
+          payload: {
+            id,
+            method,
+            inputJson: JSON.stringify(input),
+          },
+        },
+      });
+      if (result.result !== "invoked") {
+        throw new Error(`expected invoked worker result, received ${result.result}`);
+      }
+      return JSON.parse(result.payload.outputJson) as CefariWorkerMethodOutput<Name, typeof method>;
+    },
     terminate: () => workers.terminate(id),
     onMessage(handler) {
       return on("worker.message", (event) => {

@@ -4,37 +4,48 @@ import {
   defineWorker,
   runCefariWorker,
   type InferCefariWorker,
-  type WorkerInput,
-  type WorkerMessage,
-  type WorkerOutput,
+  type WorkerInit,
+  type WorkerMethods,
   type WorkerProtocolIo,
 } from "../src/worker.js";
 
-test("runs a worker from a start envelope and writes protocol lines", async () => {
+test("runs worker methods from request envelopes and writes protocol lines", async () => {
   const stdout: string[] = [];
-  const worker = defineWorker<{ value: number }, { doubled: number }, { seen: number }>({
-    async run(input, context) {
+  const worker = defineWorker((init: { multiplier: number }) => ({
+    async double(input: { value: number }, context) {
       await context.postMessage({ seen: input.value });
-      return { doubled: input.value * 2 };
+      return { doubled: input.value * init.multiplier };
     },
-  });
+  }));
 
-  const exitCode = await runCefariWorker(worker, protocolIo({
-    type: "start",
-    id: "worker-1",
-    input: { value: 21 },
-  }, stdout));
+  const exitCode = await runCefariWorker(worker, protocolIo([
+    {
+      type: "start",
+      id: "worker-1",
+      input: { multiplier: 2 },
+    },
+    {
+      type: "request",
+      requestId: "request-1",
+      method: "double",
+      input: { value: 21 },
+    },
+  ], stdout));
 
   assert.equal(exitCode, 0);
   assert.deepEqual(stdout.map((line) => JSON.parse(line)), [
     {
       type: "message",
       id: "worker-1",
+      requestId: "request-1",
+      method: "double",
       payload: { seen: 21 },
     },
     {
       type: "result",
       id: "worker-1",
+      requestId: "request-1",
+      method: "double",
       payload: { doubled: 42 },
     },
   ]);
@@ -42,14 +53,10 @@ test("runs a worker from a start envelope and writes protocol lines", async () =
 
 test("writes protocol errors for malformed input", async () => {
   const stdout: string[] = [];
-  const worker = defineWorker({
-    run() {
-      return null;
-    },
-  });
+  const worker = defineWorker(() => ({}));
 
   const exitCode = await runCefariWorker(worker, {
-    readStdin: async () => "not json",
+    readLine: async () => "not json",
     writeStdout(line) {
       stdout.push(line.trimEnd());
     },
@@ -60,55 +67,103 @@ test("writes protocol errors for malformed input", async () => {
   const errorEnvelope = JSON.parse(stdout[0]);
   assert.equal(errorEnvelope.type, "error");
   assert.equal(errorEnvelope.id, null);
-  assert.match(errorEnvelope.error.message, /worker protocol input must be JSON/);
-  assert.deepEqual(Object.keys(errorEnvelope), ["type", "id", "error"]);
+  assert.match(errorEnvelope.error.message, /worker protocol start must be JSON/);
+  assert.deepEqual(Object.keys(errorEnvelope), ["type", "id", "requestId", "method", "error"]);
   assert.deepEqual(Object.keys(errorEnvelope.error), ["message"]);
 });
 
 test("writes protocol errors for invalid start envelopes", async () => {
   const stdout: string[] = [];
-  const worker = defineWorker({
-    run() {
-      return null;
-    },
-  });
+  const worker = defineWorker(() => ({}));
 
-  const exitCode = await runCefariWorker(worker, protocolIo({ type: "start", id: "" }, stdout));
+  const exitCode = await runCefariWorker(worker, protocolIo([{ type: "start", id: "" }], stdout));
 
   assert.equal(exitCode, 1);
   assert.deepEqual(JSON.parse(stdout[0]), {
     type: "error",
     id: null,
+    requestId: null,
+    method: null,
     error: {
-      message: "worker protocol input id must be a non-empty string",
+      message: "worker protocol start id must be a non-empty string",
     },
   });
+});
+
+test("writes protocol errors for invalid method requests without exiting", async () => {
+  const stdout: string[] = [];
+  const worker = defineWorker(() => ({
+    ok() {
+      return { ok: true };
+    },
+  }));
+
+  const exitCode = await runCefariWorker(worker, protocolIo([
+    { type: "start", id: "worker-1", input: null },
+    { type: "request", requestId: "request-1", method: "missing", input: null },
+    { type: "request", requestId: "request-2", method: "ok", input: null },
+  ], stdout));
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(stdout.map((line) => JSON.parse(line)), [
+    {
+      type: "error",
+      id: "worker-1",
+      requestId: "request-1",
+      method: "missing",
+      error: {
+        message: 'worker method "missing" is not defined',
+      },
+    },
+    {
+      type: "result",
+      id: "worker-1",
+      requestId: "request-2",
+      method: "ok",
+      payload: { ok: true },
+    },
+  ]);
 });
 
 test("exposes worker type helpers", () => {
-  const worker = defineWorker<{ imageId: string }, { outputPath: string }, { progress: number }>({
-    run(input, context) {
+  const worker = defineWorker((init: { cacheDir: string }) => ({
+    render(input: { imageId: string }, context) {
       void context.postMessage({ progress: 1 });
-      return { outputPath: input.imageId };
+      return { outputPath: `${init.cacheDir}/${input.imageId}.png` };
     },
-  });
+  }));
 
   type Contract = InferCefariWorker<typeof worker>;
-  const input: WorkerInput<typeof worker> = { imageId: "abc" };
-  const output: WorkerOutput<typeof worker> = { outputPath: "cache/abc.png" };
-  const message: WorkerMessage<typeof worker> = { progress: 0.5 };
-  const contract: Contract = { input, output, message };
+  const init: WorkerInit<typeof worker> = { cacheDir: "cache" };
+  const output: WorkerMethods<typeof worker>["render"]["output"] = { outputPath: "cache/abc.png" };
+  const message: WorkerMethods<typeof worker>["render"]["message"] = { progress: 0.5 };
+  const contract: Contract = {
+    init,
+    methods: {
+      render: {
+        input: { imageId: "abc" },
+        output,
+        message,
+      },
+    },
+  };
 
   assert.deepEqual(contract, {
-    input: { imageId: "abc" },
-    output: { outputPath: "cache/abc.png" },
-    message: { progress: 0.5 },
+    init: { cacheDir: "cache" },
+    methods: {
+      render: {
+        input: { imageId: "abc" },
+        output: { outputPath: "cache/abc.png" },
+        message: { progress: 0.5 },
+      },
+    },
   });
 });
 
-function protocolIo(input: unknown, stdout: string[]): WorkerProtocolIo {
+function protocolIo(input: unknown[], stdout: string[]): WorkerProtocolIo {
+  const lines = input.map((line) => JSON.stringify(line));
   return {
-    readStdin: async () => JSON.stringify(input),
+    readLine: async () => lines.shift() ?? null,
     writeStdout(line) {
       stdout.push(line.trimEnd());
     },
