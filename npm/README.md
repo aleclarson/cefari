@@ -12,8 +12,7 @@ The public command surface is intentionally small during Cefari's pre-alpha:
 - `cefari logs`
 
 Release management commands live under `cefari package`.
-Log inspection and export commands live under `cefari logs`, including
-`cefari logs export sentry`.
+Log inspection commands live under `cefari logs`.
 
 Use config helpers from the package root:
 
@@ -27,5 +26,4 @@ Use frontend helpers from `cefari/app`:
 import { cefari } from "cefari/app";
 ```
 
-Use local log helpers from `cefari/logs`, and the official Sentry export sink
-from `cefari/logs/sentry` when writing custom operator tooling.
+Use local log helpers from `cefari/logs`.
