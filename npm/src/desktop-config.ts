@@ -69,6 +69,12 @@ function desktopConfigJson(config: ResolvedCefariConfig, options: DesktopConfigO
     deep_links: {
       schemes: deepLinkSchemes,
     },
+    logs: {
+      local: { ...config.logs.local },
+      exporters: {
+        sentry: { ...config.logs.exporters.sentry },
+      },
+    },
     daemon:
       options.daemon === undefined
         ? {

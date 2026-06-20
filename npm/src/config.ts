@@ -18,6 +18,7 @@ export interface CefariConfigInput {
   browser?: BrowserConfigInput;
   capabilities?: CefariCapability[];
   nativeResources?: Record<string, NativeResourceInput>;
+  logs?: LogsConfigInput;
   workers?: Record<string, WorkerConfigInput>;
   vite?: ViteConfigInput;
   daemon?: DaemonConfigInput;
@@ -105,6 +106,34 @@ export interface BrowserConfigInput {
   webgpu?: boolean;
 }
 
+export type ModeEnabledInput = boolean | ConfigMode;
+
+export type LogLevelInput = "debug" | "info" | "log" | "warn" | "error";
+
+export interface LogsConfigInput {
+  local?: LocalLogConfigInput;
+  exporters?: LogExportersConfigInput;
+}
+
+export interface LocalLogConfigInput {
+  enabled?: ModeEnabledInput;
+  retention?: string;
+}
+
+export interface LogExportersConfigInput {
+  sentry?: SentryLogExporterConfigInput;
+}
+
+export interface SentryLogExporterConfigInput {
+  enabled?: ModeEnabledInput;
+  dsnEnv?: string;
+  dsn?: string;
+  environment?: string;
+  release?: string;
+  level?: LogLevelInput;
+  sampleRate?: number;
+}
+
 export interface TrayCapabilityOptions {
   icon: string;
 }
@@ -187,6 +216,30 @@ export interface BrowserConfig {
   webgpu: boolean;
 }
 
+export interface LogsConfig {
+  local: LocalLogConfig;
+  exporters: LogExportersConfig;
+}
+
+export interface LocalLogConfig {
+  enabled: ModeEnabledInput;
+  retention?: string;
+}
+
+export interface LogExportersConfig {
+  sentry: SentryLogExporterConfig;
+}
+
+export interface SentryLogExporterConfig {
+  enabled: ModeEnabledInput;
+  dsnEnv?: string;
+  dsn?: string;
+  environment?: string;
+  release?: string;
+  level: LogLevelInput;
+  sampleRate: number;
+}
+
 export interface ResolvedCefariConfig {
   root: string;
   configPath: string;
@@ -194,6 +247,7 @@ export interface ResolvedCefariConfig {
   browser: BrowserConfig;
   capabilities: CefariCapability[];
   nativeResources: Record<string, NativeResource>;
+  logs: LogsConfig;
   workers: Record<string, WorkerConfig>;
   vite: ViteConfig;
   daemon?: DaemonConfig;
@@ -206,6 +260,7 @@ export interface SerializableProjectConfig {
   browser: BrowserConfig;
   capabilities: CefariCapability[];
   nativeResources: Record<string, NativeResource>;
+  logs: LogsConfig;
   workers: Record<string, WorkerConfig>;
   vite: ViteConfig;
   daemon?: DaemonConfig;
@@ -294,6 +349,7 @@ export function toSerializableProjectConfig(
     browser: { ...config.browser },
     capabilities: config.capabilities.map((capability) => ({ ...capability })),
     nativeResources: cloneNativeResources(config.nativeResources),
+    logs: cloneLogs(config.logs),
     workers: cloneWorkers(config.workers),
     vite: { ...config.vite },
     ...(config.daemon === undefined
@@ -318,6 +374,7 @@ function normalizeConfig(
   const app = normalizeApp(input.app);
   const browser = normalizeBrowser(input.browser);
   const nativeResources = normalizeNativeResources(input.nativeResources);
+  const logs = normalizeLogs(input.logs);
   const topLevelCapabilities = normalizeCapabilities(
     input.capabilities,
     "capabilities",
@@ -346,12 +403,124 @@ function normalizeConfig(
     browser,
     capabilities,
     nativeResources,
+    logs,
     workers,
     vite,
     daemon,
     targets,
     package: packageConfig,
   };
+}
+
+function normalizeLogs(value: unknown): LogsConfig {
+  if (value === undefined) {
+    return defaultLogsConfig();
+  }
+
+  const logs = asRecord(value, "logs");
+  assertOnlyFields(logs, "logs", ["local", "exporters"]);
+  return {
+    local: normalizeLocalLogs(logs.local),
+    exporters: normalizeLogExporters(logs.exporters),
+  };
+}
+
+function defaultLogsConfig(): LogsConfig {
+  return {
+    local: {
+      enabled: true,
+    },
+    exporters: {
+      sentry: {
+        enabled: false,
+        level: "info",
+        sampleRate: 1,
+      },
+    },
+  };
+}
+
+function normalizeLocalLogs(value: unknown): LocalLogConfig {
+  if (value === undefined) {
+    return { ...defaultLogsConfig().local };
+  }
+
+  const local = asRecord(value, "logs.local");
+  assertOnlyFields(local, "logs.local", ["enabled", "retention"]);
+  return {
+    enabled: normalizeModeEnabled(local.enabled, "logs.local.enabled", true),
+    ...(local.retention === undefined ? {} : { retention: requiredString(local.retention, "logs.local.retention") }),
+  };
+}
+
+function normalizeLogExporters(value: unknown): LogExportersConfig {
+  if (value === undefined) {
+    return { sentry: { ...defaultLogsConfig().exporters.sentry } };
+  }
+
+  const exporters = asRecord(value, "logs.exporters");
+  assertOnlyFields(exporters, "logs.exporters", ["sentry"]);
+  return {
+    sentry: normalizeSentryLogExporter(exporters.sentry),
+  };
+}
+
+function normalizeSentryLogExporter(value: unknown): SentryLogExporterConfig {
+  if (value === undefined) {
+    return { ...defaultLogsConfig().exporters.sentry };
+  }
+
+  const sentry = asRecord(value, "logs.exporters.sentry");
+  assertOnlyFields(sentry, "logs.exporters.sentry", [
+    "enabled",
+    "dsnEnv",
+    "dsn",
+    "environment",
+    "release",
+    "level",
+    "sampleRate",
+  ]);
+  return {
+    enabled: normalizeModeEnabled(sentry.enabled, "logs.exporters.sentry.enabled", false),
+    ...(sentry.dsnEnv === undefined ? {} : { dsnEnv: requiredString(sentry.dsnEnv, "logs.exporters.sentry.dsnEnv") }),
+    ...(sentry.dsn === undefined ? {} : { dsn: requiredString(sentry.dsn, "logs.exporters.sentry.dsn") }),
+    ...(sentry.environment === undefined
+      ? {}
+      : { environment: requiredString(sentry.environment, "logs.exporters.sentry.environment") }),
+    ...(sentry.release === undefined ? {} : { release: requiredString(sentry.release, "logs.exporters.sentry.release") }),
+    level: normalizeLogLevel(sentry.level, "logs.exporters.sentry.level", "info"),
+    sampleRate: normalizeSampleRate(sentry.sampleRate, "logs.exporters.sentry.sampleRate"),
+  };
+}
+
+function normalizeModeEnabled(value: unknown, field: string, defaultValue: ModeEnabledInput): ModeEnabledInput {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  if (typeof value === "boolean" || value === "development" || value === "production") {
+    return value;
+  }
+  throw new Error(`${field} must be a boolean, "development", or "production"`);
+}
+
+function normalizeLogLevel(value: unknown, field: string, defaultValue: LogLevelInput): LogLevelInput {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  if (value === "debug" || value === "info" || value === "log" || value === "warn" || value === "error") {
+    return value;
+  }
+  throw new Error(`${field} must be "debug", "info", "log", "warn", or "error"`);
+}
+
+function normalizeSampleRate(value: unknown, field: string): number {
+  if (value === undefined) {
+    return 1;
+  }
+  if (typeof value !== "number" || Number.isNaN(value) || value < 0 || value > 1) {
+    throw new Error(`${field} must be a number from 0 to 1`);
+  }
+  return value;
 }
 
 function normalizeApp(value: unknown): AppConfig {
@@ -873,6 +1042,28 @@ function cloneNativeResources(
       },
     ]),
   );
+}
+
+function cloneLogs(logs: LogsConfig): LogsConfig {
+  return {
+    local: {
+      enabled: logs.local.enabled,
+      ...(logs.local.retention === undefined ? {} : { retention: logs.local.retention }),
+    },
+    exporters: {
+      sentry: {
+        enabled: logs.exporters.sentry.enabled,
+        ...(logs.exporters.sentry.dsnEnv === undefined ? {} : { dsnEnv: logs.exporters.sentry.dsnEnv }),
+        ...(logs.exporters.sentry.dsn === undefined ? {} : { dsn: logs.exporters.sentry.dsn }),
+        ...(logs.exporters.sentry.environment === undefined
+          ? {}
+          : { environment: logs.exporters.sentry.environment }),
+        ...(logs.exporters.sentry.release === undefined ? {} : { release: logs.exporters.sentry.release }),
+        level: logs.exporters.sentry.level,
+        sampleRate: logs.exporters.sentry.sampleRate,
+      },
+    },
+  };
 }
 
 function clonePermissionValue(

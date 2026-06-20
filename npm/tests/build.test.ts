@@ -218,6 +218,18 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
     deep_links: {
       schemes: ["buildapp"],
     },
+    logs: {
+      local: {
+        enabled: true,
+      },
+      exporters: {
+        sentry: {
+          enabled: false,
+          level: "info",
+          sampleRate: 1,
+        },
+      },
+    },
     daemon: {
       enabled: true,
       executable: `daemon/${daemonExecutable}`,

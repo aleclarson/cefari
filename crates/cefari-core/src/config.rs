@@ -11,6 +11,7 @@ pub struct CefariConfig {
     pub browser: BrowserConfig,
     pub daemon: DaemonConfig,
     pub deep_links: DeepLinkConfig,
+    pub logs: LogRoutingConfig,
     pub updates: UpdateConfig,
     pub service: ServiceConfig,
     pub workers: WorkerConfig,
@@ -38,6 +39,133 @@ impl Default for AppConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct BrowserConfig {
     pub webgpu: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LogRoutingConfig {
+    pub local: LocalLogConfig,
+    pub exporters: LogExporterConfig,
+}
+
+impl Default for LogRoutingConfig {
+    fn default() -> Self {
+        Self {
+            local: LocalLogConfig::default(),
+            exporters: LogExporterConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LocalLogConfig {
+    pub enabled: ModeEnabledConfig,
+    pub retention: Option<String>,
+}
+
+impl Default for LocalLogConfig {
+    fn default() -> Self {
+        Self {
+            enabled: ModeEnabledConfig::Bool(true),
+            retention: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LogExporterConfig {
+    pub sentry: SentryLogExporterConfig,
+}
+
+impl Default for LogExporterConfig {
+    fn default() -> Self {
+        Self {
+            sentry: SentryLogExporterConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct SentryLogExporterConfig {
+    pub enabled: ModeEnabledConfig,
+    pub dsn_env: Option<String>,
+    pub dsn: Option<String>,
+    pub environment: Option<String>,
+    pub release: Option<String>,
+    pub level: LogRoutingLevel,
+    pub sample_rate: SampleRateConfig,
+}
+
+impl Default for SentryLogExporterConfig {
+    fn default() -> Self {
+        Self {
+            enabled: ModeEnabledConfig::Bool(false),
+            dsn_env: None,
+            dsn: None,
+            environment: None,
+            release: None,
+            level: LogRoutingLevel::Info,
+            sample_rate: SampleRateConfig(1.0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ModeEnabledConfig {
+    Bool(bool),
+    Mode(ConfigMode),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConfigMode {
+    Development,
+    Production,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogRoutingLevel {
+    Debug,
+    Info,
+    Log,
+    Warn,
+    Error,
+}
+
+impl Default for LogRoutingLevel {
+    fn default() -> Self {
+        Self::Info
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct SampleRateConfig(pub f64);
+
+impl Eq for SampleRateConfig {}
+
+impl Default for SampleRateConfig {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for SampleRateConfig {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = f64::deserialize(deserializer)?;
+        if !value.is_nan() && (0.0..=1.0).contains(&value) {
+            Ok(Self(value))
+        } else {
+            Err(serde::de::Error::custom("sample_rate must be from 0 to 1"))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
@@ -215,8 +343,9 @@ pub fn save_config(path: impl AsRef<Path>, config: &CefariConfig) -> Result<()> 
 #[cfg(test)]
 mod tests {
     use super::{
-        AppConfig, BrowserConfig, CefariConfig, DaemonConfig, ServiceConfig,
-        WorkerPermissionConfig, WorkerTargetConfig,
+        AppConfig, BrowserConfig, CefariConfig, ConfigMode, DaemonConfig, LogRoutingLevel,
+        ModeEnabledConfig, SampleRateConfig, ServiceConfig, WorkerPermissionConfig,
+        WorkerTargetConfig,
     };
 
     #[test]
@@ -281,6 +410,68 @@ mod tests {
         .expect("config should parse");
 
         assert_eq!(config.browser, BrowserConfig { webgpu: true });
+    }
+
+    #[test]
+    fn parses_log_routing_config() {
+        let config: CefariConfig = serde_json::from_str(
+            r#"{
+              "logs": {
+                "local": {
+                  "enabled": "development",
+                  "retention": "14d"
+                },
+                "exporters": {
+                  "sentry": {
+                    "enabled": "production",
+                    "dsnEnv": "SENTRY_DSN",
+                    "environment": "production",
+                    "release": "example-app@0.1.0",
+                    "level": "warn",
+                    "sampleRate": 0.5
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(
+            config.logs.local.enabled,
+            ModeEnabledConfig::Mode(ConfigMode::Development)
+        );
+        assert_eq!(config.logs.local.retention.as_deref(), Some("14d"));
+        assert_eq!(
+            config.logs.exporters.sentry.enabled,
+            ModeEnabledConfig::Mode(ConfigMode::Production)
+        );
+        assert_eq!(
+            config.logs.exporters.sentry.dsn_env.as_deref(),
+            Some("SENTRY_DSN")
+        );
+        assert_eq!(config.logs.exporters.sentry.level, LogRoutingLevel::Warn);
+        assert_eq!(
+            config.logs.exporters.sentry.sample_rate,
+            SampleRateConfig(0.5)
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_sample_rate() {
+        let error = serde_json::from_str::<CefariConfig>(
+            r#"{
+              "logs": {
+                "exporters": {
+                  "sentry": {
+                    "sampleRate": 2
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect_err("invalid sample rate should be rejected");
+
+        assert!(error.to_string().contains("sample_rate must be from 0 to 1"));
     }
 
     #[test]

@@ -75,6 +75,18 @@ function configWithWorkers(root: string): ResolvedCefariConfig {
     },
     capabilities: [],
     nativeResources: {},
+    logs: {
+      local: {
+        enabled: true,
+      },
+      exporters: {
+        sentry: {
+          enabled: false,
+          level: "info",
+          sampleRate: 1,
+        },
+      },
+    },
     workers: {
       thumbnailer: {
         entry: "workers/thumbnailer.ts",

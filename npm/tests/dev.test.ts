@@ -169,6 +169,18 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
     deep_links: {
       schemes: [],
     },
+    logs: {
+      local: {
+        enabled: true,
+      },
+      exporters: {
+        sentry: {
+          enabled: false,
+          level: "info",
+          sampleRate: 1,
+        },
+      },
+    },
     daemon: {
       enabled: false,
     },

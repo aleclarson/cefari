@@ -224,6 +224,65 @@ test("supports browser WebGPU opt-in", async () => {
   });
 });
 
+test("applies log routing defaults", async () => {
+  const root = await projectWithConfig(baseConfig());
+
+  const config = await loadCefariConfig({ root });
+  const serializable = toSerializableProjectConfig(config);
+
+  assert.deepEqual(config.logs, {
+    local: {
+      enabled: true,
+    },
+    exporters: {
+      sentry: {
+        enabled: false,
+        level: "info",
+        sampleRate: 1,
+      },
+    },
+  });
+  assert.deepEqual(serializable.logs, config.logs);
+});
+
+test("supports production log routing config", async () => {
+  const root = await projectWithConfig(baseConfig(`logs: {
+    local: {
+      enabled: "development",
+      retention: "14d",
+    },
+    exporters: {
+      sentry: {
+        enabled: "production",
+        dsnEnv: "SENTRY_DSN",
+        environment: "production",
+        release: "example-app@0.1.0",
+        level: "warn",
+        sampleRate: 0.5,
+      },
+    },
+  },`));
+
+  const config = await loadCefariConfig({ root, mode: "production" });
+
+  assert.deepEqual(config.logs, {
+    local: {
+      enabled: "development",
+      retention: "14d",
+    },
+    exporters: {
+      sentry: {
+        enabled: "production",
+        dsnEnv: "SENTRY_DSN",
+        environment: "production",
+        release: "example-app@0.1.0",
+        level: "warn",
+        sampleRate: 0.5,
+      },
+    },
+  });
+});
+
 test("supports tray capability builder", async () => {
   const root = await projectWithConfig(
     `import { defineConfig, tray } from "__CEFARI_CONFIG_API__";
@@ -630,6 +689,39 @@ test("reports clear browser validation errors", async () => {
   await assert.rejects(
     loadCefariConfig({ root }),
     /browser\.webgpu must be a boolean/,
+  );
+});
+
+test("reports clear log routing validation errors", async () => {
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`logs: { local: { enabled: "always" } },`)),
+    }),
+    /logs\.local\.enabled must be a boolean, "development", or "production"/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`logs: { exporters: { sentry: { enabled: "always" } } },`)),
+    }),
+    /logs\.exporters\.sentry\.enabled must be a boolean, "development", or "production"/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`logs: { exporters: { sentry: { level: "fatal" } } },`)),
+    }),
+    /logs\.exporters\.sentry\.level must be "debug", "info", "log", "warn", or "error"/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`logs: { exporters: { sentry: { sampleRate: 1.5 } } },`)),
+    }),
+    /logs\.exporters\.sentry\.sampleRate must be a number from 0 to 1/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`logs: { exporters: { datadog: {} } },`)),
+    }),
+    /logs\.exporters\.datadog is not supported/,
   );
 });
 
