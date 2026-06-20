@@ -27,9 +27,10 @@ Docs were checked against:
   `window.rs`, and `window_state.rs`
 - `npm/src/app/mod.ts`, namespace wrapper modules, and
   `npm/tests/app/cefari_app_test.ts`
-- `npm/src/logs.ts`, `npm/src/logs-cli.ts`, `npm/src/sentry-logs.ts`, and
-  `npm/tests/sentry-logs.test.ts` for local log storage and Sentry-shaped
-  mapping
+- `npm/src/logs.ts`, `npm/src/logs-cli.ts`, `npm/src/sentry-logs.ts`,
+  `npm/tests/sentry-logs.test.ts`, `crates/cefari-desktop/src/logging.rs`,
+  and `crates/cefari-desktop/src/runtime.rs` for local log storage, runtime log
+  routing, and Sentry streaming
 
 ## Command Evidence
 
@@ -68,10 +69,36 @@ pnpm --dir npm check
 deno test -A npm/tests/app/cefari_logs_test.ts
 ```
 
-The no-network coverage verifies local log storage, export cursor behavior, and
-Sentry-shaped level and attribute mapping without using Sentry credentials.
-Production Sentry streaming export is not implemented yet and is tracked as
-future design work.
+For production log routing on 2026-06-20, the final automated checks were:
+
+```bash
+pnpm --dir npm exec tsc -p tsconfig.json --noEmit
+pnpm --dir npm build && node --test npm/dist/tests/config.test.js npm/dist/tests/dev.test.js npm/dist/tests/build.test.js npm/dist/tests/workers.test.js
+cargo test -p cefari-core config::tests
+cargo test -p cefari-desktop
+```
+
+The no-network coverage verifies local log storage, runtime routing, Sentry
+envelope shape, level and attribute mapping, bounded queue behavior, retry, and
+shutdown flush without using Sentry credentials.
+
+Manual Sentry verification requires a real project DSN:
+
+```bash
+export SENTRY_DSN="https://PUBLIC_KEY@ORG.ingest.sentry.io/PROJECT_ID"
+cefari build /path/to/project --release
+cefari package /path/to/project --release
+```
+
+Configure the project with `logs.exporters.sentry.enabled: "production"` and
+`dsnEnv: "SENTRY_DSN"`, then launch the packaged app and trigger frontend,
+daemon, worker, and platform logs. Expected behavior:
+
+- Sentry receives logs automatically without `cefari logs export`.
+- Cefari `log` level appears as Sentry `info`.
+- attributes include `cefari.scope`, `cefari.pid`, and `cefari.log_id`.
+- local `cefari logs` inspection has rows only when `logs.local.enabled`
+  enables the local SQLite sink for that runtime mode.
 
 ## Deep Link Verification
 

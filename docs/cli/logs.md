@@ -1,6 +1,9 @@
 # Logs Commands
 
 Use `cefari logs` commands to inspect the local Cefari SQLite log database.
+These commands show local storage only. In projects that disable
+`logs.local.enabled` for the active mode, production logs may still stream to
+configured exporters such as Sentry, but there may be no local rows to inspect.
 
 ## `cefari logs path`
 

@@ -1,5 +1,7 @@
 # Proposal: Production Log Routing
 
+Status: initial implementation landed on 2026-06-20.
+
 ## Summary
 
 Cefari should treat logging as a routed event stream, not as "write everything
@@ -26,7 +28,7 @@ enabled, disabled, or reduced according to the app's configuration.
 ## Non-Goals
 
 - Do not reintroduce `cefari logs export sentry` as the production path.
-- Do not implement production streaming export in this proposal.
+- Do not treat this proposal as the full durability design.
 - Do not require SQLite to be enabled in production.
 - Do not remove the existing local SQLite log store in this proposal.
 - Do not decide a final config schema here.
@@ -67,9 +69,8 @@ Production should be configurable:
 - local storage disabled for privacy-sensitive or high-volume apps
 - local storage retained only as a bounded fallback buffer
 
-The current implementation always persists to SQLite. A later implementation
-must add the actual local-storage policy before docs claim production SQLite
-can be disabled.
+The initial implementation makes local SQLite configurable with
+`logs.local.enabled`. Retention configuration is accepted but not enforced yet.
 
 ## Streaming Exporters
 
@@ -107,7 +108,7 @@ for temporary exporter outages and crash-time diagnostics.
 
 ## Configuration Direction
 
-A future config might separate storage from exporters:
+The initial config separates storage from exporters:
 
 ```ts
 export default defineConfig({
@@ -129,8 +130,7 @@ export default defineConfig({
 });
 ```
 
-This is not a committed schema. It is a shape for the next implementation
-sprint to review.
+This schema is implemented for local SQLite storage and Sentry streaming.
 
 ## Runtime Ownership
 
@@ -148,7 +148,7 @@ Open design questions:
 
 ## Later Implementation Work
 
-Before production streaming is supported, Cefari needs:
+The initial implementation includes:
 
 - a config contract for log storage and exporters
 - a router abstraction shared by app, daemon, worker, and platform logs
@@ -157,6 +157,13 @@ Before production streaming is supported, Cefari needs:
 - a local storage policy that can differ between development and production
 - docs that describe implemented production behavior without asking users to
   run a manual export command
+
+Remaining later work:
+
+- enforce local SQLite retention
+- add a durable offline exporter buffer if needed
+- add more exporter types such as OTLP
+- add product guidance for privacy-sensitive production defaults
 
 ## Review Questions
 

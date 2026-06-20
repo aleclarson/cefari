@@ -83,10 +83,13 @@ const logger = createLogger({ scope: "daemon" });
 logger.info("daemon.ready", { port: 53117 });
 ```
 
-`cefari/logs/sentry` contains the current Sentry-shaped mapping and sink
-adapter. It exists so Cefari can prove a future automatic exporter against
-Sentry's logging API without requiring app, daemon, worker, and platform code
-to install separate source-specific hooks.
+Packaged apps stream logs to configured exporters through Cefari's runtime log
+router. App, daemon, and worker code should keep writing through Cefari logging
+APIs instead of installing source-specific Sentry hooks.
+
+`cefari/logs/sentry` remains available for Deno-side tools that need the
+Sentry-shaped mapping directly, but production app export is configured through
+`logs.exporters.sentry`.
 
 Generated IPC types are re-exported for tools, tests, and bridge code:
 

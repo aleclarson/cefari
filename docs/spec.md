@@ -47,6 +47,11 @@ frontend APIs.
   - Android target settings can declare future application identity and
     permissions.
   - Mobile target sections do not produce mobile build artifacts yet.
+- The config can define log routing.
+  - Local SQLite storage is enabled by default.
+  - Local SQLite storage can be disabled by mode.
+  - Sentry streaming can be enabled by mode.
+  - Sentry DSNs can be read from an environment variable.
 - Config paths are resolved relative to the app project.
   - Path fields must remain inside the project.
   - Generated output is written under the project root.
@@ -187,6 +192,13 @@ frontend APIs.
   - It owns notification setup.
   - It owns native action dispatch.
   - It owns runtime logging setup.
+- Cefari routes runtime logs through one log router.
+  - Platform runtime logs use the `cefari` scope.
+  - Frontend `cefari.logs` calls use the `app` scope.
+  - Daemon stderr uses the `daemon` scope.
+  - Worker stderr uses `worker:<name>` scopes.
+  - The router can write to local SQLite.
+  - The router can stream to Sentry automatically.
 - Cefari can enable WebGPU for the embedded browser.
   - Apps opt in through project config.
   - WebGPU availability still depends on Chromium, the operating system, GPU,

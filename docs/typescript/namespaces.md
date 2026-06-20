@@ -225,8 +225,10 @@ await cefari.logs.warn("sync.delayed", {
 });
 ```
 
-Log properties are stored as JSON in Cefari's local SQLite log database.
-Secret-like property values are redacted before persistence.
+Log properties are routed as structured Cefari log events. By default they are
+stored as JSON in Cefari's local SQLite log database. When configured, the same
+events stream automatically to exporters such as Sentry. Secret-like property
+values are redacted before local persistence and exporter mapping.
 
 Use `tryWrite()` when the UI wants a result object instead of a thrown error:
 

@@ -40,6 +40,19 @@ export default defineConfig({
   browser: {
     webgpu: true,
   },
+  logs: {
+    local: {
+      enabled: "development",
+    },
+    exporters: {
+      sentry: {
+        enabled: "production",
+        dsnEnv: "SENTRY_DSN",
+        environment: "production",
+        release: "my-cefari-app@0.1.0",
+      },
+    },
+  },
   targets: {
     ios: {
       bundleId: "dev.cefari.my-cefari-app",
@@ -69,6 +82,7 @@ after evaluating the config. Legacy `frontend` fields are rejected.
 - [`vite`](frontend.md): Vite root, Vite config file, and development port.
 - [`daemon`](daemon.md): optional Deno daemon entrypoint and stream contract.
 - [`targets`](targets.md): target-specific desktop, iOS, and Android settings.
+- [`logs`](logs.md): local SQLite storage and automatic streaming exporters.
 - [`package`](package.md): packaged product name and app version.
 
 ## Path Rules
@@ -80,5 +94,6 @@ outputs are written under the project root:
 - `build/`
 - `dist/`
 
-Keep runtime-maintenance configuration out of `cefari.config.ts`. This file
-describes the app project that Cefari commands operate on.
+Keep unrelated runtime-maintenance configuration out of `cefari.config.ts`.
+Logging configuration belongs here because it controls how the packaged runtime
+handles the app's log stream.
