@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
   defineWorker,
@@ -125,6 +126,48 @@ test("reports unconfigured worker native payload paths", async () => {
 
   assert.equal(exitCode, 1);
   assert.match(JSON.parse(stdout[0]).error.message, /worker native payload "bin\/missing" is not configured/);
+});
+
+test("worker native payload paths can execute a bundled tool", async () => {
+  const stdout: string[] = [];
+  const worker = defineWorker(() => ({
+    version() {
+      const result = spawnSync(workerNativePath("bin/node"), ["--version"], {
+        encoding: "utf8",
+      });
+      return {
+        status: result.status,
+        stdout: result.stdout.trim(),
+      };
+    },
+  }));
+
+  const exitCode = await runCefariWorker(worker, protocolIo([
+    {
+      type: "start",
+      id: "worker-1",
+      input: null,
+      resources: {
+        id: "thumbnailer",
+        resourceDir: "/app/resources",
+        nativeDir: "/app/resources/workers/thumbnailer/native",
+        native: {
+          "bin/node": process.execPath,
+        },
+      },
+    },
+    {
+      type: "request",
+      requestId: "request-1",
+      method: "version",
+      input: null,
+    },
+  ], stdout));
+
+  assert.equal(exitCode, 0);
+  const result = JSON.parse(stdout[0]);
+  assert.equal(result.payload.status, 0);
+  assert.match(result.payload.stdout, /^v\d+\./);
 });
 
 test("writes protocol errors for malformed input", async () => {

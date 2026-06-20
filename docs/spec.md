@@ -243,6 +243,7 @@ frontend APIs.
 - Apps can define worker contracts with `cefari/worker`.
   - `defineWorker()` describes input, output, and message types.
   - `runCefariWorker()` runs the stdio protocol used by the desktop runtime.
+  - Worker helpers expose configured native payload paths to worker code.
 - Cefari generates worker registry types during dev and build.
   - Generated types live under `.cefari/workers.d.ts`.
   - `cefari.workers.spawn()` only accepts configured worker names.

@@ -132,6 +132,13 @@ const worker = defineWorker((init: { cacheDir: string }) => ({
   ) {
     await context.postMessage({ phase: "started" });
     const thumbnailTool = workerNativePath("bin/thumbnail");
+    const command = new Deno.Command(thumbnailTool, {
+      args: [input.path, `${init.cacheDir}/thumbnail.png`],
+    });
+    const result = await command.output();
+    if (!result.success) {
+      throw new Error("thumbnail tool failed");
+    }
     await Deno.readTextFile(input.path);
     return { outputPath: `${init.cacheDir}/thumbnail.png` };
   },
@@ -150,3 +157,8 @@ payload target. In development it resolves to the configured source file. In a
 packaged app it resolves to the copied package resource. Use
 `getWorkerResources()` from `cefari/worker` when a worker needs the resource
 directory, native payload directory, or the full native payload target map.
+
+Prefer `Deno.Command` for bundled executable tools and `Deno.dlopen` for
+app-owned dynamic libraries with a stable ABI. Cefari does not provide special
+NAPI packaging support; native addons must still be packaged as explicit worker
+native payloads and loaded by worker code.
