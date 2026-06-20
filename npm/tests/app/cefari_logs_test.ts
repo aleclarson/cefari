@@ -4,6 +4,9 @@ import {
   createLogStore,
   formatLogEntry,
   subtractHours,
+  toLogExportRecord,
+  toSentryLogLevel,
+  toSentryLogRecord,
   type LogEntry,
 } from "../../src/logs.ts";
 
@@ -248,4 +251,97 @@ Deno.test("formats log entries as timeline fields, message, and properties", () 
     formatLogEntry(entry),
     "1 2026-06-16T12:00:00.000Z cefari info ipc.response_sent pid=123 component=ipc durationMs=38 response={obj_01K00000000000000000000000}",
   );
+});
+
+Deno.test("maps local rows to vendor-neutral export records", () => {
+  const entries: LogEntry[] = [
+    {
+      id: 1,
+      at: "2026-06-16T12:00:00.000Z",
+      scope: "cefari",
+      level: "info",
+      pid: 100,
+      message: "runtime.ready",
+      properties: { target: "runtime" },
+    },
+    {
+      id: 2,
+      at: "2026-06-16T12:00:01.000Z",
+      scope: "app",
+      level: "warn",
+      pid: 101,
+      message: "app.warning",
+      properties: { windowId: "main" },
+    },
+    {
+      id: 3,
+      at: "2026-06-16T12:00:02.000Z",
+      scope: "daemon",
+      level: "error",
+      pid: 102,
+      message: "daemon.failed",
+      properties: { connectionId: 7 },
+    },
+    {
+      id: 4,
+      at: "2026-06-16T12:00:03.000Z",
+      scope: "worker:thumbnailer",
+      level: "debug",
+      pid: 103,
+      message: "worker.started",
+      properties: { worker: "thumbnailer", workerId: "thumbnailer-1" },
+    },
+  ];
+
+  const records = entries.map(toLogExportRecord);
+
+  assertEquals(records.map((record) => record.scope), [
+    "cefari",
+    "app",
+    "daemon",
+    "worker:thumbnailer",
+  ]);
+  assertEquals(records[0]?.attributes, {
+    target: "runtime",
+    "cefari.scope": "cefari",
+    "cefari.log_id": 1,
+    "cefari.pid": 100,
+  });
+  assertEquals(records[3]?.attributes, {
+    worker: "thumbnailer",
+    workerId: "thumbnailer-1",
+    "cefari.scope": "worker:thumbnailer",
+    "cefari.log_id": 4,
+    "cefari.pid": 103,
+  });
+});
+
+Deno.test("maps Cefari rows to Sentry-shaped log records", () => {
+  assertEquals(toSentryLogLevel("debug"), "debug");
+  assertEquals(toSentryLogLevel("info"), "info");
+  assertEquals(toSentryLogLevel("log"), "info");
+  assertEquals(toSentryLogLevel("warn"), "warn");
+  assertEquals(toSentryLogLevel("error"), "error");
+
+  const sentry = toSentryLogRecord({
+    id: 5,
+    at: "2026-06-16T12:00:04.000Z",
+    scope: "daemon",
+    level: "log",
+    pid: 123,
+    message: "daemon stdout remains protocol-owned",
+    properties: { stream: "stderr" },
+  });
+
+  assertEquals(sentry, {
+    level: "info",
+    message: "daemon stdout remains protocol-owned",
+    timestamp: Date.parse("2026-06-16T12:00:04.000Z"),
+    attributes: {
+      stream: "stderr",
+      "cefari.scope": "daemon",
+      "cefari.log_id": 5,
+      "cefari.pid": 123,
+    },
+  });
 });
