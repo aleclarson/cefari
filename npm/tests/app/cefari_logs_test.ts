@@ -40,14 +40,26 @@ function sortJson(value: unknown): unknown {
 
 async function createTestStore(options: { inlineByteLimit?: number } = {}) {
   const testDir = await Deno.makeTempDir({ prefix: "cefari-logs-test-" });
+  const databasePath = `${testDir}/logs.sqlite`;
   const store = createLogStore({
-    databasePath: `${testDir}/logs.sqlite`,
+    databasePath,
     inlineByteLimit: options.inlineByteLimit,
   });
+  let closed = false;
   return {
+    databasePath,
     store,
+    close() {
+      if (!closed) {
+        store.close();
+        closed = true;
+      }
+    },
     async cleanup() {
-      store.close();
+      if (!closed) {
+        store.close();
+        closed = true;
+      }
       await Deno.remove(testDir, { recursive: true });
     },
   };
@@ -227,6 +239,72 @@ Deno.test("retention removes old rows and unreferenced collapsed values", async 
     assertEquals(store.query().map((entry) => entry.message), ["recent"]);
     assertEquals(store.expand(old.properties.payload as string), null);
     assertEquals(store.expand(recent.properties.payload as string)?.body, "recent value that collapses");
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("export cursors batch, acknowledge, retry, and persist", async () => {
+  const { databasePath, store, close, cleanup } = await createTestStore();
+  try {
+    store.append({ scope: "app", level: "info", message: "first" });
+    store.append({ scope: "daemon", level: "warn", message: "second" });
+    store.append({ scope: "worker:thumbnailer", level: "error", message: "third" });
+
+    assertEquals(store.exportCursor("sentry"), {
+      exporter: "sentry",
+      lastExportedId: 0,
+      updatedAt: "",
+    });
+    assertEquals(store.exportBatch({ exporter: "sentry", limit: 2 }).map((entry) => entry.message), [
+      "first",
+      "second",
+    ]);
+    assertEquals(store.exportCursor("sentry").lastExportedId, 0);
+    assertEquals(store.exportBatch({ exporter: "sentry", limit: 2 }).map((entry) => entry.message), [
+      "first",
+      "second",
+    ]);
+
+    const acknowledged = store.ackExport("sentry", 2);
+    assertEquals(acknowledged.exporter, "sentry");
+    assertEquals(acknowledged.lastExportedId, 2);
+    assert(acknowledged.updatedAt.length > 0);
+    assertEquals(store.ackExport("sentry", 1).lastExportedId, 2);
+    assertEquals(store.exportBatch({ exporter: "sentry" }).map((entry) => entry.message), ["third"]);
+
+    assertEquals(store.exportBatch({ exporter: "archive" }).map((entry) => entry.message), [
+      "first",
+      "second",
+      "third",
+    ]);
+    close();
+
+    const reopened = createLogStore({ databasePath });
+    try {
+      assertEquals(reopened.exportCursor("sentry").lastExportedId, 2);
+      assertEquals(reopened.exportBatch({ exporter: "sentry" }).map((entry) => entry.message), ["third"]);
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("export cursors can be reset for manual recovery", async () => {
+  const { store, cleanup } = await createTestStore();
+  try {
+    store.append({ scope: "cefari", level: "info", message: "runtime.ready" });
+    store.ackExport("sentry", 1);
+
+    assertEquals(store.exportCursor("sentry").lastExportedId, 1);
+    assertEquals(store.resetExportCursor("sentry"), {
+      exporter: "sentry",
+      lastExportedId: 0,
+      updatedAt: "",
+    });
+    assertEquals(store.exportBatch({ exporter: "sentry" }).map((entry) => entry.message), ["runtime.ready"]);
   } finally {
     await cleanup();
   }

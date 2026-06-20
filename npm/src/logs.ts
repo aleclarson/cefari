@@ -79,9 +79,17 @@ export type LogStore = {
     message: string;
     properties?: LogProperties;
   }) => LogEntry;
+  ackExport: (exporter: string, lastExportedId: number) => LogExportCursor;
   close: () => void;
+  exportBatch: (options: {
+    exporter: string;
+    limit?: number;
+    query?: Omit<LogQuery, "afterId" | "beforeId" | "limit">;
+  }) => LogExportRecord[];
+  exportCursor: (exporter: string) => LogExportCursor;
   expand: (id: string) => LogCollapsedValue | null;
   query: (query?: LogQuery) => LogEntry[];
+  resetExportCursor: (exporter: string) => LogExportCursor;
   retainSince: (since: Date | string) => void;
 };
 
@@ -141,6 +149,11 @@ export function createLogStore(options: { databasePath?: string; inlineByteLimit
       kind TEXT NOT NULL,
       byte_length INTEGER NOT NULL,
       body_json TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS log_export_cursors (
+      exporter TEXT PRIMARY KEY,
+      last_exported_id INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS log_entries_at_idx ON log_entries(at);
     CREATE INDEX IF NOT EXISTS log_entries_scope_at_idx ON log_entries(scope, at);
@@ -227,8 +240,53 @@ export function createLogStore(options: { databasePath?: string; inlineByteLimit
         properties,
       };
     },
+    ackExport(exporter, lastExportedId) {
+      const updatedAt = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO log_export_cursors (exporter, last_exported_id, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(exporter) DO UPDATE SET
+           last_exported_id = max(log_export_cursors.last_exported_id, excluded.last_exported_id),
+           updated_at = excluded.updated_at`,
+      ).run(exporter, lastExportedId, updatedAt);
+      const cursor = this.exportCursor(exporter);
+      return {
+        exporter,
+        lastExportedId: cursor.lastExportedId,
+        updatedAt: cursor.updatedAt,
+      };
+    },
     close() {
       db.close();
+    },
+    exportBatch(options) {
+      const cursor = this.exportCursor(options.exporter);
+      return this.query({
+        ...options.query,
+        afterId: cursor.lastExportedId,
+        limit: options.limit,
+      }).map(toLogExportRecord);
+    },
+    exportCursor(exporter) {
+      const row = db.prepare(
+        `SELECT exporter, last_exported_id, updated_at
+         FROM log_export_cursors
+         WHERE exporter = ?`,
+      ).get(exporter) as {
+        exporter: string;
+        last_exported_id: number;
+        updated_at: string;
+      } | undefined;
+
+      return row === undefined ? {
+        exporter,
+        lastExportedId: 0,
+        updatedAt: "",
+      } : {
+        exporter: row.exporter,
+        lastExportedId: row.last_exported_id,
+        updatedAt: row.updated_at,
+      };
     },
     expand(id) {
       const row = db.prepare(
@@ -332,6 +390,14 @@ export function createLogStore(options: { databasePath?: string; inlineByteLimit
       const filteredEntries = query.regex ? filterByRegex(entries, query.regex).slice(0, limit) : entries;
 
       return query.beforeId == null ? filteredEntries : filteredEntries.reverse();
+    },
+    resetExportCursor(exporter) {
+      db.prepare("DELETE FROM log_export_cursors WHERE exporter = ?").run(exporter);
+      return {
+        exporter,
+        lastExportedId: 0,
+        updatedAt: "",
+      };
     },
     retainSince(since) {
       const sinceDate = normalizeDate(since);
