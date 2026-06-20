@@ -27,9 +27,9 @@ Docs were checked against:
   `window.rs`, and `window_state.rs`
 - `npm/src/app/mod.ts`, namespace wrapper modules, and
   `npm/tests/app/cefari_app_test.ts`
-- `npm/src/logs.ts`, `npm/src/logs-cli.ts`, `npm/src/sentry-logs.ts`,
-  `npm/tests/sentry-logs.test.ts`, `crates/cefari-desktop/src/logging.rs`,
-  and `crates/cefari-desktop/src/runtime.rs` for local log storage, runtime log
+- `npm/src/logs.ts`, `npm/src/logs-cli.ts`,
+  `crates/cefari-desktop/src/logging.rs`, and
+  `crates/cefari-desktop/src/runtime.rs` for local log storage, runtime log
   routing, and Sentry streaming
 
 ## Command Evidence

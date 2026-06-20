@@ -10,14 +10,13 @@ have the native bridge unless a test installs a mock bridge.
 
 ## Package Boundary
 
-The package exports six public TypeScript entrypoints:
+The package exports five public TypeScript entrypoints:
 
 - `cefari/app`: ergonomic wrappers, namespace APIs, bridge helpers, event
   helpers, error helpers, and generated IPC types.
 - `cefari/ipc`: generated IPC types only.
 - `cefari/daemon`: daemon-side stdio helpers for configured daemon programs.
 - `cefari/logs`: Deno-side structured log store and logger helpers.
-- `cefari/logs/sentry`: a Sentry-shaped adapter for Cefari log records.
 - `cefari/worker`: helpers for Deno worker entry scripts.
 
 The default app object is `cefari`:
@@ -86,10 +85,6 @@ logger.info("daemon.ready", { port: 53117 });
 Packaged apps stream logs to configured exporters through Cefari's runtime log
 router. App, daemon, and worker code should keep writing through Cefari logging
 APIs instead of installing source-specific Sentry hooks.
-
-`cefari/logs/sentry` remains available for Deno-side tools that need the
-Sentry-shaped mapping directly, but production app export is configured through
-`logs.exporters.sentry`.
 
 Generated IPC types are re-exported for tools, tests, and bridge code:
 

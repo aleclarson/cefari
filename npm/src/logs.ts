@@ -38,15 +38,6 @@ export type LogExportRecord = LogEntry & {
   attributes: LogProperties;
 };
 
-export type SentryLogLevel = "debug" | "error" | "info" | "warn";
-
-export type SentryLogRecord = {
-  level: SentryLogLevel;
-  message: string;
-  timestamp: number;
-  attributes: LogProperties;
-};
-
 export type LogQuery = {
   afterId?: number;
   beforeId?: number;
@@ -494,24 +485,6 @@ export function toLogExportRecord(entry: LogEntry): LogExportRecord {
       "cefari.log_id": entry.id,
       "cefari.pid": entry.pid,
     },
-  };
-}
-
-export function toSentryLogLevel(level: LogLevel): SentryLogLevel {
-  if (level === "log") {
-    return "info";
-  }
-
-  return level;
-}
-
-export function toSentryLogRecord(record: LogEntry | LogExportRecord): SentryLogRecord {
-  const exportRecord = "attributes" in record ? record : toLogExportRecord(record);
-  return {
-    level: toSentryLogLevel(exportRecord.level),
-    message: exportRecord.message,
-    timestamp: Date.parse(exportRecord.at),
-    attributes: exportRecord.attributes,
   };
 }
 

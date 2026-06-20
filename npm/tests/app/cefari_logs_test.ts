@@ -5,8 +5,6 @@ import {
   formatLogEntry,
   subtractHours,
   toLogExportRecord,
-  toSentryLogLevel,
-  toSentryLogRecord,
   type LogEntry,
 } from "../../src/logs.ts";
 
@@ -391,35 +389,5 @@ Deno.test("maps local rows to vendor-neutral export records", () => {
     "cefari.scope": "worker:thumbnailer",
     "cefari.log_id": 4,
     "cefari.pid": 103,
-  });
-});
-
-Deno.test("maps Cefari rows to Sentry-shaped log records", () => {
-  assertEquals(toSentryLogLevel("debug"), "debug");
-  assertEquals(toSentryLogLevel("info"), "info");
-  assertEquals(toSentryLogLevel("log"), "info");
-  assertEquals(toSentryLogLevel("warn"), "warn");
-  assertEquals(toSentryLogLevel("error"), "error");
-
-  const sentry = toSentryLogRecord({
-    id: 5,
-    at: "2026-06-16T12:00:04.000Z",
-    scope: "daemon",
-    level: "log",
-    pid: 123,
-    message: "daemon stdout remains protocol-owned",
-    properties: { stream: "stderr" },
-  });
-
-  assertEquals(sentry, {
-    level: "info",
-    message: "daemon stdout remains protocol-owned",
-    timestamp: Date.parse("2026-06-16T12:00:04.000Z"),
-    attributes: {
-      stream: "stderr",
-      "cefari.scope": "daemon",
-      "cefari.log_id": 5,
-      "cefari.pid": 123,
-    },
   });
 });
