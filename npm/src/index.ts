@@ -19,6 +19,16 @@ export {
   type BuildOptions,
 } from "./build.js";
 export {
+  cefariBuildTargetInfo,
+  executableNameForTarget,
+  hostCefariBuildTarget,
+  parseCefariBuildTarget,
+  type CefariBuildTarget,
+  type CefariBuildTargetInfo,
+  type CefariTargetArch,
+  type CefariTargetOs,
+} from "./platform.js";
+export {
   cefariCli,
   runCefariCli,
   VERSION,

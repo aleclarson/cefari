@@ -2,6 +2,25 @@ import { spawn, spawnSync } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
 import type { InlineConfig, ViteDevServer } from "vite";
 
+export type CefariBuildTarget =
+  | "darwin-arm64"
+  | "darwin-x64"
+  | "linux-x64"
+  | "linux-arm64"
+  | "windows-x64"
+  | "windows-arm64";
+
+export type CefariTargetOs = "darwin" | "linux" | "windows";
+export type CefariTargetArch = "arm64" | "x64";
+
+export interface CefariBuildTargetInfo {
+  target: CefariBuildTarget;
+  os: CefariTargetOs;
+  arch: CefariTargetArch;
+  denoTarget: string;
+  executableSuffix: "" | ".exe";
+}
+
 export interface Platform {
   createViteServer(config: InlineConfig): Promise<ViteServerLike>;
   env: NodeJS.ProcessEnv;
@@ -45,6 +64,90 @@ export async function withPlatformForTest<T>(
   } finally {
     platform = previous;
   }
+}
+
+const buildTargets: Record<CefariBuildTarget, CefariBuildTargetInfo> = {
+  "darwin-arm64": {
+    target: "darwin-arm64",
+    os: "darwin",
+    arch: "arm64",
+    denoTarget: "aarch64-apple-darwin",
+    executableSuffix: "",
+  },
+  "darwin-x64": {
+    target: "darwin-x64",
+    os: "darwin",
+    arch: "x64",
+    denoTarget: "x86_64-apple-darwin",
+    executableSuffix: "",
+  },
+  "linux-x64": {
+    target: "linux-x64",
+    os: "linux",
+    arch: "x64",
+    denoTarget: "x86_64-unknown-linux-gnu",
+    executableSuffix: "",
+  },
+  "linux-arm64": {
+    target: "linux-arm64",
+    os: "linux",
+    arch: "arm64",
+    denoTarget: "aarch64-unknown-linux-gnu",
+    executableSuffix: "",
+  },
+  "windows-x64": {
+    target: "windows-x64",
+    os: "windows",
+    arch: "x64",
+    denoTarget: "x86_64-pc-windows-msvc",
+    executableSuffix: ".exe",
+  },
+  "windows-arm64": {
+    target: "windows-arm64",
+    os: "windows",
+    arch: "arm64",
+    denoTarget: "aarch64-pc-windows-msvc",
+    executableSuffix: ".exe",
+  },
+};
+
+export function parseCefariBuildTarget(value: string): CefariBuildTarget {
+  if (isCefariBuildTarget(value)) {
+    return value;
+  }
+  throw new Error(
+    `build target must be one of ${Object.keys(buildTargets).join(", ")}`,
+  );
+}
+
+export function isCefariBuildTarget(value: string): value is CefariBuildTarget {
+  return Object.hasOwn(buildTargets, value);
+}
+
+export function cefariBuildTargetInfo(
+  target: CefariBuildTarget,
+): CefariBuildTargetInfo {
+  return buildTargets[target];
+}
+
+export function hostCefariBuildTarget(): CefariBuildTarget {
+  const os = process.platform === "win32" ? "windows" : process.platform;
+  if (
+    (os !== "darwin" && os !== "linux" && os !== "windows") ||
+    (process.arch !== "x64" && process.arch !== "arm64")
+  ) {
+    throw new Error(
+      `unsupported host build target: ${process.platform}-${process.arch}`,
+    );
+  }
+  return parseCefariBuildTarget(`${os}-${process.arch}`);
+}
+
+export function executableNameForTarget(
+  stem: string,
+  target: CefariBuildTarget,
+): string {
+  return `${stem}${cefariBuildTargetInfo(target).executableSuffix}`;
 }
 
 function defaultPlatform(): Platform {

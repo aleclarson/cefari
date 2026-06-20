@@ -25,7 +25,7 @@ processes. The Vite port is strict and fixed.
 Build frontend, optional daemon, CEF resources, and desktop artifacts:
 
 ```bash
-cefari build [PATH] [--release]
+cefari build [PATH] [--release] [--target TARGET]
 ```
 
 Arguments and options:
@@ -33,12 +33,18 @@ Arguments and options:
 - `PATH`: project directory. Defaults to the current directory.
 - `--release`: use Cargo's release profile when Cefari builds the desktop
   runtime from source.
+- `--target TARGET`: build for a specific platform and architecture. Supported
+  targets are `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`,
+  `windows-x64`, and `windows-arm64`. Defaults to the host target.
 
 Installed Cefari CLI distributions should bundle a matching `cefari-desktop`
 runtime beside the `cefari` executable. Source-checkout CLI builds
 `cefari-desktop` with Cargo so runtime changes are picked up during Cefari
 development. Set `CEFARI_DESKTOP_RUNTIME=/path/to/cefari-desktop` to force a
 specific prebuilt runtime and skip the Cargo build.
+
+For non-host build targets, set the target-specific runtime variable, for
+example `CEFARI_DESKTOP_RUNTIME_windows_x64=/path/to/cefari-desktop.exe`.
 
 Build output is written under `build/`. See
 [Build And Package](../guides/build-and-package.md) for output details.

@@ -7,7 +7,12 @@ import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { CefariCapability, ResolvedCefariConfig } from "./config.js";
 import { CEFARI_CONFIG_FILE_ENV, writeDesktopConfig } from "./desktop-config.js";
-import { currentPlatform } from "./platform.js";
+import {
+  currentPlatform,
+  executableNameForTarget,
+  hostCefariBuildTarget,
+  type CefariBuildTarget,
+} from "./platform.js";
 import type { ChildLike, ViteServerLike } from "./platform.js";
 import { generateWorkerRegistryTypes } from "./workers.js";
 
@@ -179,8 +184,37 @@ function trayIconEnv(config: ResolvedCefariConfig): Record<string, string> {
     : { CEFARI_TRAY_ICON: resolve(config.root, tray.icon) };
 }
 
-export function resolveDesktopRuntime(root: string, release = false): string {
+export function resolveDesktopRuntime(
+  root: string,
+  release = false,
+  target: CefariBuildTarget = hostCefariBuildTarget(),
+): string {
   const { env, spawnSync } = currentPlatform();
+  const hostTarget = hostCefariBuildTarget();
+  const targetRuntimeEnv = desktopRuntimeEnvName(target);
+  const binaryName = executableNameForTarget("cefari-desktop", target);
+  const targetConfigured = env[targetRuntimeEnv];
+  if (targetConfigured !== undefined && targetConfigured !== "") {
+    if (!existsSync(targetConfigured)) {
+      throw new Error(
+        `${targetRuntimeEnv} points to missing cefari-desktop runtime ${targetConfigured}`,
+      );
+    }
+    return targetConfigured;
+  }
+
+  if (target !== hostTarget) {
+    for (const candidate of bundledTargetRuntimeCandidates(binaryName, target)) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    throw new Error(
+      `cefari build --target ${target} requires a cefari-desktop runtime for ${target}. ` +
+        `Set ${targetRuntimeEnv}=/path/to/cefari-desktop or install a CLI distribution that bundles this target.`,
+    );
+  }
+
   const configured = env[CEFARI_DESKTOP_RUNTIME_ENV];
   if (configured !== undefined && configured !== "") {
     if (!existsSync(configured)) {
@@ -191,9 +225,6 @@ export function resolveDesktopRuntime(root: string, release = false): string {
     return configured;
   }
 
-  const binaryName = process.platform === "win32"
-    ? "cefari-desktop.exe"
-    : "cefari-desktop";
   for (const candidate of bundledRuntimeCandidates(binaryName)) {
     if (existsSync(candidate)) {
       return candidate;
@@ -235,6 +266,10 @@ export function resolveDesktopRuntime(root: string, release = false): string {
   );
 }
 
+function desktopRuntimeEnvName(target: CefariBuildTarget): string {
+  return `CEFARI_DESKTOP_RUNTIME_${target.replaceAll("-", "_")}`;
+}
+
 function bundledRuntimeCandidates(binaryName: string): string[] {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
   const distDir = dirname(moduleDir);
@@ -248,6 +283,25 @@ function bundledRuntimeCandidates(binaryName: string): string[] {
     join(exeDir, "cefari-runtime", binaryName),
     join(dirname(exeDir), "lib", "cefari", binaryName),
     join(dirname(exeDir), "libexec", "cefari", binaryName),
+  ];
+}
+
+function bundledTargetRuntimeCandidates(
+  binaryName: string,
+  target: CefariBuildTarget,
+): string[] {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  const distDir = dirname(moduleDir);
+  const exeDir = dirname(process.execPath);
+  return [
+    join(distDir, "bin", "cefari-runtime", target, binaryName),
+    join(distDir, "bin", target, binaryName),
+    join(dirname(distDir), "lib", "cefari", target, binaryName),
+    join(dirname(distDir), "libexec", "cefari", target, binaryName),
+    join(exeDir, "cefari-runtime", target, binaryName),
+    join(exeDir, target, binaryName),
+    join(dirname(exeDir), "lib", "cefari", target, binaryName),
+    join(dirname(exeDir), "libexec", "cefari", target, binaryName),
   ];
 }
 

@@ -89,10 +89,14 @@ frontend APIs.
 - Cefari can build with a release profile.
   - Release builds use Cargo's release profile when the desktop runtime is built
     from source.
+- Cefari can build for an explicit platform and architecture target.
+  - Targeted builds use matching executable names, worker binaries, daemon
+    binaries, desktop runtime selection, and CEF metadata.
 - Cefari can use different desktop runtime sources.
   - Installed CLI distributions can bundle a matching desktop runtime.
   - Source checkouts can build the runtime with Cargo.
   - An environment variable can point Cefari at a specific prebuilt runtime.
+  - Cross-target builds can require a target-specific prebuilt runtime.
 - Cefari prepares CEF runtime payloads for packaging.
   - It gathers resource files.
   - It records archive metadata.
@@ -107,6 +111,7 @@ frontend APIs.
   - It writes a `cargo-packager` configuration.
   - It writes a package manifest.
   - It uses `app.identifier` as the native app identifier.
+  - It follows the build target recorded in CEF metadata.
   - It registers the Cefari notification activation protocol.
 - Cefari can invoke `cargo-packager` when it is available.
   - Native package output is written under `dist/package/output/`.

@@ -4,6 +4,7 @@ Build a Cefari project:
 
 ```bash
 cefari build PATH
+cefari build PATH --target windows-x64
 ```
 
 Package a built project:
@@ -13,6 +14,10 @@ cefari package PATH
 ```
 
 If `PATH` is omitted, Cefari uses the current directory.
+
+If `--target` is omitted, Cefari builds for the host platform and architecture.
+Supported build targets are `darwin-arm64`, `darwin-x64`, `linux-x64`,
+`linux-arm64`, `windows-x64`, and `windows-arm64`.
 
 ## Build Outputs
 
@@ -28,7 +33,7 @@ If `PATH` is omitted, Cefari uses the current directory.
 - `build/cef/resources/archive.json`
 - `build/cef/manifest.json`
 
-On Windows, executable names use `.exe`.
+Windows targets use `.exe` executable names. Non-Windows targets do not.
 
 For release-profile desktop builds:
 
@@ -60,6 +65,11 @@ When Cefari is running from a source checkout, the CLI still builds
 `CEFARI_DESKTOP_RUNTIME=/path/to/cefari-desktop` to force a specific prebuilt
 runtime and skip the Cargo build.
 
+Cross-target builds require a desktop runtime for the requested target. Set a
+target-specific runtime environment variable such as
+`CEFARI_DESKTOP_RUNTIME_linux_x64=/path/to/cefari-desktop` when building for a
+non-host target.
+
 ## Runtime Config
 
 `cefari build` writes `build/config/cefari.json` for the desktop runtime. The
@@ -72,6 +82,9 @@ metadata with packaged worker executable paths.
 Configured workers are authored as Deno source scripts. `cefari build` compiles
 each configured worker with `deno compile` and writes an executable under
 `build/workers/<workerId>/`.
+
+When a build target is selected, Cefari passes the corresponding Deno
+`--target` triple to worker and daemon compilation.
 
 Packaged apps launch compiled worker executables directly. They do not require a
 system `deno` executable for workers at runtime.

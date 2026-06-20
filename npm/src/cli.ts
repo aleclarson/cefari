@@ -1,6 +1,7 @@
-import { binary, command, flag, number, option, optional, positional, run, string, subcommands } from "cmd-ts";
+import { binary, command, flag, number, oneOf, option, optional, positional, run, string, subcommands } from "cmd-ts";
 import { runCefariBuild } from "./build.js";
 import { runCefariDev } from "./dev.js";
+import type { CefariBuildTarget } from "./platform.js";
 import {
   runCefariPackage,
   runPackageNotarize,
@@ -40,6 +41,21 @@ const release = flag({
   long: "release",
   description: "Use release-mode build or package behavior.",
   defaultValue: () => false,
+});
+
+const buildTarget = option({
+  type: optional(
+    oneOf([
+      "darwin-arm64",
+      "darwin-x64",
+      "linux-x64",
+      "linux-arm64",
+      "windows-x64",
+      "windows-arm64",
+    ] as const),
+  ),
+  long: "target",
+  description: "Build target: darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, or windows-arm64.",
 });
 
 const releaseVersion = option({
@@ -135,9 +151,10 @@ const build = command({
   args: {
     path: projectPath,
     release,
+    target: buildTarget,
   },
-  handler: async ({ path, release }) => {
-    await runCefariBuild({ root: path, release });
+  handler: async ({ path, release, target }) => {
+    await runCefariBuild({ root: path, release, target: target as CefariBuildTarget | undefined });
   },
 });
 

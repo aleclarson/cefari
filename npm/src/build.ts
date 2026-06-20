@@ -7,7 +7,13 @@ import type { DaemonConfig, ResolvedCefariConfig, WorkerConfig, WorkerPermission
 import { resolveDesktopRuntime } from "./dev.js";
 import type { DesktopWorkerExecutableEntry } from "./desktop-config.js";
 import { writeDesktopConfig } from "./desktop-config.js";
-import { currentPlatform } from "./platform.js";
+import {
+  cefariBuildTargetInfo,
+  currentPlatform,
+  executableNameForTarget,
+  hostCefariBuildTarget,
+  type CefariBuildTarget,
+} from "./platform.js";
 import { generateWorkerRegistryTypes } from "./workers.js";
 
 const CEF_VERSION = "148.4.0";
@@ -16,10 +22,12 @@ const CEF_ARCHIVE_VERSION = "148.0.10";
 export interface BuildOptions {
   root?: string;
   release?: boolean;
+  target?: CefariBuildTarget;
 }
 
 export async function runCefariBuild(options: BuildOptions = {}): Promise<void> {
   const { stdout, viteBuild } = currentPlatform();
+  const target = options.target ?? hostCefariBuildTarget();
   const root = resolve(options.root ?? process.cwd());
   const config = await loadCefariConfig({
     root,
@@ -43,21 +51,21 @@ export async function runCefariBuild(options: BuildOptions = {}): Promise<void> 
   await mkdir(workersOut, { recursive: true });
 
   await viteBuild(createViteBuildConfig(config, frontendOut));
-  const packagedWorkers = await buildWorkers(config, workersOut);
+  const packagedWorkers = await buildWorkers(config, workersOut, target);
   await writeDesktopConfig(config, configOut, {
     workers: packagedWorkers,
     daemon:
       config.daemon === undefined
         ? undefined
         : {
-            executable: normalizeResourcePath(join("daemon", daemonExecutableName(config))),
+            executable: normalizeResourcePath(join("daemon", daemonExecutableName(config, target))),
           },
   });
   if (config.daemon !== undefined) {
-    await buildDaemon(config, config.daemon, join(buildDir, "daemon"));
+    await buildDaemon(config, config.daemon, join(buildDir, "daemon"), target);
   }
-  await prepareCefResources(root);
-  await buildDesktop(config, desktopOut, Boolean(options.release));
+  await prepareCefResources(root, target);
+  await buildDesktop(config, desktopOut, Boolean(options.release), target);
 
   stdout.write(`built Cefari project at ${root}\n`);
 }
@@ -113,17 +121,20 @@ function isLocalImportTarget(value: string): boolean {
 async function buildWorkers(
   config: ResolvedCefariConfig,
   outputDir: string,
+  target: CefariBuildTarget,
 ): Promise<Record<string, DesktopWorkerExecutableEntry>> {
   const workers: Record<string, DesktopWorkerExecutableEntry> = {};
   for (const [name, worker] of Object.entries(config.workers)) {
     const source = resolve(config.root, worker.entry);
     const destinationDir = join(outputDir, name);
-    const executableName = platformExecutableName(name);
+    const executableName = executableNameForTarget(name, target);
     const executable = join(destinationDir, executableName);
     await mkdir(destinationDir, { recursive: true });
     runDenoCompile(
       [
         ...denoConfigArgs(config),
+        "--target",
+        cefariBuildTargetInfo(target).denoTarget,
         ...workerPermissionArgs(config.root, worker),
         "--output",
         executable,
@@ -208,26 +219,41 @@ async function buildDaemon(
   config: ResolvedCefariConfig,
   daemon: DaemonConfig,
   outputDir: string,
+  target: CefariBuildTarget,
 ): Promise<void> {
   const source = resolve(config.root, daemon.entry);
   const sourceCopy = join(outputDir, "main.ts");
   await copyFile(source, sourceCopy);
 
-  const executable = join(outputDir, daemonExecutableName(config));
-  runDenoCompile([...denoConfigArgs(config), "--allow-read", "--allow-net", "--output", executable, source], config.root);
+  const executable = join(outputDir, daemonExecutableName(config, target));
+  runDenoCompile(
+    [
+      ...denoConfigArgs(config),
+      "--target",
+      cefariBuildTargetInfo(target).denoTarget,
+      "--allow-read",
+      "--allow-net",
+      "--output",
+      executable,
+      source,
+    ],
+    config.root,
+  );
 }
 
 async function buildDesktop(
   config: ResolvedCefariConfig,
   outputDir: string,
   release: boolean,
+  target: CefariBuildTarget,
 ): Promise<void> {
-  const source = resolveDesktopRuntime(config.root, release);
-  await copyFile(source, join(outputDir, desktopExecutableName(config)));
+  const source = resolveDesktopRuntime(config.root, release, target);
+  await copyFile(source, join(outputDir, desktopExecutableName(config, target)));
 }
 
-async function prepareCefResources(root: string): Promise<void> {
+async function prepareCefResources(root: string, target: CefariBuildTarget): Promise<void> {
   const { env } = currentPlatform();
+  const targetInfo = cefariBuildTargetInfo(target);
   const cefDir = join(root, "build", "cef");
   const resourcesDir = join(cefDir, "resources");
   const cacheDir = join(root, "build", "cef-cache");
@@ -256,8 +282,9 @@ async function prepareCefResources(root: string): Promise<void> {
       {
         version: CEF_VERSION,
         archive_version: CEF_ARCHIVE_VERSION,
-        target_os: process.platform,
-        target_arch: process.arch,
+        target,
+        target_os: targetInfo.os,
+        target_arch: targetInfo.arch,
         source: archive.name ?? "",
         sha1: archive.sha1 ?? "",
         cache_dir: cacheDir,
@@ -269,14 +296,10 @@ async function prepareCefResources(root: string): Promise<void> {
   );
 }
 
-function daemonExecutableName(config: ResolvedCefariConfig): string {
-  return platformExecutableName(`${config.app.projectName}-daemon`);
+function daemonExecutableName(config: ResolvedCefariConfig, target: CefariBuildTarget): string {
+  return executableNameForTarget(`${config.app.projectName}-daemon`, target);
 }
 
-function desktopExecutableName(config: ResolvedCefariConfig): string {
-  return platformExecutableName(config.app.projectName);
-}
-
-function platformExecutableName(stem: string): string {
-  return process.platform === "win32" ? `${stem}.exe` : stem;
+function desktopExecutableName(config: ResolvedCefariConfig, target: CefariBuildTarget): string {
+  return executableNameForTarget(config.app.projectName, target);
 }

@@ -150,6 +150,56 @@ test("package omits daemon artifacts when daemon is not configured", async () =>
   assert.equal(Object.hasOwn(manifest, "daemon_executable"), false);
 });
 
+test("package uses build manifest target for format and executable names", async () => {
+  const root = await projectWithPackageBuild();
+  await writeFile(join(root, "build/desktop/package-app.exe"), "desktop");
+  await writeFile(join(root, "build/daemon/package-app-daemon.exe"), "daemon");
+  await writeFile(join(root, "build/workers/thumbnailer/thumbnailer.exe"), "worker");
+  await writeFile(
+    join(root, "build/cef/manifest.json"),
+    JSON.stringify({ target: "windows-x64", target_os: "windows", target_arch: "x64" }),
+  );
+
+  await withPackagePlatform([], async () => {
+    await runCefariPackage({ root });
+  });
+
+  const metadata = await readFile(join(root, "dist/package/cargo-packager.toml"), "utf8");
+  assert.match(metadata, /formats = \["nsis"\]/);
+  assert.match(metadata, /path = "package-app\.exe"/);
+  const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
+  assert.equal(manifest.desktop_binary, "package-app.exe");
+  assert.match(manifest.daemon_executable, /package-app-daemon\.exe/);
+  assert.match(manifest.worker_executables.thumbnailer, /thumbnailer\.exe/);
+});
+
+test("package rejects missing executables for build manifest target", async () => {
+  const root = await projectWithPackageBuild();
+  await writeFile(
+    join(root, "build/cef/manifest.json"),
+    JSON.stringify({ target: "windows-x64", target_os: "windows", target_arch: "x64" }),
+  );
+
+  await withPackagePlatform([], async () => {
+    await assert.rejects(
+      runCefariPackage({ root }),
+      /artifact does not exist: .*build\/desktop\/package-app\.exe/,
+    );
+  });
+});
+
+test("package rejects invalid build manifest target", async () => {
+  const root = await projectWithPackageBuild();
+  await writeFile(
+    join(root, "build/cef/manifest.json"),
+    JSON.stringify({ target: "freebsd-x64", target_os: "freebsd", target_arch: "x64" }),
+  );
+
+  await withPackagePlatform([], async () => {
+    await assert.rejects(runCefariPackage({ root }), /build target must be one of/);
+  });
+});
+
 test("package rejects missing configured worker executables", async () => {
   const root = await projectWithPackageBuild();
   await rm(join(root, "build/workers/thumbnailer/thumbnailer"));

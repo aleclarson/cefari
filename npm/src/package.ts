@@ -4,7 +4,13 @@ import { basename, join, resolve } from "node:path";
 import { loadCefariConfig } from "./config.js";
 import type { ResolvedCefariConfig } from "./config.js";
 import { runCefariBuild } from "./build.js";
-import { currentPlatform } from "./platform.js";
+import {
+  currentPlatform,
+  executableNameForTarget,
+  hostCefariBuildTarget,
+  parseCefariBuildTarget,
+  type CefariBuildTarget,
+} from "./platform.js";
 
 export type SignPlatform = "macos" | "windows" | "linux";
 export type UpdatePackageFormat = "app" | "appimage" | "nsis" | "wix";
@@ -65,11 +71,12 @@ export async function runCefariPackage(options: PackageOptions = {}): Promise<vo
   const buildDir = join(root, "build");
   const packageDir = join(root, "dist", "package");
   const cefResources = join(buildDir, "cef", "resources");
+  const target = await readBuildTarget(buildDir);
 
-  ensureBuildArtifacts(config, buildDir, cefResources);
+  ensureBuildArtifacts(config, buildDir, cefResources, target);
   await mkdir(packageDir, { recursive: true });
-  await writePackageMetadata(config, packageDir, buildDir, cefResources, options.releaseVersion);
-  await writePackageManifest(config, packageDir, buildDir, cefResources);
+  await writePackageMetadata(config, packageDir, buildDir, cefResources, options.releaseVersion, target);
+  await writePackageManifest(config, packageDir, buildDir, cefResources, target);
   stdout.write(`prepared package assembly at ${packageDir}\n`);
   runCargoPackager(packageDir);
 }
@@ -164,19 +171,24 @@ export async function runPackageRelease(options: ReleaseOptions = {}): Promise<v
   await runCefariPackage({ root, release: true, releaseVersion: version });
 }
 
-function ensureBuildArtifacts(config: ResolvedCefariConfig, buildDir: string, cefResources: string): void {
+function ensureBuildArtifacts(
+  config: ResolvedCefariConfig,
+  buildDir: string,
+  cefResources: string,
+  target: CefariBuildTarget,
+): void {
   for (const path of [
     join(buildDir, "frontend", "index.html"),
     join(buildDir, "config", "cefari.json"),
-    join(buildDir, "desktop", desktopExecutableName(config)),
+    join(buildDir, "desktop", desktopExecutableName(config, target)),
     join(buildDir, "workers"),
     join(cefResources, "archive.json"),
-    ...(config.daemon === undefined ? [] : [join(buildDir, "daemon", daemonExecutableName(config))]),
+    ...(config.daemon === undefined ? [] : [join(buildDir, "daemon", daemonExecutableName(config, target))]),
   ]) {
     ensureArtifact(path);
   }
   for (const worker of Object.keys(config.workers)) {
-    ensureArtifact(join(buildDir, "workers", worker, platformExecutableName(worker)));
+    ensureArtifact(join(buildDir, "workers", worker, executableNameForTarget(worker, target)));
   }
 }
 
@@ -186,6 +198,7 @@ async function writePackageMetadata(
   buildDir: string,
   cefResources: string,
   releaseVersion: string | undefined,
+  target: CefariBuildTarget,
 ): Promise<void> {
   const icon = config.app.icon === undefined ? undefined : resolve(config.root, config.app.icon);
   if (icon !== undefined) {
@@ -202,7 +215,7 @@ async function writePackageMetadata(
     `product_name = ${tomlString(config.package.productName)}`,
     `version = ${tomlString(releaseVersion ?? config.package.version)}`,
     `identifier = ${tomlString(config.app.identifier)}`,
-    `formats = [${tomlString(defaultPackageFormat())}]`,
+    `formats = [${tomlString(defaultPackageFormat(target))}]`,
     `binaries_dir = ${tomlString(join(buildDir, "desktop"))}`,
     "",
     "[[deep_link_protocols]]",
@@ -210,7 +223,7 @@ async function writePackageMetadata(
     `name = ${tomlString(`${config.app.identifier}.notification`)}`,
     "",
     "[[binaries]]",
-    `path = ${tomlString(desktopExecutableName(config))}`,
+    `path = ${tomlString(desktopExecutableName(config, target))}`,
     "main = true",
     "",
     ...resourceToml(join(buildDir, "frontend"), "frontend"),
@@ -231,26 +244,27 @@ async function writePackageManifest(
   packageDir: string,
   buildDir: string,
   cefResources: string,
+  target: CefariBuildTarget,
 ): Promise<void> {
   const manifest = {
     product_name: config.package.productName,
     identifier: config.app.identifier,
     notification_protocol: notificationProtocol(config.app.identifier),
     tray_icon: config.capabilities.some((capability) => capability.type === "tray") ? "tray-icon.png" : null,
-    desktop_binary: desktopExecutableName(config),
+    desktop_binary: desktopExecutableName(config, target),
     frontend_dir: normalizePath(join(buildDir, "frontend")),
     config_file: normalizePath(join(buildDir, "config", "cefari.json")),
     ...(config.daemon === undefined
       ? {}
       : {
           daemon_dir: normalizePath(join(buildDir, "daemon")),
-          daemon_executable: normalizePath(join(buildDir, "daemon", daemonExecutableName(config))),
+          daemon_executable: normalizePath(join(buildDir, "daemon", daemonExecutableName(config, target))),
         }),
     workers_dir: normalizePath(join(buildDir, "workers")),
     worker_executables: Object.fromEntries(
       Object.keys(config.workers).map((worker) => [
         worker,
-        normalizePath(join(buildDir, "workers", worker, platformExecutableName(worker))),
+        normalizePath(join(buildDir, "workers", worker, executableNameForTarget(worker, target))),
       ]),
     ),
     cef_resources: normalizePath(cefResources),
@@ -341,7 +355,7 @@ function validateUpdateFormat(format: string): asserts format is UpdatePackageFo
 }
 
 function defaultUpdateTarget(): string {
-  return `${process.platform}-${process.arch}`;
+  return hostCefariBuildTarget();
 }
 
 function defaultUpdateFormat(target: string): UpdatePackageFormat {
@@ -354,26 +368,43 @@ function defaultUpdateFormat(target: string): UpdatePackageFormat {
   return "appimage";
 }
 
-function defaultPackageFormat(): string {
-  if (process.platform === "darwin") {
+async function readBuildTarget(buildDir: string): Promise<CefariBuildTarget> {
+  const manifestPath = join(buildDir, "cef", "manifest.json");
+  if (!existsSync(manifestPath)) {
+    return hostCefariBuildTarget();
+  }
+
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    target?: string;
+    target_os?: string;
+    target_arch?: string;
+  };
+  if (manifest.target !== undefined) {
+    return parseCefariBuildTarget(manifest.target);
+  }
+  if (manifest.target_os !== undefined && manifest.target_arch !== undefined) {
+    const os = manifest.target_os === "win32" ? "windows" : manifest.target_os;
+    return parseCefariBuildTarget(`${os}-${manifest.target_arch}`);
+  }
+  return hostCefariBuildTarget();
+}
+
+function defaultPackageFormat(target: CefariBuildTarget): string {
+  if (target.startsWith("darwin-")) {
     return "dmg";
   }
-  if (process.platform === "win32") {
+  if (target.startsWith("windows-")) {
     return "nsis";
   }
   return "deb";
 }
 
-function daemonExecutableName(config: ResolvedCefariConfig): string {
-  return platformExecutableName(`${config.app.projectName}-daemon`);
+function daemonExecutableName(config: ResolvedCefariConfig, target: CefariBuildTarget): string {
+  return executableNameForTarget(`${config.app.projectName}-daemon`, target);
 }
 
-function desktopExecutableName(config: ResolvedCefariConfig): string {
-  return platformExecutableName(config.app.projectName);
-}
-
-function platformExecutableName(stem: string): string {
-  return process.platform === "win32" ? `${stem}.exe` : stem;
+function desktopExecutableName(config: ResolvedCefariConfig, target: CefariBuildTarget): string {
+  return executableNameForTarget(config.app.projectName, target);
 }
 
 function resourceToml(src: string, target: string): string[] {
