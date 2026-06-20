@@ -17,7 +17,7 @@ use tracing_subscriber::{
 };
 
 pub(crate) struct LogGuards {
-    _router: Arc<LogRouter>,
+    router: Arc<LogRouter>,
 }
 
 type SharedLogDatabase = Arc<Mutex<Connection>>;
@@ -114,7 +114,13 @@ impl LogSink for SqliteLogSink {
     }
 }
 
-pub(crate) fn init_logging(paths: &RuntimePaths) -> Result<LogGuards> {
+impl LogGuards {
+    pub(crate) fn router(&self) -> Arc<LogRouter> {
+        self.router.clone()
+    }
+}
+
+pub(crate) fn init_logging(paths: &RuntimePaths, local_storage_enabled: bool) -> Result<LogGuards> {
     let log_config = RuntimeLogConfig::new(paths);
     fs::create_dir_all(&log_config.directory).with_context(|| {
         format!(
@@ -123,10 +129,10 @@ pub(crate) fn init_logging(paths: &RuntimePaths) -> Result<LogGuards> {
         )
     })?;
 
-    let database = open_log_database(&log_config.database.file_path())?;
-    let router = Arc::new(LogRouter::new(vec![
-        Arc::new(SqliteLogSink::from_database(database)) as Arc<dyn LogSink>,
-    ]));
+    let router = Arc::new(LogRouter::with_optional_local_database(
+        &log_config.database.file_path(),
+        local_storage_enabled,
+    )?);
     let layer = RoutedLogLayer::new(router.clone());
 
     tracing_subscriber::registry()
@@ -134,7 +140,7 @@ pub(crate) fn init_logging(paths: &RuntimePaths) -> Result<LogGuards> {
         .try_init()
         .map_err(|error| anyhow::anyhow!("failed to initialize tracing subscriber: {error}"))?;
 
-    Ok(LogGuards { _router: router })
+    Ok(LogGuards { router })
 }
 
 fn open_log_database(path: &Path) -> Result<SharedLogDatabase> {

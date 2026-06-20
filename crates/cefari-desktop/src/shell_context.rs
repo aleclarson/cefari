@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use cefari_core::{
     CefariIpcError, CefariIpcEvent, DialogCommand, DialogResult, DownloadCommand, DownloadResult,
@@ -11,7 +13,7 @@ use tracing::debug;
 
 use crate::{
     desktop_app, desktop_cef, desktop_dialogs, desktop_files, desktop_ipc, desktop_logs,
-    desktop_workers, external, runtime, window, window_state,
+    desktop_workers, external, logging, runtime, window, window_state,
 };
 use crate::{desktop_notifications, desktop_ui, event_loop::UserEvent};
 
@@ -22,6 +24,7 @@ pub(crate) struct DesktopShellContext<'a> {
     pub(crate) paths: &'a RuntimePaths,
     pub(crate) cef_runtime: &'a mut desktop_cef::CefRuntime,
     pub(crate) runtime_operations: &'a runtime::RuntimeOperations,
+    pub(crate) log_router: Arc<logging::LogRouter>,
     pub(crate) worker_manager: &'a mut desktop_workers::DesktopWorkerManager,
     pub(crate) window_state: &'a mut window_state::WindowStateStore,
     pub(crate) source_window_id: Option<String>,
@@ -144,7 +147,7 @@ impl desktop_ipc::shell::ShellContext for DesktopShellContext<'_> {
 
 impl desktop_ipc::logs::LogContext for DesktopShellContext<'_> {
     fn log(&mut self, request: &cefari_core::LogRequest) -> Result<()> {
-        desktop_logs::append_app_log(self.paths, self.source_window_id.as_deref(), request)
+        desktop_logs::append_app_log(&self.log_router, self.source_window_id.as_deref(), request)
     }
 }
 

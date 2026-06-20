@@ -109,9 +109,11 @@ pub(crate) fn run_native_shell(
         event_proxy: event_loop.create_proxy(),
     });
     let daemon_spawner = Arc::new(desktop_daemon::SystemDaemonSpawner);
+    let log_router = guards._log_guards.router();
     let worker_manager = desktop_workers::DesktopWorkerManager::new(
         runtime_operations.worker_config().clone(),
         paths.clone(),
+        log_router.clone(),
         Arc::new(TaoWorkerEventSink {
             event_proxy: event_loop.create_proxy(),
         }),
@@ -131,7 +133,13 @@ pub(crate) fn run_native_shell(
         worker_manager,
         devtools_enabled,
         window_state_store,
-        desktop_daemon::DaemonManager::new(daemon_config, paths, daemon_spawner, daemon_event_sink),
+        desktop_daemon::DaemonManager::new(
+            daemon_config,
+            paths,
+            log_router,
+            daemon_spawner,
+            daemon_event_sink,
+        ),
     )
 }
 
@@ -151,6 +159,7 @@ fn run_event_loop(
 ) -> ! {
     #![allow(clippy::too_many_lines)]
 
+    let log_router = guards._log_guards.router();
     let mut cef_message_pump_deadline = Some(Instant::now());
     let mut tray = None;
     let mut smoke_secondary_created = false;
@@ -182,6 +191,7 @@ fn run_event_loop(
                             paths: &paths,
                             cef_runtime: &mut guards.cef_runtime,
                             runtime_operations: &runtime_operations,
+                            log_router: log_router.clone(),
                             worker_manager: &mut worker_manager,
                             window_state: &mut window_state_store,
                             source_window_id: None,
@@ -230,6 +240,7 @@ fn run_event_loop(
                         paths: &paths,
                         cef_runtime: &mut guards.cef_runtime,
                         runtime_operations: &runtime_operations,
+                        log_router: log_router.clone(),
                         worker_manager: &mut worker_manager,
                         window_state: &mut window_state_store,
                         source_window_id: None,
@@ -260,6 +271,7 @@ fn run_event_loop(
                         paths: &paths,
                         cef_runtime: &mut guards.cef_runtime,
                         runtime_operations: &runtime_operations,
+                        log_router: log_router.clone(),
                         worker_manager: &mut worker_manager,
                         window_state: &mut window_state_store,
                         source_window_id: None,
@@ -318,6 +330,7 @@ fn run_event_loop(
                     paths: &paths,
                     cef_runtime: &mut guards.cef_runtime,
                     runtime_operations: &runtime_operations,
+                    log_router: log_router.clone(),
                     worker_manager: &mut worker_manager,
                     window_state: &mut window_state_store,
                     source_window_id: Some(source_window_id),

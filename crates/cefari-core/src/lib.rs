@@ -16,9 +16,11 @@ pub mod updates;
 mod error;
 
 pub use config::{
-    AppConfig, BrowserConfig, CefariConfig, DaemonConfig, DeepLinkConfig, ServiceConfig,
-    NativeResourceConfig, UpdateConfig, WorkerConfig, WorkerDenoSourceConfig, WorkerEntryConfig,
-    WorkerExecutableConfig, WorkerPermissionConfig,
+    AppConfig, BrowserConfig, CefariConfig, ConfigMode, DaemonConfig, DeepLinkConfig,
+    LocalLogConfig, LogExporterConfig, LogRoutingConfig, LogRoutingLevel, ModeEnabledConfig,
+    NativeResourceConfig, SampleRateConfig, SentryLogExporterConfig, ServiceConfig, UpdateConfig,
+    WorkerConfig, WorkerDenoSourceConfig, WorkerEntryConfig, WorkerExecutableConfig,
+    WorkerPermissionConfig,
     WorkerPermissionsConfig, WorkerTargetConfig, load_config, save_config,
 };
 pub use error::{Error, Result};

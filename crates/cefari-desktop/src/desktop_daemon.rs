@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use cefari_core::{DAEMON_LOG_SCOPE, LOG_PROPERTY_CONNECTION_ID, RuntimeLogConfig, RuntimePaths};
+use cefari_core::{DAEMON_LOG_SCOPE, LOG_PROPERTY_CONNECTION_ID, RuntimePaths};
 
 use crate::logging;
 
@@ -156,7 +156,7 @@ struct ActiveDaemonConnection {
 
 pub struct DaemonManager {
     config: Option<DaemonProcessConfig>,
-    paths: RuntimePaths,
+    log_router: Arc<logging::LogRouter>,
     spawner: Arc<dyn DaemonSpawner>,
     sink: Arc<dyn DaemonEventSink>,
     next_id: u64,
@@ -166,13 +166,14 @@ pub struct DaemonManager {
 impl DaemonManager {
     pub fn new(
         config: Option<DaemonProcessConfig>,
-        paths: RuntimePaths,
+        _paths: RuntimePaths,
+        log_router: Arc<logging::LogRouter>,
         spawner: Arc<dyn DaemonSpawner>,
         sink: Arc<dyn DaemonEventSink>,
     ) -> Self {
         Self {
             config,
-            paths,
+            log_router,
             spawner,
             sink,
             next_id: 1,
@@ -196,12 +197,7 @@ impl DaemonManager {
         let process_id = child.process_id;
         let sink = self.sink.clone();
         thread::spawn(move || read_daemon_stdout(id, stdout, sink));
-        spawn_daemon_stderr_reader(
-            RuntimeLogConfig::new(&self.paths).database.file_path(),
-            id,
-            process_id,
-            stderr,
-        );
+        spawn_daemon_stderr_reader(self.log_router.clone(), id, process_id, stderr);
         self.active = Some(ActiveDaemonConnection {
             id,
             process: child.process,
@@ -261,7 +257,7 @@ impl DaemonManager {
 }
 
 fn spawn_daemon_stderr_reader(
-    database_path: PathBuf,
+    router: Arc<logging::LogRouter>,
     connection_id: DaemonConnectionId,
     process_id: Option<u32>,
     stderr: Box<dyn BufRead + Send>,
@@ -272,7 +268,7 @@ fn spawn_daemon_stderr_reader(
                 Ok(line) if line.trim().is_empty() => {}
                 Ok(line) => {
                     if let Err(error) =
-                        append_daemon_stderr_line(&database_path, connection_id, process_id, &line)
+                        append_daemon_stderr_line(&router, connection_id, process_id, &line)
                     {
                         eprintln!("failed to write daemon stderr log: {error}");
                     }
@@ -287,7 +283,7 @@ fn spawn_daemon_stderr_reader(
 }
 
 fn append_daemon_stderr_line(
-    database_path: &std::path::Path,
+    router: &logging::LogRouter,
     connection_id: DaemonConnectionId,
     process_id: Option<u32>,
     line: &str,
@@ -300,7 +296,12 @@ fn append_daemon_stderr_line(
         properties["childPid"] = serde_json::json!(process_id);
     }
 
-    logging::append_log_entry(database_path, DAEMON_LOG_SCOPE, "log", line, properties)
+    router.route(&logging::LogEvent::new(
+        DAEMON_LOG_SCOPE,
+        "log",
+        line,
+        properties,
+    ))
 }
 
 impl Drop for DaemonManager {
@@ -354,7 +355,9 @@ mod tests {
         DaemonChild, DaemonChildProcess, DaemonConnectionId, DaemonEvent, DaemonEventSink,
         DaemonManager, DaemonProcessConfig, DaemonSpawner, append_daemon_stderr_line,
     };
-    use cefari_core::{AppIdentity, RuntimePaths};
+    use cefari_core::{AppIdentity, RuntimeLogConfig, RuntimePaths};
+
+    use crate::logging;
 
     #[test]
     fn connect_rejects_unconfigured_daemon() {
@@ -371,6 +374,7 @@ mod tests {
         let mut manager = DaemonManager::new(
             Some(test_config()),
             test_paths(),
+            test_log_router(),
             Arc::new(FakeSpawner::new(Vec::from("pong"))),
             Arc::new(sink.clone()),
         );
@@ -397,6 +401,7 @@ mod tests {
         let mut manager = DaemonManager::new(
             Some(test_config()),
             test_paths(),
+            test_log_router(),
             spawner,
             Arc::new(RecordingSink::default()),
         );
@@ -447,6 +452,7 @@ mod tests {
             let mut manager = DaemonManager::new(
                 Some(test_config()),
                 test_paths(),
+                test_log_router(),
                 spawner,
                 Arc::new(RecordingSink::default()),
             );
@@ -464,6 +470,7 @@ mod tests {
         let mut manager = DaemonManager::new(
             Some(test_config()),
             test_paths(),
+            test_log_router(),
             spawner,
             Arc::new(RecordingSink::default()),
         );
@@ -478,6 +485,7 @@ mod tests {
         DaemonManager::new(
             config,
             test_paths(),
+            test_log_router(),
             Arc::new(FakeSpawner::new(stdout)),
             Arc::new(RecordingSink::default()),
         )
@@ -485,6 +493,15 @@ mod tests {
 
     fn test_paths() -> RuntimePaths {
         RuntimePaths::resolve(&AppIdentity::cefari()).expect("runtime paths should resolve")
+    }
+
+    fn test_log_router() -> Arc<logging::LogRouter> {
+        Arc::new(
+            logging::LogRouter::with_local_database(
+                &RuntimeLogConfig::new(&test_paths()).database.file_path(),
+            )
+            .expect("router should open"),
+        )
     }
 
     fn test_config() -> DaemonProcessConfig {
@@ -503,8 +520,10 @@ mod tests {
         std::fs::create_dir_all(&root).expect("temp dir should exist");
         let database_path = root.join("cefari.sqlite");
 
+        let router = logging::LogRouter::with_local_database(&database_path).expect("router");
+
         append_daemon_stderr_line(
-            &database_path,
+            &router,
             DaemonConnectionId::from_u64(7),
             Some(4321),
             "daemon warning",

@@ -7,9 +7,9 @@ use std::{
 use anyhow::Result;
 use cefari_core::{
     AppConfig, BrowserConfig, CEFARI_DAEMON_LOG_ENV, CEFARI_LOG_DATABASE_ENV, CefariConfig,
-    CefariServiceSpec, DaemonConfig, NativeResourceConfig, PendingUpdate, RuntimeLogConfig,
-    RuntimePaths, UpdateCheckConfig, UpdateCheckState, WorkerConfig, check_for_update,
-    install_service, install_update, load_config,
+    CefariServiceSpec, ConfigMode, DaemonConfig, ModeEnabledConfig, NativeResourceConfig,
+    PendingUpdate, RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
+    WorkerConfig, check_for_update, install_service, install_update, load_config,
     packaged_resources_dir, resolve_resource, service_manager, service_status, start_service,
     stop_service, update_id,
 };
@@ -153,6 +153,10 @@ impl RuntimeOperations {
 
     pub fn browser_config(&self) -> &BrowserConfig {
         &self.config.browser
+    }
+
+    pub fn local_log_storage_enabled(&self) -> bool {
+        mode_enabled(&self.config.logs.local.enabled, runtime_mode())
     }
 
     pub fn deep_link_schemes(&self) -> &[String] {
@@ -317,6 +321,21 @@ fn daemon_native_resource_path(paths: &RuntimePaths, resource: &NativeResourceCo
     Ok(paths.resource_dir.join(path))
 }
 
+fn runtime_mode() -> ConfigMode {
+    if std::env::var("CEFARI_DEV_MODE").as_deref() == Ok("1") {
+        ConfigMode::Development
+    } else {
+        ConfigMode::Production
+    }
+}
+
+fn mode_enabled(enabled: &ModeEnabledConfig, mode: ConfigMode) -> bool {
+    match enabled {
+        ModeEnabledConfig::Bool(enabled) => *enabled,
+        ModeEnabledConfig::Mode(enabled_mode) => enabled_mode == &mode,
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AppliedUpdate {
     pub version: String,
@@ -380,13 +399,13 @@ mod tests {
     use std::{ffi::OsString, fs, path::PathBuf, sync::Mutex};
 
     use cefari_core::{
-        AppIdentity, CEFARI_LOG_DATABASE_ENV, CefariConfig, DaemonConfig, RuntimePaths,
-        UpdateCheckState,
+        AppIdentity, CEFARI_LOG_DATABASE_ENV, CefariConfig, ConfigMode, DaemonConfig,
+        ModeEnabledConfig, RuntimePaths, UpdateCheckState,
     };
 
     use super::{
         CEFARI_DAEMON_RESOURCES_ENV, RuntimeOperations, RuntimeUpdateState,
-        daemon_executable_path, load_desktop_config,
+        daemon_executable_path, load_desktop_config, mode_enabled,
     };
 
     #[test]
@@ -402,6 +421,27 @@ mod tests {
             runtime.update_state().expect("unconfigured update check"),
             UpdateCheckState::NotConfigured
         );
+        assert!(runtime.local_log_storage_enabled());
+    }
+
+    #[test]
+    fn evaluates_mode_sensitive_log_storage() {
+        assert!(mode_enabled(
+            &ModeEnabledConfig::Mode(ConfigMode::Development),
+            ConfigMode::Development
+        ));
+        assert!(!mode_enabled(
+            &ModeEnabledConfig::Mode(ConfigMode::Development),
+            ConfigMode::Production
+        ));
+        assert!(mode_enabled(
+            &ModeEnabledConfig::Bool(true),
+            ConfigMode::Production
+        ));
+        assert!(!mode_enabled(
+            &ModeEnabledConfig::Bool(false),
+            ConfigMode::Development
+        ));
     }
 
     #[test]

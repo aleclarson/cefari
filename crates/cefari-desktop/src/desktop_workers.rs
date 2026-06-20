@@ -26,6 +26,7 @@ use crate::logging;
 pub(crate) struct DesktopWorkerManager {
     config: WorkerConfig,
     paths: RuntimePaths,
+    log_router: Arc<logging::LogRouter>,
     spawner: Arc<dyn WorkerProcessSpawner>,
     events: Arc<dyn WorkerEventSink>,
     processes: BTreeMap<String, ManagedWorkerProcess>,
@@ -112,20 +113,29 @@ impl DesktopWorkerManager {
     pub(crate) fn new(
         config: WorkerConfig,
         paths: RuntimePaths,
+        log_router: Arc<logging::LogRouter>,
         events: Arc<dyn WorkerEventSink>,
     ) -> Self {
-        Self::with_spawner(config, paths, events, Arc::new(DenoWorkerProcessSpawner))
+        Self::with_spawner(
+            config,
+            paths,
+            log_router,
+            events,
+            Arc::new(DenoWorkerProcessSpawner),
+        )
     }
 
     pub(crate) fn with_spawner(
         config: WorkerConfig,
         paths: RuntimePaths,
+        log_router: Arc<logging::LogRouter>,
         events: Arc<dyn WorkerEventSink>,
         spawner: Arc<dyn WorkerProcessSpawner>,
     ) -> Self {
         Self {
             config,
             paths,
+            log_router,
             spawner,
             events,
             processes: BTreeMap::new(),
@@ -181,7 +191,7 @@ impl DesktopWorkerManager {
         }
         if let Some(stderr) = child.take_stderr() {
             spawn_stderr_reader(
-                RuntimeLogConfig::new(&self.paths).database.file_path(),
+                self.log_router.clone(),
                 id.clone(),
                 request.worker.clone(),
                 process_id,
@@ -580,7 +590,7 @@ fn spawn_stdout_reader(
 }
 
 fn spawn_stderr_reader(
-    database_path: PathBuf,
+    router: Arc<logging::LogRouter>,
     id: String,
     worker: String,
     process_id: Option<u32>,
@@ -592,7 +602,7 @@ fn spawn_stderr_reader(
                 Ok(line) if line.trim().is_empty() => {}
                 Ok(line) => {
                     if let Err(error) =
-                        append_worker_stderr_line(&database_path, &id, &worker, process_id, &line)
+                        append_worker_stderr_line(&router, &id, &worker, process_id, &line)
                     {
                         error!(%error, %id, %worker, "failed to write worker stderr log");
                     }
@@ -607,7 +617,7 @@ fn spawn_stderr_reader(
 }
 
 fn append_worker_stderr_line(
-    database_path: &Path,
+    router: &logging::LogRouter,
     id: &str,
     worker: &str,
     process_id: Option<u32>,
@@ -622,13 +632,12 @@ fn append_worker_stderr_line(
         properties["childPid"] = serde_json::json!(process_id);
     }
 
-    logging::append_log_entry(
-        database_path,
-        &worker_log_scope(worker),
+    router.route(&logging::LogEvent::new(
+        worker_log_scope(worker),
         "log",
         line,
         properties,
-    )
+    ))
 }
 
 fn handle_worker_stdout_line(
@@ -928,8 +937,13 @@ mod tests {
     fn builds_deno_command_for_configured_worker() {
         let sink = Arc::new(RecordingSink::default());
         let spawner = Arc::new(RecordingSpawner::default());
-        let mut manager =
-            DesktopWorkerManager::with_spawner(worker_config(), paths(), sink, spawner.clone());
+        let mut manager = DesktopWorkerManager::with_spawner(
+            worker_config(),
+            paths(),
+            test_log_router(),
+            sink,
+            spawner.clone(),
+        );
 
         let result = manager
             .dispatch(&WorkerCommand::Spawn(WorkerSpawnRequest {
@@ -979,6 +993,7 @@ mod tests {
         let mut manager = DesktopWorkerManager::with_spawner(
             executable_worker_config("workers/thumbnailer/thumbnailer"),
             paths(),
+            test_log_router(),
             sink,
             spawner.clone(),
         );
@@ -1028,8 +1043,10 @@ mod tests {
         std::fs::create_dir_all(&root).expect("temp dir should exist");
         let database_path = root.join("cefari.sqlite");
 
+        let router = logging::LogRouter::with_local_database(&database_path).expect("router");
+
         append_worker_stderr_line(
-            &database_path,
+            &router,
             "thumbnailer-1",
             "thumbnailer",
             Some(1234),
@@ -1072,6 +1089,7 @@ mod tests {
         let mut manager = DesktopWorkerManager::with_spawner(
             executable_worker_config("../thumbnailer"),
             paths(),
+            test_log_router(),
             Arc::new(RecordingSink::default()),
             spawner.clone(),
         );
@@ -1144,6 +1162,7 @@ mod tests {
         let mut manager = DesktopWorkerManager::with_spawner(
             worker_config(),
             paths(),
+            test_log_router(),
             Arc::new(RecordingSink::default()),
             spawner.clone(),
         );
@@ -1165,6 +1184,7 @@ mod tests {
         let mut manager = DesktopWorkerManager::with_spawner(
             worker_config(),
             paths(),
+            test_log_router(),
             Arc::new(RecordingSink::default()),
             spawner.clone(),
         );
@@ -1228,6 +1248,7 @@ mod tests {
         let mut manager = DesktopWorkerManager::with_spawner(
             worker_config(),
             paths(),
+            test_log_router(),
             sink.clone(),
             Arc::new(RecordingSpawner::default()),
         );
@@ -1274,6 +1295,7 @@ mod tests {
         let mut manager = DesktopWorkerManager::with_spawner(
             worker_config(),
             paths(),
+            test_log_router(),
             Arc::new(RecordingSink::default()),
             Arc::new(ExitedSpawner),
         );
@@ -1405,5 +1427,15 @@ mod tests {
             resource_dir: PathBuf::from("/tmp/cefari/resources"),
             update_dir: PathBuf::from("/tmp/cefari/updates"),
         }
+    }
+
+    fn test_log_router() -> Arc<logging::LogRouter> {
+        std::fs::create_dir_all(paths().log_dir).expect("log dir should exist");
+        Arc::new(
+            logging::LogRouter::with_local_database(
+                &RuntimeLogConfig::new(&paths()).database.file_path(),
+            )
+            .expect("router should open"),
+        )
     }
 }
