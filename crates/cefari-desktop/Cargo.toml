@@ -28,6 +28,7 @@ tracing-appender.workspace = true
 tracing-subscriber = { workspace = true, features = ["json"] }
 tray-icon.workspace = true
 tokio = { workspace = true, features = ["rt"] }
+ureq.workspace = true
 user-notify.workspace = true
 
 

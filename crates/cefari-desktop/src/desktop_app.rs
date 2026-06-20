@@ -20,7 +20,11 @@ pub(crate) struct RuntimeGuards {
 pub(crate) fn run() -> Result<()> {
     let paths = RuntimePaths::resolve(&AppIdentity::cefari())?;
     let runtime_operations = runtime::RuntimeOperations::load(&paths)?;
-    let log_guards = logging::init_logging(&paths, runtime_operations.local_log_storage_enabled())?;
+    let log_guards = logging::init_logging(
+        &paths,
+        runtime_operations.local_log_storage_enabled(),
+        runtime_operations.sentry_log_sink_config(),
+    )?;
     let instance = match desktop_single_instance::acquire_or_forward(
         &paths,
         runtime_operations.deep_link_schemes(),

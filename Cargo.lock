@@ -669,6 +669,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "tray-icon",
+ "ureq",
  "user-notify",
 ]
 

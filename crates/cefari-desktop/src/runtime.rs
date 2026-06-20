@@ -7,14 +7,14 @@ use std::{
 use anyhow::Result;
 use cefari_core::{
     AppConfig, BrowserConfig, CEFARI_DAEMON_LOG_ENV, CEFARI_LOG_DATABASE_ENV, CefariConfig,
-    CefariServiceSpec, ConfigMode, DaemonConfig, ModeEnabledConfig, NativeResourceConfig,
-    PendingUpdate, RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
-    WorkerConfig, check_for_update, install_service, install_update, load_config,
-    packaged_resources_dir, resolve_resource, service_manager, service_status, start_service,
-    stop_service, update_id,
+    CefariServiceSpec, ConfigMode, DaemonConfig, LogRoutingLevel, ModeEnabledConfig,
+    NativeResourceConfig, PendingUpdate, RuntimeLogConfig, RuntimePaths, UpdateCheckConfig,
+    UpdateCheckState, WorkerConfig, check_for_update, install_service, install_update,
+    load_config, packaged_resources_dir, resolve_resource, service_manager, service_status,
+    start_service, stop_service, update_id,
 };
 
-use crate::desktop_daemon::DaemonProcessConfig;
+use crate::{desktop_daemon::DaemonProcessConfig, logging::SentryLogSinkConfig};
 
 const CEFARI_DAEMON_DEV_ENTRY_ENV: &str = "CEFARI_DAEMON_DEV_ENTRY";
 const CEFARI_DAEMON_DEV_CWD_ENV: &str = "CEFARI_DAEMON_DEV_CWD";
@@ -157,6 +157,26 @@ impl RuntimeOperations {
 
     pub fn local_log_storage_enabled(&self) -> bool {
         mode_enabled(&self.config.logs.local.enabled, runtime_mode())
+    }
+
+    pub fn sentry_log_sink_config(&self) -> Option<SentryLogSinkConfig> {
+        let sentry = &self.config.logs.exporters.sentry;
+        if !mode_enabled(&sentry.enabled, runtime_mode()) {
+            return None;
+        }
+        let dsn = sentry
+            .dsn_env
+            .as_ref()
+            .and_then(|name| std::env::var(name).ok())
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| sentry.dsn.clone())?;
+        Some(SentryLogSinkConfig {
+            dsn,
+            environment: sentry.environment.clone(),
+            release: sentry.release.clone(),
+            level: log_routing_level_name(&sentry.level).to_owned(),
+            sample_rate: sentry.sample_rate.0,
+        })
     }
 
     pub fn deep_link_schemes(&self) -> &[String] {
@@ -336,6 +356,16 @@ fn mode_enabled(enabled: &ModeEnabledConfig, mode: ConfigMode) -> bool {
     }
 }
 
+fn log_routing_level_name(level: &LogRoutingLevel) -> &'static str {
+    match level {
+        LogRoutingLevel::Debug => "debug",
+        LogRoutingLevel::Info => "info",
+        LogRoutingLevel::Log => "log",
+        LogRoutingLevel::Warn => "warn",
+        LogRoutingLevel::Error => "error",
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AppliedUpdate {
     pub version: String,
@@ -400,7 +430,8 @@ mod tests {
 
     use cefari_core::{
         AppIdentity, CEFARI_LOG_DATABASE_ENV, CefariConfig, ConfigMode, DaemonConfig,
-        ModeEnabledConfig, RuntimePaths, UpdateCheckState,
+        LogRoutingLevel, ModeEnabledConfig, RuntimePaths, SampleRateConfig,
+        SentryLogExporterConfig, UpdateCheckState,
     };
 
     use super::{
@@ -442,6 +473,37 @@ mod tests {
             &ModeEnabledConfig::Bool(false),
             ConfigMode::Development
         ));
+    }
+
+    #[test]
+    fn sentry_log_sink_config_is_disabled_by_default() {
+        let paths = RuntimePaths::resolve(&AppIdentity::cefari()).expect("paths should resolve");
+        let runtime = runtime_with_config(&paths, CefariConfig::default());
+
+        assert!(runtime.sentry_log_sink_config().is_none());
+    }
+
+    #[test]
+    fn sentry_log_sink_config_uses_literal_dsn() {
+        let paths = RuntimePaths::resolve(&AppIdentity::cefari()).expect("paths should resolve");
+        let mut config = CefariConfig::default();
+        config.logs.exporters.sentry = SentryLogExporterConfig {
+            enabled: ModeEnabledConfig::Bool(true),
+            dsn: Some("https://public@sentry.invalid/42".to_owned()),
+            environment: Some("production".to_owned()),
+            release: Some("cefari@0.1.0".to_owned()),
+            level: LogRoutingLevel::Warn,
+            sample_rate: SampleRateConfig(0.5),
+            ..SentryLogExporterConfig::default()
+        };
+        let runtime = runtime_with_config(&paths, config);
+
+        let sentry = runtime.sentry_log_sink_config().expect("sentry config");
+        assert_eq!(sentry.dsn, "https://public@sentry.invalid/42");
+        assert_eq!(sentry.environment.as_deref(), Some("production"));
+        assert_eq!(sentry.release.as_deref(), Some("cefari@0.1.0"));
+        assert_eq!(sentry.level, "warn");
+        assert_eq!(sentry.sample_rate, 0.5);
     }
 
     #[test]
@@ -568,11 +630,14 @@ mod tests {
     }
 
     fn runtime_with_daemon(paths: &RuntimePaths, daemon: DaemonConfig) -> RuntimeOperations {
+        let mut config = CefariConfig::default();
+        config.daemon = daemon;
+        runtime_with_config(paths, config)
+    }
+
+    fn runtime_with_config(paths: &RuntimePaths, config: CefariConfig) -> RuntimeOperations {
         RuntimeOperations {
-            config: CefariConfig {
-                daemon,
-                ..CefariConfig::default()
-            },
+            config,
             paths: paths.clone(),
             updates: Mutex::<RuntimeUpdateState>::default(),
         }

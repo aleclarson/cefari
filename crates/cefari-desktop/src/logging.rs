@@ -1,7 +1,12 @@
 use std::{
+    collections::VecDeque,
     fs,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicI64, Ordering},
+    },
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
@@ -21,9 +26,23 @@ pub(crate) struct LogGuards {
 }
 
 type SharedLogDatabase = Arc<Mutex<Connection>>;
+const SENTRY_LOG_BATCH_SIZE: usize = 10;
+const SENTRY_LOG_QUEUE_LIMIT: usize = 512;
+const SENTRY_RETRY_BACKOFF: Duration = Duration::from_secs(1);
+static NEXT_LOG_ID: AtomicI64 = AtomicI64::new(1);
+
+#[derive(Debug, Clone)]
+pub(crate) struct SentryLogSinkConfig {
+    pub(crate) dsn: String,
+    pub(crate) environment: Option<String>,
+    pub(crate) release: Option<String>,
+    pub(crate) level: String,
+    pub(crate) sample_rate: f64,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct LogEvent {
+    pub(crate) id: i64,
     pub(crate) scope: String,
     pub(crate) level: String,
     pub(crate) message: String,
@@ -40,6 +59,7 @@ impl LogEvent {
         properties: Value,
     ) -> Self {
         Self {
+            id: next_log_id(),
             scope: scope.into(),
             level: level.into(),
             message: message.into(),
@@ -50,8 +70,20 @@ impl LogEvent {
     }
 }
 
+fn next_log_id() -> i64 {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0);
+    millis.saturating_mul(10_000) + NEXT_LOG_ID.fetch_add(1, Ordering::Relaxed) % 10_000
+}
+
 pub(crate) trait LogSink: Send + Sync {
     fn append(&self, event: &LogEvent) -> Result<()>;
+
+    fn flush(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub(crate) struct LogRouter {
@@ -86,6 +118,13 @@ impl LogRouter {
         }
         Ok(())
     }
+
+    pub(crate) fn flush(&self) -> Result<()> {
+        for sink in &self.sinks {
+            sink.flush()?;
+        }
+        Ok(())
+    }
 }
 
 pub(crate) struct SqliteLogSink {
@@ -114,13 +153,134 @@ impl LogSink for SqliteLogSink {
     }
 }
 
+pub(crate) trait SentryTransport: Send + Sync {
+    fn send_envelope(&self, url: &str, body: &str) -> Result<()>;
+}
+
+struct UreqSentryTransport;
+
+impl SentryTransport for UreqSentryTransport {
+    fn send_envelope(&self, url: &str, body: &str) -> Result<()> {
+        ureq::post(url)
+            .header("content-type", "application/x-sentry-envelope")
+            .send(body)
+            .map(|_| ())
+            .map_err(|error| anyhow::anyhow!("failed to send Sentry log envelope: {error}"))
+    }
+}
+
+pub(crate) struct SentryLogSink {
+    config: SentryLogSinkConfig,
+    endpoint: String,
+    transport: Arc<dyn SentryTransport>,
+    queue: Mutex<SentryQueue>,
+}
+
+struct SentryQueue {
+    events: VecDeque<LogEvent>,
+    retry_after: Option<Instant>,
+}
+
+impl SentryLogSink {
+    pub(crate) fn new(config: SentryLogSinkConfig) -> Result<Self> {
+        Self::with_transport(config, Arc::new(UreqSentryTransport))
+    }
+
+    pub(crate) fn with_transport(
+        config: SentryLogSinkConfig,
+        transport: Arc<dyn SentryTransport>,
+    ) -> Result<Self> {
+        let endpoint = sentry_envelope_endpoint(&config.dsn)?;
+        Ok(Self {
+            config,
+            endpoint,
+            transport,
+            queue: Mutex::new(SentryQueue {
+                events: VecDeque::new(),
+                retry_after: None,
+            }),
+        })
+    }
+
+    fn flush_locked(&self, queue: &mut SentryQueue, force: bool) -> Result<()> {
+        if queue.events.is_empty() {
+            return Ok(());
+        }
+        if !force && queue.events.len() < SENTRY_LOG_BATCH_SIZE {
+            return Ok(());
+        }
+        if !force
+            && queue
+                .retry_after
+                .is_some_and(|retry_after| retry_after > Instant::now())
+        {
+            return Ok(());
+        }
+
+        let batch_size = queue.events.len().min(SENTRY_LOG_BATCH_SIZE);
+        let batch: Vec<LogEvent> = queue.events.drain(..batch_size).collect();
+        let body = sentry_log_envelope(&self.config, &batch)?;
+        match self.transport.send_envelope(&self.endpoint, &body) {
+            Ok(()) => {
+                queue.retry_after = None;
+                Ok(())
+            }
+            Err(error) => {
+                for event in batch.into_iter().rev() {
+                    queue.events.push_front(event);
+                }
+                queue.retry_after = Some(Instant::now() + SENTRY_RETRY_BACKOFF);
+                Err(error)
+            }
+        }
+    }
+}
+
+impl LogSink for SentryLogSink {
+    fn append(&self, event: &LogEvent) -> Result<()> {
+        if !sentry_level_enabled(&event.level, &self.config.level)
+            || !sample_event(event, self.config.sample_rate)
+        {
+            return Ok(());
+        }
+
+        let mut queue = self
+            .queue
+            .lock()
+            .map_err(|error| anyhow::anyhow!("failed to lock Sentry log queue: {error}"))?;
+        if queue.events.len() >= SENTRY_LOG_QUEUE_LIMIT {
+            queue.events.pop_front();
+        }
+        queue.events.push_back(event.clone());
+        if let Err(error) = self.flush_locked(&mut queue, false) {
+            eprintln!("{error}");
+        }
+        Ok(())
+    }
+
+    fn flush(&self) -> Result<()> {
+        let mut queue = self
+            .queue
+            .lock()
+            .map_err(|error| anyhow::anyhow!("failed to lock Sentry log queue: {error}"))?;
+        while !queue.events.is_empty() {
+            self.flush_locked(&mut queue, true)?;
+        }
+        Ok(())
+    }
+}
+
 impl LogGuards {
     pub(crate) fn router(&self) -> Arc<LogRouter> {
         self.router.clone()
     }
 }
 
-pub(crate) fn init_logging(paths: &RuntimePaths, local_storage_enabled: bool) -> Result<LogGuards> {
+pub(crate) fn init_logging(
+    paths: &RuntimePaths,
+    local_storage_enabled: bool,
+    sentry: Option<SentryLogSinkConfig>,
+) -> Result<LogGuards> {
     let log_config = RuntimeLogConfig::new(paths);
     fs::create_dir_all(&log_config.directory).with_context(|| {
         format!(
@@ -129,10 +289,16 @@ pub(crate) fn init_logging(paths: &RuntimePaths, local_storage_enabled: bool) ->
         )
     })?;
 
-    let router = Arc::new(LogRouter::with_optional_local_database(
-        &log_config.database.file_path(),
-        local_storage_enabled,
-    )?);
+    let mut sinks: Vec<Arc<dyn LogSink>> = Vec::new();
+    if local_storage_enabled {
+        sinks.push(Arc::new(SqliteLogSink::open(
+            &log_config.database.file_path(),
+        )?));
+    }
+    if let Some(sentry) = sentry {
+        sinks.push(Arc::new(SentryLogSink::new(sentry)?));
+    }
+    let router = Arc::new(LogRouter::new(sinks));
     let layer = RoutedLogLayer::new(router.clone());
 
     tracing_subscriber::registry()
@@ -141,6 +307,14 @@ pub(crate) fn init_logging(paths: &RuntimePaths, local_storage_enabled: bool) ->
         .map_err(|error| anyhow::anyhow!("failed to initialize tracing subscriber: {error}"))?;
 
     Ok(LogGuards { router })
+}
+
+impl Drop for LogGuards {
+    fn drop(&mut self) {
+        if let Err(error) = self.router.flush() {
+            eprintln!("failed to flush Cefari log router: {error}");
+        }
+    }
 }
 
 fn open_log_database(path: &Path) -> Result<SharedLogDatabase> {
@@ -223,9 +397,10 @@ pub(crate) fn append_log_entry(
 fn insert_log_entry(connection: &Connection, event: &LogEvent) -> rusqlite::Result<()> {
     let properties_json = redact_log_value(&event.properties, None).to_string();
     connection.execute(
-        "INSERT INTO log_entries (at, scope, level, pid, message, properties_json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO log_entries (id, at, scope, level, pid, message, properties_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
+            event.id,
             event.at,
             event.scope,
             event.level,
@@ -235,6 +410,159 @@ fn insert_log_entry(connection: &Connection, event: &LogEvent) -> rusqlite::Resu
         ],
     )?;
     Ok(())
+}
+
+fn sentry_envelope_endpoint(dsn: &str) -> Result<String> {
+    let (scheme, rest) = dsn
+        .split_once("://")
+        .ok_or_else(|| anyhow::anyhow!("Sentry DSN must include a URL scheme"))?;
+    let public_key_host_path = rest
+        .split_once('@')
+        .map_or(rest, |(_, host_path)| host_path);
+    let (host, path) = public_key_host_path
+        .split_once('/')
+        .ok_or_else(|| anyhow::anyhow!("Sentry DSN must include a project id"))?;
+    let mut segments: Vec<&str> = path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let project_id = segments
+        .pop()
+        .ok_or_else(|| anyhow::anyhow!("Sentry DSN must include a project id"))?;
+    let prefix = if segments.is_empty() {
+        String::new()
+    } else {
+        format!("/{}", segments.join("/"))
+    };
+    Ok(format!(
+        "{scheme}://{host}{prefix}/api/{project_id}/envelope/"
+    ))
+}
+
+fn sentry_log_envelope(config: &SentryLogSinkConfig, events: &[LogEvent]) -> Result<String> {
+    let header = serde_json::json!({
+        "dsn": config.dsn,
+        "sent_at": iso_timestamp(),
+    });
+    let item_header = serde_json::json!({
+        "type": "log",
+        "item_count": events.len(),
+        "content_type": "application/vnd.sentry.items.log+json",
+    });
+    let items: Vec<Value> = events
+        .iter()
+        .map(|event| sentry_log_payload(config, event))
+        .collect::<Result<_>>()?;
+    let payload = serde_json::json!({ "items": items });
+    Ok(format!("{header}\n{item_header}\n{payload}\n"))
+}
+
+fn sentry_log_payload(config: &SentryLogSinkConfig, event: &LogEvent) -> Result<Value> {
+    let mut attributes = Map::new();
+    attributes.insert(
+        "cefari.scope".to_owned(),
+        sentry_attribute(Value::String(event.scope.clone())),
+    );
+    attributes.insert(
+        "cefari.pid".to_owned(),
+        sentry_attribute(Value::Number(Number::from(event.pid))),
+    );
+    attributes.insert(
+        "cefari.log_id".to_owned(),
+        sentry_attribute(Value::Number(Number::from(event.id))),
+    );
+    if let Some(environment) = &config.environment {
+        attributes.insert(
+            "environment".to_owned(),
+            sentry_attribute(Value::String(environment.clone())),
+        );
+    }
+    if let Some(release) = &config.release {
+        attributes.insert(
+            "release".to_owned(),
+            sentry_attribute(Value::String(release.clone())),
+        );
+    }
+    if let Value::Object(properties) = redact_log_value(&event.properties, None) {
+        for (key, value) in properties {
+            attributes.insert(key, sentry_attribute(value));
+        }
+    }
+
+    let level = sentry_level(&event.level);
+    Ok(serde_json::json!({
+        "timestamp": iso_timestamp_seconds(&event.at)?,
+        "trace_id": "00000000000000000000000000000000",
+        "level": level,
+        "body": event.message,
+        "severity_number": sentry_severity_number(level),
+        "attributes": attributes,
+    }))
+}
+
+fn sentry_attribute(value: Value) -> Value {
+    let type_name = match value {
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) | Value::Object(_) => "string",
+        Value::Null => "string",
+    };
+    let value = match value {
+        Value::Array(_) | Value::Object(_) | Value::Null => Value::String(value.to_string()),
+        value => value,
+    };
+    serde_json::json!({ "value": value, "type": type_name })
+}
+
+fn sentry_level(level: &str) -> &'static str {
+    match level {
+        "debug" => "debug",
+        "warn" => "warn",
+        "error" => "error",
+        "log" | "info" => "info",
+        _ => "info",
+    }
+}
+
+fn sentry_level_enabled(level: &str, minimum: &str) -> bool {
+    level_rank(sentry_level(level)) >= level_rank(sentry_level(minimum))
+}
+
+fn level_rank(level: &str) -> u8 {
+    match level {
+        "debug" => 1,
+        "info" => 2,
+        "warn" => 3,
+        "error" => 4,
+        "fatal" => 5,
+        _ => 2,
+    }
+}
+
+fn sentry_severity_number(level: &str) -> u8 {
+    match level {
+        "debug" => 5,
+        "info" => 9,
+        "warn" => 13,
+        "error" => 17,
+        "fatal" => 21,
+        _ => 9,
+    }
+}
+
+fn sample_event(event: &LogEvent, sample_rate: f64) -> bool {
+    if sample_rate >= 1.0 {
+        return true;
+    }
+    if sample_rate <= 0.0 {
+        return false;
+    }
+    let mut hash = 0_u64;
+    for byte in event.at.bytes().chain(event.message.bytes()) {
+        hash = hash.wrapping_mul(31).wrapping_add(u64::from(byte));
+    }
+    (hash % 10_000) as f64 / 10_000.0 < sample_rate
 }
 
 fn redact_log_value(value: &Value, parent_key: Option<&str>) -> Value {
@@ -330,6 +658,28 @@ fn iso_timestamp() -> String {
     }
 }
 
+fn iso_timestamp_seconds(value: &str) -> Result<f64> {
+    if value.len() < "2026-06-20T13:00:00Z".len() {
+        anyhow::bail!("invalid ISO timestamp");
+    }
+    let year: i32 = value[0..4].parse()?;
+    let month: u32 = value[5..7].parse()?;
+    let day: u32 = value[8..10].parse()?;
+    let hour: u64 = value[11..13].parse()?;
+    let minute: u64 = value[14..16].parse()?;
+    let second: u64 = value[17..19].parse()?;
+    let millis = value
+        .split_once('.')
+        .and_then(|(_, fraction)| fraction.get(0..3))
+        .and_then(|fraction| fraction.parse::<u64>().ok())
+        .unwrap_or(0);
+    let days = days_from_civil(year, month, day);
+    Ok(
+        (days as u64 * 86_400 + hour * 3_600 + minute * 60 + second) as f64
+            + millis as f64 / 1000.0,
+    )
+}
+
 fn chrono_like_seconds(seconds: u64) -> String {
     let days = seconds / 86_400;
     let seconds_of_day = seconds % 86_400;
@@ -338,6 +688,17 @@ fn chrono_like_seconds(seconds: u64) -> String {
     let minute = (seconds_of_day % 3_600) / 60;
     let second = seconds_of_day % 60;
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}")
+}
+
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let year = i64::from(year) - i64::from(month <= 2);
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month = i64::from(month);
+    let day = i64::from(day);
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
 }
 
 fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
@@ -358,8 +719,9 @@ fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::{
-        LogEvent, LogRouter, LogSink, RoutedLogLayer, SqliteLogSink, append_log_entry,
-        initialize_log_database, iso_timestamp,
+        LogEvent, LogRouter, LogSink, RoutedLogLayer, SENTRY_LOG_BATCH_SIZE, SentryLogSink,
+        SentryLogSinkConfig, SentryTransport, SqliteLogSink, append_log_entry,
+        initialize_log_database, iso_timestamp, sentry_envelope_endpoint, sentry_log_envelope,
     };
     use anyhow::Result;
     use cefari_core::CEFARI_LOG_SCOPE;
@@ -602,6 +964,153 @@ mod tests {
 
         assert_eq!(first.events.lock().unwrap().len(), 1);
         assert_eq!(second.events.lock().unwrap().len(), 1);
+    }
+
+    #[derive(Default)]
+    struct CapturingTransport {
+        envelopes: Mutex<Vec<(String, String)>>,
+        fail_next: Mutex<bool>,
+    }
+
+    impl SentryTransport for CapturingTransport {
+        fn send_envelope(&self, url: &str, body: &str) -> Result<()> {
+            let mut fail_next = self.fail_next.lock().unwrap();
+            if *fail_next {
+                *fail_next = false;
+                anyhow::bail!("transport down");
+            }
+            self.envelopes
+                .lock()
+                .unwrap()
+                .push((url.to_owned(), body.to_owned()));
+            Ok(())
+        }
+    }
+
+    fn sentry_config() -> SentryLogSinkConfig {
+        SentryLogSinkConfig {
+            dsn: "https://public@sentry.invalid/42".to_owned(),
+            environment: Some("test".to_owned()),
+            release: Some("cefari@0.1.0".to_owned()),
+            level: "info".to_owned(),
+            sample_rate: 1.0,
+        }
+    }
+
+    #[test]
+    fn builds_sentry_envelope_endpoint_from_dsn() {
+        assert_eq!(
+            sentry_envelope_endpoint("https://public@sentry.invalid/42").unwrap(),
+            "https://sentry.invalid/api/42/envelope/"
+        );
+        assert_eq!(
+            sentry_envelope_endpoint("https://public@sentry.invalid/prefix/42").unwrap(),
+            "https://sentry.invalid/prefix/api/42/envelope/"
+        );
+    }
+
+    #[test]
+    fn maps_log_events_to_sentry_log_envelopes() {
+        let event = LogEvent {
+            id: 42,
+            scope: "worker:thumbnailer".to_owned(),
+            level: "log".to_owned(),
+            message: "thumbnail.ready".to_owned(),
+            properties: serde_json::json!({ "durationMs": 17, "token": "secret" }),
+            pid: 1234,
+            at: "2026-01-02T03:04:05.250Z".to_owned(),
+        };
+
+        let envelope = sentry_log_envelope(&sentry_config(), &[event]).expect("envelope");
+        let lines: Vec<&str> = envelope.lines().collect();
+        assert_eq!(lines.len(), 3);
+        let item_header: Value = serde_json::from_str(lines[1]).expect("item header");
+        let payload: Value = serde_json::from_str(lines[2]).expect("payload");
+
+        assert_eq!(item_header["type"], "log");
+        assert_eq!(
+            item_header["content_type"],
+            "application/vnd.sentry.items.log+json"
+        );
+        let log = &payload["items"][0];
+        assert_eq!(log["level"], "info");
+        assert_eq!(log["body"], "thumbnail.ready");
+        assert_eq!(log["timestamp"], 1767323045.25);
+        assert_eq!(
+            log["attributes"]["cefari.scope"],
+            serde_json::json!({ "value": "worker:thumbnailer", "type": "string" })
+        );
+        assert_eq!(
+            log["attributes"]["cefari.log_id"],
+            serde_json::json!({ "value": 42, "type": "number" })
+        );
+        assert_eq!(
+            log["attributes"]["token"],
+            serde_json::json!({ "value": "[redacted]", "type": "string" })
+        );
+    }
+
+    #[test]
+    fn sentry_sink_batches_and_flushes_events() {
+        let transport = Arc::new(CapturingTransport::default());
+        let sink = SentryLogSink::with_transport(sentry_config(), transport.clone()).expect("sink");
+
+        for index in 0..SENTRY_LOG_BATCH_SIZE {
+            sink.append(&LogEvent::new(
+                "app",
+                "info",
+                format!("event.{index}"),
+                Value::Object(Default::default()),
+            ))
+            .expect("append should not fail");
+        }
+
+        let envelopes = transport.envelopes.lock().unwrap();
+        assert_eq!(envelopes.len(), 1);
+        assert_eq!(envelopes[0].0, "https://sentry.invalid/api/42/envelope/");
+    }
+
+    #[test]
+    fn sentry_sink_retries_failed_batches_on_flush() {
+        let transport = Arc::new(CapturingTransport::default());
+        *transport.fail_next.lock().unwrap() = true;
+        let sink = SentryLogSink::with_transport(sentry_config(), transport.clone()).expect("sink");
+
+        for index in 0..SENTRY_LOG_BATCH_SIZE {
+            sink.append(&LogEvent::new(
+                "app",
+                "info",
+                format!("event.{index}"),
+                Value::Object(Default::default()),
+            ))
+            .expect("append should not fail");
+        }
+        assert_eq!(transport.envelopes.lock().unwrap().len(), 0);
+
+        sink.flush().expect("flush retries queued batch");
+        assert_eq!(transport.envelopes.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn router_flush_flushes_sentry_sink() {
+        let transport = Arc::new(CapturingTransport::default());
+        let sink = Arc::new(
+            SentryLogSink::with_transport(sentry_config(), transport.clone()).expect("sink"),
+        );
+        let router = LogRouter::new(vec![sink]);
+
+        router
+            .route(&LogEvent::new(
+                "app",
+                "warn",
+                "flush.me",
+                Value::Object(Default::default()),
+            ))
+            .expect("route should not fail");
+        assert_eq!(transport.envelopes.lock().unwrap().len(), 0);
+
+        router.flush().expect("flush should send queued event");
+        assert_eq!(transport.envelopes.lock().unwrap().len(), 1);
     }
 
     #[test]
