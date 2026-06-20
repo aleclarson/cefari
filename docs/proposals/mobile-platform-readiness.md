@@ -198,7 +198,7 @@ Guidelines:
   errors.
 - Keep desktop convenience APIs out of portable examples unless the example is
   explicitly desktop-scoped.
-- Clarify `cefari.window` and `cefari.windows` as desktop-scoped before mobile
+- Clarify `cefari.desktop.window` and `cefari.desktop.windows` as desktop-scoped before mobile
   support starts. Mobile should get route, screen, or presentation APIs later
   rather than treating mobile views as desktop windows.
 
@@ -397,7 +397,7 @@ mobile host implementation starts.
   protocol, config, validation, and portable helpers.
 - Daemon should stay desktop-only. Mobile background work should become separate
   constrained capabilities later.
-- `cefari.window` and `cefari.windows` should be clarified as desktop-scoped
+- `cefari.desktop.window` and `cefari.desktop.windows` should be clarified as desktop-scoped
   before mobile support starts.
 - Capability metadata should be declared in Rust beside each capability
   contract.

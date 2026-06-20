@@ -36,7 +36,7 @@ rename, copy, stat, and access checks. The desktop dispatcher rejects absolute
 paths and parent traversal before invoking the `cap-std` directory capability.
 
 Daemon stream connect/write/close traffic is intentionally separate from the
-generated IPC command union. Frontend code should use `cefari.daemon.connect()`
+generated IPC command union. Frontend code should use `cefari.desktop.daemon.connect()`
 for byte streams and layer any framing or RPC protocol on top.
 
 Window creation payloads support app-defined IDs, frontend routes, initial

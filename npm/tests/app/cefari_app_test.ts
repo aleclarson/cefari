@@ -1,8 +1,8 @@
 import {
+  capabilitySupport,
   cefari,
   type CefariBridge,
   CefariError,
-  capabilitySupport,
   type CefariIpcCommand,
   type CefariIpcEvent,
   type CefariIpcResponse,
@@ -32,7 +32,7 @@ Deno.test("reports unavailable outside the Cefari shell", async () => {
   withBridge(undefined);
 
   assertEquals(cefari.isAvailable(), false);
-  assertEquals(cefari.daemon.isConfigured(), false);
+  assertEquals(cefari.desktop.daemon.isConfigured(), false);
 
   const result = await cefari.tryInvoke({ command: "updateState" });
   assertEquals(result.ok, false);
@@ -41,11 +41,11 @@ Deno.test("reports unavailable outside the Cefari shell", async () => {
   }
 
   await assertRejectsCefariError(
-    () => cefari.updates.state(),
+    () => cefari.desktop.updates.state(),
     "window.cefari is only available",
   );
   await assertRejectsCefariError(
-    () => cefari.daemon.connect(),
+    () => cefari.desktop.daemon.connect(),
     "daemon streams are only available",
   );
 });
@@ -73,11 +73,19 @@ Deno.test("wraps typed namespace commands", async () => {
     },
   });
 
-  assertEquals(await cefari.windows.current(), mainWindowState("Focused"));
-  assertEquals(await cefari.windows.list(), [mainWindowState("Focused")]);
-  assertEquals(await cefari.windows.get("main"), mainWindowState("Focused"));
   assertEquals(
-    await cefari.windows.create({
+    await cefari.desktop.windows.current(),
+    mainWindowState("Focused"),
+  );
+  assertEquals(await cefari.desktop.windows.list(), [
+    mainWindowState("Focused"),
+  ]);
+  assertEquals(
+    await cefari.desktop.windows.get("main"),
+    mainWindowState("Focused"),
+  );
+  assertEquals(
+    await cefari.desktop.windows.create({
       id: "settings",
       route: "/settings",
       title: "Settings",
@@ -86,20 +94,20 @@ Deno.test("wraps typed namespace commands", async () => {
     }),
     mainWindowState("Settings", "settings", "secondary", "/settings"),
   );
-  assertEquals(await cefari.window.focus(), {
+  assertEquals(await cefari.desktop.window.focus(), {
     ...mainWindowState("Focused"),
     focused: true,
   });
   assertEquals(
-    await cefari.windows.focus("settings"),
+    await cefari.desktop.windows.focus("settings"),
     mainWindowState("Focused"),
   );
-  assertEquals(await cefari.window.setTitle("Dashboard"), {
+  assertEquals(await cefari.desktop.window.setTitle("Dashboard"), {
     ...mainWindowState("Dashboard"),
     focused: true,
   });
   assertEquals(
-    await cefari.windows.setTitle("settings", "Settings"),
+    await cefari.desktop.windows.setTitle("settings", "Settings"),
     mainWindowState("Settings"),
   );
   assertEquals(
@@ -108,21 +116,21 @@ Deno.test("wraps typed namespace commands", async () => {
       url: "https://example.com/",
     },
   );
-  assertEquals(await cefari.updates.state(), { state: "current" });
-  assertEquals(await cefari.updates.check(), {
+  assertEquals(await cefari.desktop.updates.state(), { state: "current" });
+  assertEquals(await cefari.desktop.updates.check(), {
     state: "available",
     version: "1.2.3",
     updateId: "1.2.3",
   });
-  assertEquals(await cefari.updates.apply({ updateId: "1.2.3" }), {
+  assertEquals(await cefari.desktop.updates.apply({ updateId: "1.2.3" }), {
     state: "readyToRestart",
     version: "1.2.3",
     restartRequired: true,
   });
-  await cefari.updates.restart();
-  await cefari.updates.applyAndRestart();
-  assertEquals(await cefari.service.status(), { status: "running" });
-  assertEquals(await cefari.tray.restoreWindow(), { restored: true });
+  await cefari.desktop.updates.restart();
+  await cefari.desktop.updates.applyAndRestart();
+  assertEquals(await cefari.desktop.service.status(), { status: "running" });
+  assertEquals(await cefari.desktop.tray.restoreWindow(), { restored: true });
   assertEquals(await cefari.downloads.cancel("cef-1"), {
     result: "canceled",
     payload: { id: "cef-1" },
@@ -654,7 +662,7 @@ Deno.test("filters typed events", () => {
   > = [];
   const workerMessages: number[] = [];
 
-  const unsubscribeFocus = cefari.window.onFocused((state) => {
+  const unsubscribeFocus = cefari.desktop.window.onFocused((state) => {
     focused.push(state.title);
   });
   const unsubscribeDeepLink = cefari.on("deepLinkOpened", (event) => {
@@ -663,7 +671,7 @@ Deno.test("filters typed events", () => {
   const unsubscribeDownload = cefari.on("download.completed", (event) => {
     downloads.push(event.destinationPath);
   });
-  const unsubscribeFilteredFocus = cefari.windows.onFocused(
+  const unsubscribeFilteredFocus = cefari.desktop.windows.onFocused(
     (event) => filteredFocus.push(event.windowId),
     { windowId: "settings" },
   );
@@ -809,9 +817,9 @@ Deno.test("throws typed errors for unconfigured daemon bridge", async () => {
     },
   });
 
-  assertEquals(cefari.daemon.isConfigured(), true);
+  assertEquals(cefari.desktop.daemon.isConfigured(), true);
   const error = await assertRejectsCefariError(
-    () => cefari.daemon.connect(),
+    () => cefari.desktop.daemon.connect(),
     "daemon is not configured",
   );
   assertEquals(error.code, "unsupported");
@@ -835,8 +843,8 @@ Deno.test("plumbs daemon stream connect, read, write, and close", async () => {
     },
   });
 
-  const connection = await cefari.daemon.connect();
-  assertEquals(cefari.daemon.isConfigured(), true);
+  const connection = await cefari.desktop.daemon.connect();
+  assertEquals(cefari.desktop.daemon.isConfigured(), true);
 
   const reader = connection.readable.getReader();
   for (const handler of handlers) {

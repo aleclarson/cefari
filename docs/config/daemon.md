@@ -41,12 +41,12 @@ daemon.
 
 ## Frontend Streams
 
-Frontend code connects through `cefari.daemon.connect()` from `cefari/app`:
+Frontend code connects through `cefari.desktop.daemon.connect()` from `cefari/app`:
 
 ```ts
 import { cefari } from "cefari/app";
 
-const connection = await cefari.daemon.connect();
+const connection = await cefari.desktop.daemon.connect();
 await connection.writable.getWriter().write(new TextEncoder().encode("ping"));
 ```
 

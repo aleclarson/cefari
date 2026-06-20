@@ -212,7 +212,7 @@ frontend APIs.
   - Apps can call low-level IPC commands directly when needed.
   - Apps can use throwing APIs or result-style APIs.
 - Cefari exposes daemon stream APIs when an app configures a daemon.
-  - Frontend code can call `cefari.daemon.connect()`.
+  - Frontend code can call `cefari.desktop.daemon.connect()`.
   - Frontend code receives daemon-to-webview bytes through `readable`.
   - Frontend code sends webview-to-daemon bytes through `writable`.
   - Daemon code can import stdio helpers from `cefari/daemon`.
@@ -256,13 +256,13 @@ frontend APIs.
 > This section covers app lifecycle and native window controls.
 
 - Apps can ask the native runtime to quit.
-- Apps can control the current native window through `cefari.window`.
+- Apps can control the current native window through `cefari.desktop.window`.
   - Apps can read the current window state.
   - Apps can show the current window.
   - Apps can focus the current window.
   - Apps can close the current window.
   - Apps can set the current window title.
-- Apps can create and manage secondary native windows through `cefari.windows`.
+- Apps can create and manage secondary native windows through `cefari.desktop.windows`.
   - Secondary windows use Cefari string IDs.
   - The startup window is always `main`.
   - Apps can list live windows.
@@ -293,7 +293,7 @@ frontend APIs.
   - Window events include the Cefari window ID.
   - Created, shown, focused, blurred, close-requested, closed, moved, resized,
     and title-changed events are available.
-  - `cefari.windows` event helpers can filter by window ID.
+  - `cefari.desktop.windows` event helpers can filter by window ID.
 
 ## Shell APIs
 

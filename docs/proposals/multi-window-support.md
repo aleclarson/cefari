@@ -168,20 +168,20 @@ state include a `WindowState` snapshot.
 
 ## Frontend TypeScript API
 
-`cefari.window` remains the current-window convenience API:
+`cefari.desktop.window` remains the current-window convenience API:
 
 ```ts
-await cefari.window.current();
-await cefari.window.show();
-await cefari.window.focus();
-await cefari.window.close();
-await cefari.window.setTitle("Dashboard");
+await cefari.desktop.window.current();
+await cefari.desktop.window.show();
+await cefari.desktop.window.focus();
+await cefari.desktop.window.close();
+await cefari.desktop.window.setTitle("Dashboard");
 ```
 
-`cefari.windows` manages all windows:
+`cefari.desktop.windows` manages all windows:
 
 ```ts
-const settings = await cefari.windows.create({
+const settings = await cefari.desktop.windows.create({
   id: "settings",
   route: "/settings",
   title: "Settings",
@@ -189,19 +189,19 @@ const settings = await cefari.windows.create({
   height: 560,
 });
 
-await cefari.windows.focus("settings");
-await cefari.windows.setTitle("settings", "Preferences");
-await cefari.windows.close("settings");
+await cefari.desktop.windows.focus("settings");
+await cefari.desktop.windows.setTitle("settings", "Preferences");
+await cefari.desktop.windows.close("settings");
 
-const all = await cefari.windows.list();
+const all = await cefari.desktop.windows.list();
 ```
 
 Event helpers should support both global and window-filtered subscriptions:
 
 ```ts
-cefari.windows.onCreated((event) => {});
-cefari.windows.onClosed("settings", (event) => {});
-cefari.window.onFocused((event) => {});
+cefari.desktop.windows.onCreated((event) => {});
+cefari.desktop.windows.onClosed("settings", (event) => {});
+cefari.desktop.window.onFocused((event) => {});
 ```
 
 ## Desktop Runtime Responsibilities

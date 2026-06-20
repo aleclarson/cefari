@@ -1,13 +1,14 @@
 export type * from "./ipc.ts";
 export {
   capabilitySupport,
-  ipcCapabilitySupport,
-  supportsTarget,
   type CefariTarget,
   type IpcCapabilitySupport,
+  ipcCapabilitySupport,
   type PlatformSupport,
+  supportsTarget,
 } from "./platform-support.ts";
 export type { AppApi } from "./app.ts";
+export { desktop, type DesktopApi } from "./desktop.ts";
 export { CefariError, type CefariResult, isCefariError } from "./errors.ts";
 export type { CefariBridge, CefariWindow, Unsubscribe } from "./transport.ts";
 export { invoke, isAvailable, onAnyEvent, tryInvoke } from "./transport.ts";
@@ -19,7 +20,7 @@ export {
   type DialogsApi,
 } from "./dialogs.ts";
 export { downloads, type DownloadsApi } from "./downloads.ts";
-export { daemon, type DaemonApi, type DaemonConnection } from "./daemon.ts";
+export type { DaemonApi, DaemonConnection } from "./daemon.ts";
 export { files, type FilesApi, type JsonValue } from "./files.ts";
 export {
   CefariDirent,
@@ -35,9 +36,7 @@ export type {
   WindowCreateOptions,
   WindowTargetInput,
 } from "./window.ts";
-export { windowControls as window } from "./window.ts";
 export type { WindowEventFilter, WindowsApi } from "./windows.ts";
-export { windows } from "./windows.ts";
 export type {
   CefariWorkerErrorEvent,
   CefariWorkerExitEvent,
@@ -55,11 +54,8 @@ export { workers } from "./workers.ts";
 export type { ShellApi } from "./shell.ts";
 export { shell } from "./shell.ts";
 export type { UpdateApplyOptions, UpdatesApi } from "./updates.ts";
-export { updates } from "./updates.ts";
 export type { ServiceApi } from "./service.ts";
-export { service } from "./service.ts";
 export type { TrayApi } from "./tray.ts";
-export { tray } from "./tray.ts";
 export {
   type NotificationCategoriesRegistered,
   type NotificationPermission,
@@ -71,9 +67,9 @@ export {
 } from "./notifications.ts";
 
 import { app, type AppApi } from "./app.ts";
+import { desktop, type DesktopApi } from "./desktop.ts";
 import { dialogs, type DialogsApi } from "./dialogs.ts";
 import { downloads, type DownloadsApi } from "./downloads.ts";
-import { daemon, type DaemonApi } from "./daemon.ts";
 import { type CefariEventMap, on } from "./events.ts";
 import type { CefariResult } from "./errors.ts";
 import { files, type FilesApi } from "./files.ts";
@@ -84,14 +80,9 @@ import type {
   CefariIpcResult,
 } from "./ipc.ts";
 import { notifications, type NotificationsApi } from "./notifications.ts";
-import { service, type ServiceApi } from "./service.ts";
 import { shell, type ShellApi } from "./shell.ts";
-import { tray, type TrayApi } from "./tray.ts";
 import { invoke, isAvailable, onAnyEvent, tryInvoke } from "./transport.ts";
 import type { Unsubscribe } from "./transport.ts";
-import { updates, type UpdatesApi } from "./updates.ts";
-import { type WindowApi, windowControls } from "./window.ts";
-import { windows, type WindowsApi } from "./windows.ts";
 import { workers, type WorkersApi } from "./workers.ts";
 
 export type CefariApp = {
@@ -104,17 +95,12 @@ export type CefariApp = {
   ): Unsubscribe;
   onAnyEvent(handler: (event: CefariIpcEvent) => void): Unsubscribe;
   app: AppApi;
-  window: WindowApi;
-  windows: WindowsApi;
+  desktop: DesktopApi;
   workers: WorkersApi;
   shell: ShellApi;
-  updates: UpdatesApi;
-  service: ServiceApi;
-  tray: TrayApi;
   notifications: NotificationsApi;
   dialogs: DialogsApi;
   downloads: DownloadsApi;
-  daemon: DaemonApi;
   fs: FileSystemApi;
   files: FilesApi;
 };
@@ -126,17 +112,12 @@ export const cefari: Readonly<CefariApp> = Object.freeze({
   on,
   onAnyEvent,
   app,
-  window: windowControls,
-  windows,
+  desktop,
   workers,
   shell,
-  updates,
-  service,
-  tray,
   notifications,
   dialogs,
   downloads,
-  daemon,
   fs,
   files,
 });

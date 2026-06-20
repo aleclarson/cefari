@@ -49,7 +49,7 @@ daemon: {
 ```
 
 Daemon stdout is reserved for byte-stream protocol data when frontend code uses
-`cefari.daemon.connect()`. Write daemon logs to stderr.
+`cefari.desktop.daemon.connect()`. Write daemon logs to stderr.
 
 ## Release Workflows
 

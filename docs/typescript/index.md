@@ -24,8 +24,8 @@ The default app object is `cefari`:
 import { cefari } from "cefari/app";
 
 if (cefari.isAvailable()) {
-  await cefari.window.setTitle("Dashboard");
-  await cefari.windows.create({ id: "settings", route: "/settings" });
+  await cefari.desktop.window.setTitle("Dashboard");
+  await cefari.desktop.windows.create({ id: "settings", route: "/settings" });
 }
 ```
 
@@ -38,13 +38,13 @@ await shell.openExternalUrl("https://example.com");
 const state = await updates.state();
 ```
 
-Configured daemon streams are available through `cefari.daemon`:
+Configured daemon streams are available through `cefari.desktop.daemon`:
 
 ```ts
 import { cefari } from "cefari/app";
 
-if (cefari.daemon.isConfigured()) {
-  const connection = await cefari.daemon.connect();
+if (cefari.desktop.daemon.isConfigured()) {
+  const connection = await cefari.desktop.daemon.connect();
   const writer = connection.writable.getWriter();
   await writer.write(new TextEncoder().encode("ping"));
   await writer.close();

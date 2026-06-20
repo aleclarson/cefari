@@ -6,8 +6,8 @@ as named exports.
 ```ts
 import { cefari } from "cefari/app";
 
-await cefari.window.focus();
-await cefari.windows.create({ id: "settings", route: "/settings" });
+await cefari.desktop.window.focus();
+await cefari.desktop.windows.create({ id: "settings", route: "/settings" });
 ```
 
 ## App
@@ -35,13 +35,13 @@ Current methods:
 
 ## Window
 
-Use `cefari.window` for current-window convenience operations:
+Use `cefari.desktop.window` for current-window convenience operations:
 
 ```ts
-await cefari.window.show();
-await cefari.window.focus();
+await cefari.desktop.window.show();
+await cefari.desktop.window.focus();
 
-const state = await cefari.window.setTitle("Dashboard");
+const state = await cefari.desktop.window.setTitle("Dashboard");
 console.log(state.title);
 ```
 
@@ -51,7 +51,7 @@ also accept an optional target when code needs to use the convenience namespace
 against a specific window.
 
 ```ts
-const closedState = await cefari.window.close();
+const closedState = await cefari.desktop.window.close();
 console.log(closedState.visible);
 ```
 
@@ -70,11 +70,11 @@ Current methods:
 
 ## Windows
 
-Use `cefari.windows` when code needs to create or target specific native
+Use `cefari.desktop.windows` when code needs to create or target specific native
 windows:
 
 ```ts
-const settings = await cefari.windows.create({
+const settings = await cefari.desktop.windows.create({
   id: "settings",
   route: "/settings",
   title: "Settings",
@@ -83,8 +83,8 @@ const settings = await cefari.windows.create({
   persistKey: "settings",
 });
 
-await cefari.windows.focus(settings.id);
-await cefari.windows.setTitle("settings", "Preferences");
+await cefari.desktop.windows.focus(settings.id);
+await cefari.desktop.windows.setTitle("settings", "Preferences");
 ```
 
 The startup window is always `main`. Secondary windows load trusted app
@@ -95,7 +95,7 @@ default and for secondary windows only when `persistKey` is supplied.
 Parented and modal windows are supported for secondary windows:
 
 ```ts
-await cefari.windows.create({
+await cefari.desktop.windows.create({
   id: "dialog",
   route: "/dialog",
   parentId: "main",
@@ -213,10 +213,10 @@ Current methods:
 
 ## Updates
 
-Use `cefari.updates` for update state and user-triggered update checks:
+Use `cefari.desktop.updates` for update state and user-triggered update checks:
 
 ```ts
-const state = await cefari.updates.state();
+const state = await cefari.desktop.updates.state();
 
 switch (state.state) {
   case "notConfigured":
@@ -239,7 +239,7 @@ switch (state.state) {
 Run a check when the user asks for one:
 
 ```ts
-const result = await cefari.updates.check();
+const result = await cefari.desktop.updates.check();
 
 if (result.state === "available") {
   console.log(`update available: ${result.version}`);
@@ -249,15 +249,15 @@ if (result.state === "available") {
 Apply the checked update from an explicit user-visible action:
 
 ```ts
-const checked = await cefari.updates.check();
+const checked = await cefari.desktop.updates.check();
 
 if (checked.state === "available") {
-  const applied = await cefari.updates.apply({
+  const applied = await cefari.desktop.updates.apply({
     updateId: checked.updateId,
   });
 
   if (applied.restartRequired) {
-    await cefari.updates.restart();
+    await cefari.desktop.updates.restart();
   }
 }
 ```
@@ -265,7 +265,7 @@ if (checked.state === "available") {
 For a one-shot action, use `applyAndRestart()`:
 
 ```ts
-await cefari.updates.applyAndRestart({ updateId: result.updateId });
+await cefari.desktop.updates.applyAndRestart({ updateId: result.updateId });
 ```
 
 `apply()` installs the native update that Rust cached from the most recent
@@ -276,7 +276,7 @@ installation, so app code must not rely on `apply()` always returning.
 Subscribe to runtime update state changes:
 
 ```ts
-const unsubscribe = cefari.updates.onStateChanged((state) => {
+const unsubscribe = cefari.desktop.updates.onStateChanged((state) => {
   console.log(state.state);
 });
 
@@ -294,10 +294,10 @@ Current methods:
 
 ## Service
 
-Use `cefari.service` when the UI needs daemon status:
+Use `cefari.desktop.service` when the UI needs daemon status:
 
 ```ts
-const service = await cefari.service.status();
+const service = await cefari.desktop.service.status();
 console.log(service.status);
 ```
 
@@ -312,10 +312,10 @@ restart actions.
 
 ## Daemon
 
-Use `cefari.daemon` when a configured daemon needs a low-level byte stream:
+Use `cefari.desktop.daemon` when a configured daemon needs a low-level byte stream:
 
 ```ts
-const connection = await cefari.daemon.connect();
+const connection = await cefari.desktop.daemon.connect();
 const writer = connection.writable.getWriter();
 await writer.write(new TextEncoder().encode("ping"));
 ```
@@ -421,7 +421,7 @@ Current `cefari.files` methods:
 Subscribe to tray restore events when the UI needs to refresh visible state:
 
 ```ts
-const unsubscribe = cefari.tray.onRestoreWindow(() => {
+const unsubscribe = cefari.desktop.tray.onRestoreWindow(() => {
   console.log("tray requested window restore");
 });
 
@@ -431,7 +431,7 @@ unsubscribe();
 The wrapper also exposes the command used by Rust tray handling:
 
 ```ts
-const result = await cefari.tray.restoreWindow();
+const result = await cefari.desktop.tray.restoreWindow();
 console.log(result.restored);
 ```
 

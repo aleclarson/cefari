@@ -56,7 +56,7 @@ arrives as:
 ```
 
 Daemon byte streams do not use generated IPC bindings. Use
-`cefari.daemon.connect()` from `cefari/app` for webview-to-daemon and
+`cefari.desktop.daemon.connect()` from `cefari/app` for webview-to-daemon and
 daemon-to-webview bytes. The stream bridge is intentionally low-level and
 separate from `CefariIpcCommand` so apps can layer their own framing or RPC
 library on top.

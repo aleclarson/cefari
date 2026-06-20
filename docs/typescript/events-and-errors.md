@@ -53,18 +53,18 @@ cefari.on("deepLinkOpened", (event) => {
 Namespace helpers call the same event system:
 
 ```ts
-const offFocus = cefari.window.onFocused((state) => {
+const offFocus = cefari.desktop.window.onFocused((state) => {
   console.log(state.title);
 });
 
-const offSettingsFocus = cefari.windows.onFocused(
+const offSettingsFocus = cefari.desktop.windows.onFocused(
   (event) => {
     console.log(event.state.title);
   },
   { windowId: "settings" },
 );
 
-const offUpdate = cefari.updates.onStateChanged((state) => {
+const offUpdate = cefari.desktop.updates.onStateChanged((state) => {
   console.log(state.state);
 });
 
