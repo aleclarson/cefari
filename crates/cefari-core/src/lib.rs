@@ -7,6 +7,7 @@
 pub mod config;
 pub mod ipc;
 pub mod logging;
+pub mod platform;
 pub mod paths;
 pub mod resources;
 pub mod services;
@@ -26,6 +27,7 @@ pub use logging::{
     CEFARI_DAEMON_LOG_ENV, LogFileConfig, LogFormat, LogRotation, LogStream, RuntimeLogConfig,
     prune_rotated_logs,
 };
+pub use platform::{CefariTarget, PlatformSupport};
 pub use paths::{AppIdentity, RuntimePaths};
 pub use resources::{PackageFormat, packaged_resources_dir, resolve_resource};
 pub use services::{
