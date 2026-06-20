@@ -7,6 +7,7 @@ pub mod app;
 pub mod dialogs;
 pub mod downloads;
 pub mod files;
+pub mod logs;
 pub mod notifications;
 pub mod service;
 pub mod shell;
@@ -32,6 +33,7 @@ pub trait DesktopIpcContext:
     + dialogs::DialogContext
     + notifications::NotificationContext
     + files::FilesContext
+    + logs::LogContext
     + workers::WorkersContext
 {
 }
@@ -47,6 +49,7 @@ impl<T> DesktopIpcContext for T where
         + dialogs::DialogContext
         + notifications::NotificationContext
         + files::FilesContext
+        + logs::LogContext
         + workers::WorkersContext
 {
 }
@@ -94,6 +97,7 @@ fn dispatch_command(
         CefariIpcCommand::Dialog(command) => dialogs::dispatch(command, context),
         CefariIpcCommand::Notification(command) => notifications::dispatch(command, context),
         CefariIpcCommand::Files(command) => files::dispatch(command, context),
+        CefariIpcCommand::Log(request) => logs::dispatch(request, context),
         CefariIpcCommand::Worker(command) => workers::dispatch(command, context),
     }
 }
@@ -117,20 +121,20 @@ mod tests {
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
         DialogCommand, DialogRequest, DialogResult, DownloadCommand, DownloadIdRequest,
-        DownloadIdResult, DownloadResult, FileResult, FilesCommand, NotificationCapabilities,
-        NotificationCategory, NotificationCategoryAction, NotificationCommand,
-        NotificationRegisterCategoriesRequest, NotificationRemoveDeliveredRequest,
-        NotificationResult, NotificationSendRequest, OpenExternalUrlRequest, ServiceStatusResult,
-        TrayResult, UpdateApplyRequest, UpdateApplyResult, UpdateCheckResult, UpdateStateKind,
-        UpdateStateResult, WindowCreateRequest, WindowKind, WindowListResult,
-        WindowSetTitleRequest, WindowState, WindowTargetRequest, WorkerCommand, WorkerIdResult,
-        WorkerListResult, WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState,
-        WorkerStatus,
+        DownloadIdResult, DownloadResult, FileResult, FilesCommand, LogLevel, LogRequest,
+        NotificationCapabilities, NotificationCategory, NotificationCategoryAction,
+        NotificationCommand, NotificationRegisterCategoriesRequest,
+        NotificationRemoveDeliveredRequest, NotificationResult, NotificationSendRequest,
+        OpenExternalUrlRequest, ServiceStatusResult, TrayResult, UpdateApplyRequest,
+        UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
+        WindowCreateRequest, WindowKind, WindowListResult, WindowSetTitleRequest, WindowState,
+        WindowTargetRequest, WorkerCommand, WorkerIdResult, WorkerListResult, WorkerResult,
+        WorkerSpawnRequest, WorkerSpawnResult, WorkerState, WorkerStatus,
     };
 
     use super::{
-        DesktopIpcDispatcher, app, dialogs, downloads, files, notifications, service, shell, tray,
-        updates, windows, workers,
+        DesktopIpcDispatcher, app, dialogs, downloads, files, logs, notifications, service, shell,
+        tray, updates, windows, workers,
     };
 
     #[derive(Debug)]
@@ -139,6 +143,7 @@ mod tests {
         window_title: String,
         reload_should_fail: bool,
         notifications_available: bool,
+        log_messages: Vec<String>,
     }
 
     impl Default for FakeShellContext {
@@ -148,6 +153,7 @@ mod tests {
                 window_title: "Cefari".to_owned(),
                 reload_should_fail: false,
                 notifications_available: true,
+                log_messages: Vec::new(),
             }
         }
     }
@@ -396,6 +402,14 @@ mod tests {
         }
     }
 
+    impl logs::LogContext for FakeShellContext {
+        fn log(&mut self, request: &LogRequest) -> Result<()> {
+            self.calls.push("log");
+            self.log_messages.push(request.message.clone());
+            Ok(())
+        }
+    }
+
     impl workers::WorkersContext for FakeShellContext {
         fn worker(&mut self, command: &WorkerCommand) -> Result<WorkerResult, CefariIpcError> {
             match command {
@@ -546,6 +560,11 @@ mod tests {
             CefariIpcCommand::Files(FilesCommand::Exists(cefari_core::FilePathRequest {
                 path: "state.json".to_owned(),
             })),
+            CefariIpcCommand::Log(LogRequest {
+                level: LogLevel::Info,
+                message: "app.ready".to_owned(),
+                properties_json: r#"{"component":"startup"}"#.to_owned(),
+            }),
             CefariIpcCommand::Worker(WorkerCommand::Spawn(WorkerSpawnRequest {
                 worker: "thumbnailer".to_owned(),
                 input_json: r#"{"imageId":"abc"}"#.to_owned(),
@@ -596,10 +615,12 @@ mod tests {
                 "notification_remove_all_delivered",
                 "files_app_data_dir",
                 "files_exists",
+                "log",
                 "worker_spawn",
                 "worker_list",
             ]
         );
+        assert_eq!(context.log_messages, ["app.ready"]);
     }
 
     #[test]

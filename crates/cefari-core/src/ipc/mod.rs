@@ -7,6 +7,7 @@ pub mod app;
 pub mod dialogs;
 pub mod downloads;
 pub mod files;
+pub mod logs;
 pub mod notifications;
 pub mod service;
 pub mod shell;
@@ -18,6 +19,7 @@ pub mod workers;
 pub use dialogs::*;
 pub use downloads::*;
 pub use files::*;
+pub use logs::*;
 pub use notifications::*;
 pub use service::*;
 pub use shell::*;
@@ -72,7 +74,7 @@ mod tests {
         CefariIpcCommand, CefariIpcError, CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest,
         CefariIpcResponse, DeepLinkOpenEvent, DialogCommand, DialogDefaultDirectory, DialogFilter,
         DialogModality, DialogRequest, DialogResult, DialogSelectedPath, DownloadCommand,
-        DownloadCompletedEvent, DownloadEvent, DownloadIdRequest, FileKind,
+        DownloadCompletedEvent, DownloadEvent, DownloadIdRequest, FileKind, LogLevel, LogRequest,
         IPC_CAPABILITY_SUPPORT_TYPESCRIPT, NotificationCommand, OpenExternalUrlRequest,
         WindowIdEvent, WindowSetTitleRequest, ipc_capability_support, ipc_types,
     };
@@ -209,6 +211,27 @@ mod tests {
         );
         assert!(json.contains("download"));
         assert!(json.contains("cancel"));
+    }
+
+    #[test]
+    fn round_trips_log_commands() {
+        let request = CefariIpcRequest {
+            id: "log-info".to_owned(),
+            command: CefariIpcCommand::Log(LogRequest {
+                level: LogLevel::Info,
+                message: "app.ready".to_owned(),
+                properties_json: r#"{"component":"startup"}"#.to_owned(),
+            }),
+        };
+
+        let json = serde_json::to_string(&request).expect("request should serialize");
+
+        assert_eq!(
+            serde_json::from_str::<CefariIpcRequest>(&json).expect("request should deserialize"),
+            request
+        );
+        assert!(json.contains("log"));
+        assert!(json.contains("propertiesJson"));
     }
 
     #[test]

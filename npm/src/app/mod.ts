@@ -30,6 +30,12 @@ export {
   type FileSystemApi,
   fs,
 } from "./fs.ts";
+export {
+  logs,
+  type LogLevel,
+  type LogProperties,
+  type LogsApi,
+} from "./logs.ts";
 export { app } from "./app.ts";
 export type {
   WindowApi,
@@ -74,6 +80,7 @@ import { type CefariEventMap, on } from "./events.ts";
 import type { CefariResult } from "./errors.ts";
 import { files, type FilesApi } from "./files.ts";
 import { type FileSystemApi, fs } from "./fs.ts";
+import { logs, type LogsApi } from "./logs.ts";
 import type {
   CefariIpcCommand,
   CefariIpcEvent,
@@ -103,6 +110,7 @@ export type CefariApp = {
   downloads: DownloadsApi;
   fs: FileSystemApi;
   files: FilesApi;
+  logs: LogsApi;
 };
 
 export const cefari: Readonly<CefariApp> = Object.freeze({
@@ -120,4 +128,5 @@ export const cefari: Readonly<CefariApp> = Object.freeze({
   downloads,
   fs,
   files,
+  logs,
 });

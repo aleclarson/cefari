@@ -530,8 +530,8 @@ mod tests {
     use cefari_core::{
         AppDataDirInfo, CefariIpcCommand, CefariIpcError, CefariIpcOutcome, CefariIpcRequest,
         DialogCommand, DialogResult, DownloadCommand, DownloadIdResult, DownloadResult, FileResult,
-        FilesCommand, NotificationCommand, NotificationResult, ServiceStatusResult, TrayResult,
-        UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
+        FilesCommand, LogRequest, NotificationCommand, NotificationResult, ServiceStatusResult,
+        TrayResult, UpdateApplyResult, UpdateCheckResult, UpdateStateKind, UpdateStateResult,
         WindowCreateRequest, WindowKind, WindowListResult, WindowSetTitleRequest, WindowState,
         WindowTargetRequest, WorkerCommand, WorkerListResult, WorkerResult, WorkerState,
         WorkerStatus,
@@ -684,6 +684,12 @@ mod tests {
                 FilesCommand::Exists(_) => Ok(FileResult::Exists { exists: true }),
                 _ => anyhow::bail!("unsupported test file command"),
             }
+        }
+    }
+
+    impl desktop_ipc::logs::LogContext for FakeShellContext {
+        fn log(&mut self, _request: &LogRequest) -> Result<()> {
+            Ok(())
         }
     }
 

@@ -257,6 +257,8 @@ Deno.test("wraps typed namespace commands", async () => {
     await cefari.files.readBytes("blob.bin"),
     new Uint8Array([1, 2]),
   );
+  await cefari.logs.info("app.ready", { component: "startup" });
+  await cefari.logs.warn("app.slow");
 
   assertEquals(commands, [
     { command: "windowCurrent" },
@@ -473,6 +475,22 @@ Deno.test("wraps typed namespace commands", async () => {
       payload: {
         file: "readFile",
         payload: { path: "blob.bin", encoding: "base64" },
+      },
+    },
+    {
+      command: "log",
+      payload: {
+        level: "info",
+        message: "app.ready",
+        propertiesJson: '{"component":"startup"}',
+      },
+    },
+    {
+      command: "log",
+      payload: {
+        level: "warn",
+        message: "app.slow",
+        propertiesJson: "{}",
       },
     },
   ]);
@@ -985,6 +1003,7 @@ function responseFor(command: CefariIpcCommand): CefariIpcResponse {
   switch (command.command) {
     case "appQuit":
     case "openLogs":
+    case "log":
       return ok({ result: "empty" });
     case "windowCurrent":
       return ok({

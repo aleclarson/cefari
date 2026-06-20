@@ -9,7 +9,7 @@ export type AppDataDirInfo = {
 	displayPath: string,
 };
 
-export type CefariIpcCommand = { command: "appQuit" } | { command: "windowCurrent" } | { command: "windowList" } | { command: "windowCreate"; payload: WindowCreateRequest } | { command: "windowShow"; payload: WindowTargetRequest } | { command: "windowFocus"; payload: WindowTargetRequest } | { command: "windowClose"; payload: WindowTargetRequest } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "download"; payload: DownloadCommand } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand } | { command: "worker"; payload: WorkerCommand };
+export type CefariIpcCommand = { command: "appQuit" } | { command: "windowCurrent" } | { command: "windowList" } | { command: "windowCreate"; payload: WindowCreateRequest } | { command: "windowShow"; payload: WindowTargetRequest } | { command: "windowFocus"; payload: WindowTargetRequest } | { command: "windowClose"; payload: WindowTargetRequest } | { command: "windowSetTitle"; payload: WindowSetTitleRequest } | { command: "openLogs" } | { command: "reloadUi" } | { command: "openExternalUrl"; payload: OpenExternalUrlRequest } | { command: "updateState" } | { command: "updateCheck" } | { command: "updateApply"; payload: UpdateApplyRequest } | { command: "updateRestart" } | { command: "serviceStatus" } | { command: "trayRestoreWindow" } | { command: "download"; payload: DownloadCommand } | { command: "log"; payload: LogRequest } | { command: "notification"; payload: NotificationCommand } | { command: "dialog"; payload: DialogCommand } | { command: "files"; payload: FilesCommand } | { command: "worker"; payload: WorkerCommand };
 
 export type CefariIpcError = { code: "invalidCommand"; details: {
 	message: string,
@@ -186,6 +186,14 @@ export type FileWriteResult = {
 };
 
 export type FilesCommand = { file: "appDataDir" } | { file: "readFile"; payload: FileReadRequest } | { file: "writeFile"; payload: FileWriteRequest } | { file: "readdir"; payload: ReadDirRequest } | { file: "mkdir"; payload: MkdirRequest } | { file: "rm"; payload: RmRequest } | { file: "rename"; payload: RenameRequest } | { file: "copyFile"; payload: CopyFileRequest } | { file: "stat"; payload: FilePathRequest } | { file: "access"; payload: FilePathRequest } | { file: "exists"; payload: FilePathRequest };
+
+export type LogLevel = "debug" | "error" | "info" | "log" | "warn";
+
+export type LogRequest = {
+	level: LogLevel,
+	message: string,
+	propertiesJson: string,
+};
 
 export type MkdirRequest = {
 	path: string,

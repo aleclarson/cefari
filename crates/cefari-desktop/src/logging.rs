@@ -5,7 +5,10 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use cefari_core::{CEFARI_LOG_SCHEMA_SQL, CEFARI_LOG_SCOPE, RuntimeLogConfig, RuntimePaths};
+use cefari_core::{
+    CEFARI_LOG_SCHEMA_SQL, CEFARI_LOG_SCOPE, RuntimeLogConfig, RuntimePaths,
+    should_redact_log_property_key,
+};
 use rusqlite::{Connection, params};
 use serde_json::{Map, Number, Value};
 use tracing::{Event, Level, Subscriber, field::Field, field::Visit};
@@ -94,18 +97,18 @@ where
             properties.insert("line".to_owned(), Value::Number(Number::from(line)));
         }
 
-        let properties_json = Value::Object(properties).to_string();
-        let level = level_name(metadata.level());
-        let pid = i64::from(std::process::id());
-        let at = iso_timestamp();
+        let input = LogEntryInput {
+            scope: CEFARI_LOG_SCOPE,
+            level: level_name(metadata.level()),
+            message: &message,
+            properties: Value::Object(properties),
+            pid: i64::from(std::process::id()),
+            at: iso_timestamp(),
+        };
 
         match self.database.lock() {
             Ok(connection) => {
-                if let Err(error) = connection.execute(
-                    "INSERT INTO log_entries (at, scope, level, pid, message, properties_json)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![at, CEFARI_LOG_SCOPE, level, pid, message, properties_json],
-                ) {
+                if let Err(error) = insert_log_entry(&connection, &input) {
                     eprintln!("failed to write Cefari runtime log: {error}");
                 }
             }
@@ -113,6 +116,79 @@ where
                 eprintln!("failed to lock Cefari runtime log database: {error}");
             }
         }
+    }
+}
+
+pub(crate) fn append_log_entry(
+    database_path: &Path,
+    scope: &str,
+    level: &str,
+    message: &str,
+    properties: Value,
+) -> Result<()> {
+    let database = open_log_database(database_path)?;
+    let connection = database
+        .lock()
+        .map_err(|error| anyhow::anyhow!("failed to lock log database: {error}"))?;
+    let input = LogEntryInput {
+        scope,
+        level,
+        message,
+        properties,
+        pid: i64::from(std::process::id()),
+        at: iso_timestamp(),
+    };
+    insert_log_entry(&connection, &input).context("failed to insert log entry")
+}
+
+struct LogEntryInput<'a> {
+    scope: &'a str,
+    level: &'a str,
+    message: &'a str,
+    properties: Value,
+    pid: i64,
+    at: String,
+}
+
+fn insert_log_entry(connection: &Connection, input: &LogEntryInput<'_>) -> rusqlite::Result<()> {
+    let properties_json = redact_log_value(&input.properties, None).to_string();
+    connection.execute(
+        "INSERT INTO log_entries (at, scope, level, pid, message, properties_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            input.at,
+            input.scope,
+            input.level,
+            input.pid,
+            input.message,
+            properties_json
+        ],
+    )?;
+    Ok(())
+}
+
+fn redact_log_value(value: &Value, parent_key: Option<&str>) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| redact_log_value(item, parent_key))
+                .collect(),
+        ),
+        Value::Object(object) => Value::Object(
+            object
+                .iter()
+                .map(|(key, value)| {
+                    let value = if should_redact_log_property_key(key, parent_key) {
+                        Value::String("[redacted]".to_owned())
+                    } else {
+                        redact_log_value(value, Some(key))
+                    };
+                    (key.clone(), value)
+                })
+                .collect(),
+        ),
+        value => value.clone(),
     }
 }
 
@@ -211,7 +287,7 @@ fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{SqliteLogLayer, initialize_log_database, iso_timestamp};
+    use super::{SqliteLogLayer, append_log_entry, initialize_log_database, iso_timestamp};
     use cefari_core::CEFARI_LOG_SCOPE;
     use rusqlite::Connection;
     use serde_json::Value;
@@ -280,6 +356,57 @@ mod tests {
         assert_eq!(properties["window_id"], "main");
         assert_eq!(properties["duration_ms"], 38);
         assert!(properties["target"].is_string());
+    }
+
+    #[test]
+    fn appends_explicit_log_entries_to_sqlite() {
+        let root = std::env::temp_dir().join(format!("cefari-app-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("temp dir should exist");
+        let database_path = root.join("cefari.sqlite");
+
+        append_log_entry(
+            &database_path,
+            "app",
+            "warn",
+            "app.warning",
+            serde_json::json!({
+                "windowId": "main",
+                "token": "secret",
+                "env": {
+                    "OPENAI_API_KEY": "secret",
+                    "PATH": "/bin"
+                }
+            }),
+        )
+        .expect("app log should append");
+
+        let connection = Connection::open(&database_path).expect("database should open");
+        let row = connection
+            .query_row(
+                "SELECT scope, level, message, properties_json FROM log_entries",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                },
+            )
+            .expect("log row should exist");
+
+        assert_eq!(row.0, "app");
+        assert_eq!(row.1, "warn");
+        assert_eq!(row.2, "app.warning");
+        let properties: Value = serde_json::from_str(&row.3).expect("properties should be json");
+        assert_eq!(properties["windowId"], "main");
+        assert_eq!(properties["token"], "[redacted]");
+        assert_eq!(properties["env"]["OPENAI_API_KEY"], "[redacted]");
+        assert_eq!(properties["env"]["PATH"], "/bin");
+
+        std::fs::remove_dir_all(root).expect("temp dir should be removable");
     }
 
     #[test]
