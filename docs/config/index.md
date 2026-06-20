@@ -40,6 +40,16 @@ export default defineConfig({
   browser: {
     webgpu: true,
   },
+  targets: {
+    ios: {
+      bundleId: "dev.cefari.my-cefari-app",
+      permissions: ["notifications"],
+    },
+    android: {
+      applicationId: "dev.cefari.my_cefari_app",
+      permissions: ["notifications"],
+    },
+  },
   package: {
     productName: "My Cefari App",
     version: "0.1.0",
@@ -58,6 +68,7 @@ after evaluating the config. Legacy `frontend` fields are rejected.
 - [`workers`](workers.md): configured Deno script workers and permissions.
 - [`vite`](frontend.md): Vite root, Vite config file, and development port.
 - [`daemon`](daemon.md): optional Deno daemon entrypoint and stream contract.
+- [`targets`](targets.md): target-specific desktop, iOS, and Android settings.
 - [`package`](package.md): packaged product name and app version.
 
 ## Path Rules

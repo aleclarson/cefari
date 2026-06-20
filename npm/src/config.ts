@@ -19,13 +19,16 @@ export interface CefariConfigInput {
   workers?: Record<string, WorkerConfigInput>;
   vite?: ViteConfigInput;
   daemon?: DaemonConfigInput;
+  targets?: CefariTargetsConfigInput;
   package: PackageConfigInput;
   frontend?: never;
 }
 
 export type CefariConfigExport =
   | CefariConfigInput
-  | ((context: CefariConfigContext) => CefariConfigInput | Promise<CefariConfigInput>);
+  | ((
+    context: CefariConfigContext,
+  ) => CefariConfigInput | Promise<CefariConfigInput>);
 
 export interface AppConfigInput {
   projectName: string;
@@ -62,6 +65,29 @@ export interface WorkerConfigInput {
 export interface PackageConfigInput {
   productName: string;
   version: string;
+}
+
+export type CefariAppTarget = "desktop" | "ios" | "android";
+
+export interface CefariTargetsConfigInput {
+  desktop?: DesktopTargetConfigInput;
+  ios?: IosTargetConfigInput;
+  android?: AndroidTargetConfigInput;
+}
+
+export interface DesktopTargetConfigInput {
+  capabilities?: CefariCapability[];
+  daemon?: DaemonConfigInput;
+}
+
+export interface IosTargetConfigInput {
+  bundleId?: string;
+  permissions?: string[];
+}
+
+export interface AndroidTargetConfigInput {
+  applicationId?: string;
+  permissions?: string[];
 }
 
 export interface BrowserConfigInput {
@@ -113,6 +139,27 @@ export interface WorkerConfig {
 
 export interface PackageConfig extends PackageConfigInput {}
 
+export interface CefariTargetsConfig {
+  desktop: DesktopTargetConfig;
+  ios?: IosTargetConfig;
+  android?: AndroidTargetConfig;
+}
+
+export interface DesktopTargetConfig {
+  capabilities: CefariCapability[];
+  daemon?: DaemonConfig;
+}
+
+export interface IosTargetConfig {
+  bundleId: string;
+  permissions: string[];
+}
+
+export interface AndroidTargetConfig {
+  applicationId: string;
+  permissions: string[];
+}
+
 export interface BrowserConfig {
   webgpu: boolean;
 }
@@ -126,6 +173,7 @@ export interface ResolvedCefariConfig {
   workers: Record<string, WorkerConfig>;
   vite: ViteConfig;
   daemon?: DaemonConfig;
+  targets: CefariTargetsConfig;
   package: PackageConfig;
 }
 
@@ -136,6 +184,7 @@ export interface SerializableProjectConfig {
   workers: Record<string, WorkerConfig>;
   vite: ViteConfig;
   daemon?: DaemonConfig;
+  targets: CefariTargetsConfig;
   package: PackageConfig;
 }
 
@@ -159,11 +208,15 @@ export function tray(config: TrayCapabilityOptions): TrayCapabilityInput {
   return { type: "tray", ...config };
 }
 
-export function deepLinks(config: DeepLinksCapabilityOptions): DeepLinksCapabilityInput {
+export function deepLinks(
+  config: DeepLinksCapabilityOptions,
+): DeepLinksCapabilityInput {
   return { type: "deepLinks", ...config };
 }
 
-export async function loadCefariConfig(options: LoadCefariConfigOptions = {}): Promise<ResolvedCefariConfig> {
+export async function loadCefariConfig(
+  options: LoadCefariConfigOptions = {},
+): Promise<ResolvedCefariConfig> {
   const root = resolve(options.root ?? process.cwd());
   const configPath = resolve(root, options.configFile ?? "cefari.config.ts");
   if (!existsSync(configPath)) {
@@ -178,24 +231,39 @@ export async function loadCefariConfig(options: LoadCefariConfigOptions = {}): P
   };
 
   const { runnerImport } = await import("vite");
-  const { module } = await runnerImport<CefariConfigModule>(pathToFileURL(configPath).href, {
-    root,
-    logLevel: "silent",
-    resolve: {
-      alias: [{ find: /^cefari$/, replacement: resolve(dirname(fileURLToPath(import.meta.url)), "index.js") }],
+  const { module } = await runnerImport<CefariConfigModule>(
+    pathToFileURL(configPath).href,
+    {
+      root,
+      logLevel: "silent",
+      resolve: {
+        alias: [{
+          find: /^cefari$/,
+          replacement: resolve(
+            dirname(fileURLToPath(import.meta.url)),
+            "index.js",
+          ),
+        }],
+      },
     },
-  });
+  );
 
   if (!Object.hasOwn(module, "default")) {
-    throw new Error(`Cefari config at ${configPath} must have a default export`);
+    throw new Error(
+      `Cefari config at ${configPath} must have a default export`,
+    );
   }
 
   const configExport = module.default;
-  const config = typeof configExport === "function" ? await configExport(context) : configExport;
+  const config = typeof configExport === "function"
+    ? await configExport(context)
+    : configExport;
   return normalizeConfig(config, { root, configPath });
 }
 
-export function toSerializableProjectConfig(config: ResolvedCefariConfig): SerializableProjectConfig {
+export function toSerializableProjectConfig(
+  config: ResolvedCefariConfig,
+): SerializableProjectConfig {
   return {
     app: { ...config.app },
     browser: { ...config.browser },
@@ -203,22 +271,38 @@ export function toSerializableProjectConfig(config: ResolvedCefariConfig): Seria
     workers: cloneWorkers(config.workers),
     vite: { ...config.vite },
     ...(config.daemon === undefined ? {} : { daemon: { ...config.daemon } }),
+    targets: cloneTargets(config.targets),
     package: { ...config.package },
   };
 }
 
-function normalizeConfig(config: unknown, paths: { root: string; configPath: string }): ResolvedCefariConfig {
+function normalizeConfig(
+  config: unknown,
+  paths: { root: string; configPath: string },
+): ResolvedCefariConfig {
   const input = asRecord(config, "default export");
   if ("frontend" in input) {
-    throw new Error("frontend is no longer supported in cefari.config.ts; use vite instead");
+    throw new Error(
+      "frontend is no longer supported in cefari.config.ts; use vite instead",
+    );
   }
 
   const app = normalizeApp(input.app);
   const browser = normalizeBrowser(input.browser);
-  const capabilities = normalizeCapabilities(input.capabilities);
+  const topLevelCapabilities = normalizeCapabilities(
+    input.capabilities,
+    "capabilities",
+  );
   const workers = normalizeWorkers(input.workers);
   const vite = normalizeVite(input.vite);
-  const daemon = normalizeDaemon(input.daemon);
+  const topLevelDaemon = normalizeDaemon(input.daemon, "daemon");
+  const targets = normalizeTargets(input.targets, {
+    app,
+    topLevelCapabilities,
+    topLevelDaemon,
+  });
+  const capabilities = targets.desktop.capabilities;
+  const daemon = targets.desktop.daemon;
   const packageConfig = normalizePackage(input.package);
 
   return {
@@ -230,6 +314,7 @@ function normalizeConfig(config: unknown, paths: { root: string; configPath: str
     workers,
     vite,
     daemon,
+    targets,
     package: packageConfig,
   };
 }
@@ -244,7 +329,9 @@ function normalizeApp(value: unknown): AppConfig {
     projectName,
     name: requiredString(app.name, "app.name"),
     identifier: requiredString(app.identifier, "app.identifier"),
-    ...(app.icon === undefined ? {} : { icon: relativePath(app.icon, "app.icon") }),
+    ...(app.icon === undefined
+      ? {}
+      : { icon: relativePath(app.icon, "app.icon") }),
   };
 }
 
@@ -260,27 +347,33 @@ function normalizeBrowser(value: unknown): BrowserConfig {
   };
 }
 
-function normalizeCapabilities(value: unknown): CefariCapability[] {
+function normalizeCapabilities(
+  value: unknown,
+  field: string,
+): CefariCapability[] {
   if (value === undefined) {
     return [];
   }
   if (!Array.isArray(value)) {
-    throw new Error("capabilities must be an array");
+    throw new Error(`${field} must be an array`);
   }
 
   let trayCount = 0;
   const deepLinkSchemes = new Set<string>();
   return value.map((entry, index) => {
-    const capability = asRecord(entry, `capabilities[${index}]`);
-    const type = requiredString(capability.type, `capabilities[${index}].type`);
+    const capabilityField = `${field}[${index}]`;
+    const capability = asRecord(entry, capabilityField);
+    const type = requiredString(capability.type, `${capabilityField}.type`);
     if (type === "tray") {
       trayCount += 1;
       if (trayCount > 1) {
-        throw new Error("capabilities must not include more than one tray capability");
+        throw new Error(
+          `${field} must not include more than one tray capability`,
+        );
       }
       return {
         type: "tray",
-        icon: relativePath(capability.icon, `capabilities[${index}].icon`),
+        icon: relativePath(capability.icon, `${capabilityField}.icon`),
       };
     }
     if (type === "deepLinks") {
@@ -288,12 +381,12 @@ function normalizeCapabilities(value: unknown): CefariCapability[] {
         type: "deepLinks",
         schemes: normalizeDeepLinkSchemes(
           capability.schemes,
-          `capabilities[${index}].schemes`,
+          `${capabilityField}.schemes`,
           deepLinkSchemes,
         ),
       };
     }
-    throw new Error(`capabilities[${index}].type must be "tray" or "deepLinks"`);
+    throw new Error(`${capabilityField}.type must be "tray" or "deepLinks"`);
   });
 }
 
@@ -313,21 +406,47 @@ function normalizeWorkers(value: unknown): Record<string, WorkerConfig> {
     assertOnlyFields(worker, field, ["entry", "permissions"]);
     normalized[id] = {
       entry: relativePath(worker.entry, `${field}.entry`),
-      permissions: normalizeWorkerPermissions(worker.permissions, `${field}.permissions`),
+      permissions: normalizeWorkerPermissions(
+        worker.permissions,
+        `${field}.permissions`,
+      ),
     };
   }
   return normalized;
 }
 
-function normalizeWorkerPermissions(value: unknown, field: string): WorkerPermissions {
+function normalizeWorkerPermissions(
+  value: unknown,
+  field: string,
+): WorkerPermissions {
   const permissions = asRecord(value, field);
   assertOnlyFields(permissions, field, ["read", "write", "net", "env", "run"]);
   return {
-    read: normalizeWorkerPermissionValue(permissions.read, `${field}.read`, "path"),
-    write: normalizeWorkerPermissionValue(permissions.write, `${field}.write`, "path"),
-    net: normalizeWorkerPermissionValue(permissions.net, `${field}.net`, "name"),
-    env: normalizeWorkerPermissionValue(permissions.env, `${field}.env`, "name"),
-    run: normalizeWorkerPermissionValue(permissions.run, `${field}.run`, "path"),
+    read: normalizeWorkerPermissionValue(
+      permissions.read,
+      `${field}.read`,
+      "path",
+    ),
+    write: normalizeWorkerPermissionValue(
+      permissions.write,
+      `${field}.write`,
+      "path",
+    ),
+    net: normalizeWorkerPermissionValue(
+      permissions.net,
+      `${field}.net`,
+      "name",
+    ),
+    env: normalizeWorkerPermissionValue(
+      permissions.env,
+      `${field}.env`,
+      "name",
+    ),
+    run: normalizeWorkerPermissionValue(
+      permissions.run,
+      `${field}.run`,
+      "path",
+    ),
   };
 }
 
@@ -345,14 +464,23 @@ function normalizeWorkerPermissionValue(
 
   return value.map((entry, index) => {
     const item = requiredString(entry, `${field}[${index}]`);
-    if (itemKind === "path" && (item.startsWith("/") || item.split(/[\\/]/).includes(".."))) {
-      throw new Error(`${field}[${index}] must be a relative path or Cefari permission token`);
+    if (
+      itemKind === "path" &&
+      (item.startsWith("/") || item.split(/[\\/]/).includes(".."))
+    ) {
+      throw new Error(
+        `${field}[${index}] must be a relative path or Cefari permission token`,
+      );
     }
     return item;
   });
 }
 
-function normalizeDeepLinkSchemes(value: unknown, field: string, seen: Set<string>): string[] {
+function normalizeDeepLinkSchemes(
+  value: unknown,
+  field: string,
+  seen: Set<string>,
+): string[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`${field} must be a non-empty array`);
   }
@@ -360,7 +488,9 @@ function normalizeDeepLinkSchemes(value: unknown, field: string, seen: Set<strin
   return value.map((scheme, index) => {
     const normalized = deepLinkScheme(scheme, `${field}[${index}]`);
     if (seen.has(normalized)) {
-      throw new Error(`${field}[${index}] duplicates deep link scheme "${normalized}"`);
+      throw new Error(
+        `${field}[${index}] duplicates deep link scheme "${normalized}"`,
+      );
     }
     seen.add(normalized);
     return normalized;
@@ -373,7 +503,9 @@ function deepLinkScheme(value: unknown, field: string): string {
     throw new Error(`${field} must be a URL scheme without ://`);
   }
   if (!/^[a-z][a-z0-9+.-]*$/.test(scheme)) {
-    throw new Error(`${field} must be lowercase ASCII and match ^[a-z][a-z0-9+.-]*$`);
+    throw new Error(
+      `${field} must be lowercase ASCII and match ^[a-z][a-z0-9+.-]*$`,
+    );
   }
   if (["http", "https", "file", "mailto", "cefari"].includes(scheme)) {
     throw new Error(`${field} must not use reserved scheme "${scheme}"`);
@@ -390,11 +522,17 @@ function normalizeVite(value: unknown): ViteConfig {
   }
 
   const vite = asRecord(value, "vite");
-  const configFile = vite.configFile === undefined ? undefined : normalizeViteConfigFile(vite.configFile);
+  const configFile = vite.configFile === undefined
+    ? undefined
+    : normalizeViteConfigFile(vite.configFile);
   return {
-    root: vite.root === undefined ? "frontend" : relativePath(vite.root, "vite.root"),
+    root: vite.root === undefined
+      ? "frontend"
+      : relativePath(vite.root, "vite.root"),
     ...(configFile === undefined ? {} : { configFile }),
-    devPort: vite.devPort === undefined ? 5173 : port(vite.devPort, "vite.devPort"),
+    devPort: vite.devPort === undefined
+      ? 5173
+      : port(vite.devPort, "vite.devPort"),
   };
 }
 
@@ -405,13 +543,117 @@ function normalizeViteConfigFile(value: unknown): string | false {
   return relativePath(value, "vite.configFile");
 }
 
-function normalizeDaemon(value: unknown): DaemonConfig | undefined {
+function normalizeDaemon(
+  value: unknown,
+  field: string,
+): DaemonConfig | undefined {
   if (value === undefined) {
     return undefined;
   }
-  const daemon = asRecord(value, "daemon");
+  const daemon = asRecord(value, field);
   return {
-    entry: relativePath(daemon.entry, "daemon.entry"),
+    entry: relativePath(daemon.entry, `${field}.entry`),
+  };
+}
+
+function normalizeTargets(
+  value: unknown,
+  defaults: {
+    app: AppConfig;
+    topLevelCapabilities: CefariCapability[];
+    topLevelDaemon?: DaemonConfig;
+  },
+): CefariTargetsConfig {
+  if (value === undefined) {
+    return {
+      desktop: {
+        capabilities: defaults.topLevelCapabilities,
+        ...(defaults.topLevelDaemon === undefined
+          ? {}
+          : { daemon: defaults.topLevelDaemon }),
+      },
+    };
+  }
+
+  const targets = asRecord(value, "targets");
+  assertOnlyFields(targets, "targets", ["desktop", "ios", "android"]);
+  return {
+    desktop: normalizeDesktopTarget(targets.desktop, defaults),
+    ...(targets.ios === undefined
+      ? {}
+      : { ios: normalizeIosTarget(targets.ios, defaults.app) }),
+    ...(targets.android === undefined
+      ? {}
+      : { android: normalizeAndroidTarget(targets.android, defaults.app) }),
+  };
+}
+
+function normalizeDesktopTarget(
+  value: unknown,
+  defaults: {
+    topLevelCapabilities: CefariCapability[];
+    topLevelDaemon?: DaemonConfig;
+  },
+): DesktopTargetConfig {
+  if (value === undefined) {
+    return {
+      capabilities: defaults.topLevelCapabilities,
+      ...(defaults.topLevelDaemon === undefined
+        ? {}
+        : { daemon: defaults.topLevelDaemon }),
+    };
+  }
+
+  const desktop = asRecord(value, "targets.desktop");
+  assertOnlyFields(desktop, "targets.desktop", ["capabilities", "daemon"]);
+  return {
+    capabilities: desktop.capabilities === undefined
+      ? defaults.topLevelCapabilities
+      : normalizeCapabilities(
+        desktop.capabilities,
+        "targets.desktop.capabilities",
+      ),
+    daemon: desktop.daemon === undefined
+      ? defaults.topLevelDaemon
+      : normalizeDaemon(desktop.daemon, "targets.desktop.daemon"),
+  };
+}
+
+function normalizeIosTarget(value: unknown, app: AppConfig): IosTargetConfig {
+  const ios = asRecord(value, "targets.ios");
+  assertOnlyFields(ios, "targets.ios", ["bundleId", "permissions"]);
+  return {
+    bundleId: optionalString(
+      ios.bundleId,
+      "targets.ios.bundleId",
+      app.identifier,
+    ),
+    permissions: optionalStringArray(
+      ios.permissions,
+      "targets.ios.permissions",
+    ),
+  };
+}
+
+function normalizeAndroidTarget(
+  value: unknown,
+  app: AppConfig,
+): AndroidTargetConfig {
+  const android = asRecord(value, "targets.android");
+  assertOnlyFields(android, "targets.android", [
+    "applicationId",
+    "permissions",
+  ]);
+  return {
+    applicationId: optionalString(
+      android.applicationId,
+      "targets.android.applicationId",
+      app.identifier,
+    ),
+    permissions: optionalStringArray(
+      android.permissions,
+      "targets.android.permissions",
+    ),
   };
 }
 
@@ -422,7 +664,10 @@ function normalizePackage(value: unknown): PackageConfig {
     throw new Error("package.version must be a semantic version");
   }
   return {
-    productName: requiredString(packageConfig.productName, "package.productName"),
+    productName: requiredString(
+      packageConfig.productName,
+      "package.productName",
+    ),
     version,
   };
 }
@@ -434,7 +679,11 @@ function asRecord(value: unknown, field: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function assertOnlyFields(value: Record<string, unknown>, field: string, allowedFields: string[]): void {
+function assertOnlyFields(
+  value: Record<string, unknown>,
+  field: string,
+  allowedFields: string[],
+): void {
   const allowed = new Set(allowedFields);
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) {
@@ -443,7 +692,9 @@ function assertOnlyFields(value: Record<string, unknown>, field: string, allowed
   }
 }
 
-function cloneWorkers(workers: Record<string, WorkerConfig>): Record<string, WorkerConfig> {
+function cloneWorkers(
+  workers: Record<string, WorkerConfig>,
+): Record<string, WorkerConfig> {
   return Object.fromEntries(
     Object.entries(workers).map(([id, worker]) => [
       id,
@@ -461,8 +712,35 @@ function cloneWorkers(workers: Record<string, WorkerConfig>): Record<string, Wor
   );
 }
 
-function clonePermissionValue(value: WorkerPermissionValue): WorkerPermissionValue {
+function clonePermissionValue(
+  value: WorkerPermissionValue,
+): WorkerPermissionValue {
   return value === "none" ? "none" : [...value];
+}
+
+function cloneTargets(targets: CefariTargetsConfig): CefariTargetsConfig {
+  return {
+    desktop: {
+      capabilities: targets.desktop.capabilities.map((capability) => ({
+        ...capability,
+      })),
+      ...(targets.desktop.daemon === undefined
+        ? {}
+        : { daemon: { ...targets.desktop.daemon } }),
+    },
+    ...(targets.ios === undefined ? {} : {
+      ios: {
+        bundleId: targets.ios.bundleId,
+        permissions: [...targets.ios.permissions],
+      },
+    }),
+    ...(targets.android === undefined ? {} : {
+      android: {
+        applicationId: targets.android.applicationId,
+        permissions: [...targets.android.permissions],
+      },
+    }),
+  };
 }
 
 function requiredString(value: unknown, field: string): string {
@@ -472,7 +750,34 @@ function requiredString(value: unknown, field: string): string {
   return value;
 }
 
-function optionalBoolean(value: unknown, field: string, defaultValue: boolean): boolean {
+function optionalString(
+  value: unknown,
+  field: string,
+  defaultValue: string,
+): string {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  return requiredString(value, field);
+}
+
+function optionalStringArray(value: unknown, field: string): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${field} must be a string array`);
+  }
+  return value.map((entry, index) =>
+    requiredString(entry, `${field}[${index}]`)
+  );
+}
+
+function optionalBoolean(
+  value: unknown,
+  field: string,
+  defaultValue: boolean,
+): boolean {
   if (value === undefined) {
     return defaultValue;
   }
@@ -491,7 +796,10 @@ function relativePath(value: unknown, field: string): string {
 }
 
 function port(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 65535) {
+  if (
+    typeof value !== "number" || !Number.isInteger(value) || value < 1 ||
+    value > 65535
+  ) {
     throw new Error(`${field} must be an integer from 1 to 65535`);
   }
   return value;

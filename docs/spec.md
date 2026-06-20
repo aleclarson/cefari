@@ -36,6 +36,12 @@ frontend APIs.
   - Tray and menu-bar integration is available when configured.
   - Deep-link URL schemes are available when configured.
   - Native capabilities are disabled unless the app opts in.
+- The config can define target-specific sections.
+  - Desktop target settings can provide desktop capabilities and daemon config.
+  - iOS target settings can declare future bundle identity and permissions.
+  - Android target settings can declare future application identity and
+    permissions.
+  - Mobile target sections do not produce mobile build artifacts yet.
 - Config paths are resolved relative to the app project.
   - Path fields must remain inside the project.
   - Generated output is written under the project root.
