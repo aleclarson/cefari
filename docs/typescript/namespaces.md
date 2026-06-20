@@ -211,6 +211,43 @@ Current methods:
 - `tryOpenLogs(): Promise<CefariResult<void>>`
 - `openExternalUrl(url: string | URL): Promise<ExternalUrlResult>`
 
+## Logs
+
+Use `cefari.logs` for structured frontend logs:
+
+```ts
+await cefari.logs.info("settings.saved", {
+  panel: "notifications",
+});
+
+await cefari.logs.warn("sync.delayed", {
+  retryAfterMs: 5000,
+});
+```
+
+Log properties are stored as JSON in Cefari's local SQLite log database.
+Secret-like property values are redacted before persistence.
+
+Use `tryWrite()` when the UI wants a result object instead of a thrown error:
+
+```ts
+const result = await cefari.logs.tryWrite({
+  level: "info",
+  message: "export.finished",
+  properties: { count: 12 },
+});
+```
+
+Current methods:
+
+- `debug(message, properties?): Promise<void>`
+- `info(message, properties?): Promise<void>`
+- `log(message, properties?): Promise<void>`
+- `warn(message, properties?): Promise<void>`
+- `error(message, properties?): Promise<void>`
+- `write(entry): Promise<void>`
+- `tryWrite(entry): Promise<CefariResult<void>>`
+
 ## Updates
 
 Use `cefari.desktop.updates` for update state and user-triggered update checks:

@@ -417,6 +417,10 @@ async function workerSmoke() {
 
 async function postReloadSmoke() {
   record("post-reload");
+  await cefari.logs.info("smoke.frontend.started", {
+    phase: "post-reload",
+  });
+
   const updateState = await invokeOk({ command: "updateState" }, "updateState");
   assert(
     updateState.payload.state === "notConfigured",

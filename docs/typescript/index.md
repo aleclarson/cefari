@@ -10,12 +10,13 @@ have the native bridge unless a test installs a mock bridge.
 
 ## Package Boundary
 
-The package exports four public TypeScript entrypoints:
+The package exports five public TypeScript entrypoints:
 
 - `cefari/app`: ergonomic wrappers, namespace APIs, bridge helpers, event
   helpers, error helpers, and generated IPC types.
 - `cefari/ipc`: generated IPC types only.
 - `cefari/daemon`: daemon-side stdio helpers for configured daemon programs.
+- `cefari/logs`: Deno-side structured log store and logger helpers.
 - `cefari/worker`: helpers for Deno worker entry scripts.
 
 The default app object is `cefari`:
@@ -71,6 +72,16 @@ if (isCefariDaemon()) {
 The v1 daemon stream transport is stdio. The public API is transport-agnostic
 and does not expose HTTP or WebSocket selection.
 
+Daemon and worker programs can use `cefari/logs` when they need structured log
+rows in the same local database:
+
+```ts
+import { createLogger } from "cefari/logs";
+
+const logger = createLogger({ scope: "daemon" });
+logger.info("daemon.ready", { port: 53117 });
+```
+
 Generated IPC types are re-exported for tools, tests, and bridge code:
 
 ```ts
@@ -115,7 +126,7 @@ whose code is `unsupported`.
 ## Documentation Map
 
 - [Namespace APIs](namespaces.md): `app`, `window`, `windows`, `workers`,
-  `shell`, `updates`, `service`, `tray`, `notifications`, `daemon`, `fs`, and
-  `files`.
+  `shell`, `logs`, `updates`, `service`, `tray`, `notifications`, `daemon`,
+  `fs`, and `files`.
 - [Events And Errors](events-and-errors.md): typed event subscriptions,
   low-level event logging, thrown errors, and result-style helpers.

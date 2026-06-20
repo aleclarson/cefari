@@ -19,6 +19,7 @@ type SmokeWorkerMessage =
 
 const worker = defineWorker((_init: null) => ({
   async transform(input: SmokeWorkerInput, context: { postMessage(message: SmokeWorkerMessage): Promise<void> }): Promise<SmokeWorkerOutput> {
+    console.error("cefari smoke worker transform started");
     await context.postMessage({ phase: "started" });
 
     const contents = await Deno.readTextFile(input.inputPath);

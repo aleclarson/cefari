@@ -323,6 +323,34 @@ frontend APIs.
 - Apps can reload their frontend with the browser-native reload API.
   - Use `window.location.reload()`.
 
+## Logging
+
+> This section covers supported runtime, app, daemon, worker, and CLI logging.
+
+- Cefari writes runtime logs into one local SQLite database.
+  - The database lives under the app's managed log directory.
+  - `cefari logs path` prints the active database path.
+  - `cefari.shell.openLogs()` opens the containing log location.
+- Cefari records logs by source scope.
+  - `cefari` covers native runtime logs.
+  - `app` covers frontend logs written through `cefari.logs`.
+  - `daemon` covers configured daemon stderr and daemon helper logs.
+  - `worker:<name>` covers configured worker stderr and worker helper logs.
+- Frontend code can write structured app logs through `cefari.logs`.
+  - Supported levels are `debug`, `info`, `log`, `warn`, and `error`.
+  - Properties are stored as structured JSON.
+  - Secret-like property values are redacted before persistence.
+- Daemon and worker stdout remain protocol-owned.
+  - Daemon stdout carries daemon stream bytes.
+  - Worker stdout carries the worker protocol.
+  - Daemon and worker stderr are captured as logs.
+- The CLI can inspect logs without running the desktop app.
+  - `cefari logs page` prints historical rows.
+  - `cefari logs tail` follows new rows.
+  - `cefari logs expand` prints collapsed large values.
+  - Log queries can filter by level, scope, text, regex, properties, cursors,
+    and time.
+
 ## Native Dialogs
 
 > This section covers native file and folder selection dialogs.

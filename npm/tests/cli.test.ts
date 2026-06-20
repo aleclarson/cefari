@@ -126,6 +126,15 @@ test("pages log rows with filters and hides debug rows by default", async () => 
     const defaultRows = JSON.parse(defaultPage.stdout) as Array<{ message: string }>;
     assert.deepEqual(defaultRows.map((row) => row.message), ["daemon ready", "worker warning", "runtime failed"]);
 
+    const allScopesPage = await cefari(["logs", "page", "--json", "--level", "debug", "--limit", "10"], {
+      env: { CEFARI_LOG_DATABASE: databasePath },
+    });
+    const allScopesRows = JSON.parse(allScopesPage.stdout) as Array<{ scope: string }>;
+    assert.deepEqual(
+      new Set(allScopesRows.map((row) => row.scope)),
+      new Set(["app", "daemon", "worker:thumbnailer", "cefari"]),
+    );
+
     const filteredPage = await cefari([
       "logs",
       "page",

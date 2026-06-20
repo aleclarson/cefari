@@ -140,7 +140,25 @@ if ! grep -q '"status": "pass"' "$result_file"; then
   exit 1
 fi
 
+log_db="$(env HOME="$home_dir" node "$repo_root/npm/dist/bin/cefari.js" logs path)"
+log_rows="$run_root/cefari-logs.json"
+env HOME="$home_dir" node "$repo_root/npm/dist/bin/cefari.js" logs page --json --level debug --limit 500 > "$log_rows"
+
+node - "$log_rows" "$log_db" <<'NODE'
+const [rowsPath, databasePath] = process.argv.slice(2);
+const rows = JSON.parse(require("node:fs").readFileSync(rowsPath, "utf8"));
+const scopes = new Set(rows.map((row) => row.scope));
+for (const scope of ["cefari", "app", "daemon", "worker:smoke-worker"]) {
+  if (!scopes.has(scope)) {
+    console.error(`missing ${scope} scope in ${databasePath}`);
+    console.error(`observed scopes: ${Array.from(scopes).sort().join(", ")}`);
+    process.exit(1);
+  }
+}
+NODE
+
 echo "cefari dev smoke passed"
 echo "  result: $result_file"
+echo "  logs: $log_db"
 echo "  stdout: $stdout_log"
 echo "  stderr: $stderr_log"
