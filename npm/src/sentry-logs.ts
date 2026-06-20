@@ -35,6 +35,13 @@ export type SentryLogSink = {
   flush: (timeout?: number) => Promise<boolean>;
 };
 
+/**
+ * Creates a Sentry-backed sink for Cefari log export records.
+ *
+ * The core `cefari/logs` store stays vendor-neutral; this adapter lives behind
+ * the `cefari/logs/sentry` subpath and can be faked in tests by passing a
+ * `client`.
+ */
 export function createSentryLogSink(options: SentryLogSinkOptions): SentryLogSink {
   const client = options.client ?? (Sentry as unknown as SentryLogClient);
   client.init({

@@ -3,7 +3,7 @@
 This page records the evidence used to keep the documentation grounded in the
 current repository state.
 
-Last checked: 2026-06-17.
+Last checked: 2026-06-20.
 
 ## Source Evidence
 
@@ -27,6 +27,8 @@ Docs were checked against:
   `window.rs`, and `window_state.rs`
 - `npm/src/app/mod.ts`, namespace wrapper modules, and
   `npm/tests/app/cefari_app_test.ts`
+- `npm/src/logs.ts`, `npm/src/logs-cli.ts`, `npm/src/sentry-logs.ts`, and
+  `npm/tests/cli.test.ts` for SQLite log export and Sentry-shaped mapping
 
 ## Command Evidence
 
@@ -53,6 +55,38 @@ cargo test -p cefari-desktop
 pnpm --dir npm check
 pnpm --dir npm test
 ```
+
+For the Sentry-shaped log export sprint on 2026-06-20, the final automated
+checks were:
+
+```bash
+pnpm --dir npm exec tsc -p tsconfig.json --noEmit
+pnpm --dir npm build && node --test npm/dist/tests/cli.test.js
+pnpm --dir npm test
+pnpm --dir npm check
+deno test -A npm/tests/app/cefari_logs_test.ts
+```
+
+The no-network coverage creates app, daemon, worker, and Cefari runtime rows in
+one SQLite database, exports them through one fake Sentry sink, verifies
+Sentry-shaped levels and Cefari attributes, and checks that the export cursor
+advances only after successful flush.
+
+Human-run Sentry verification still requires a real project DSN:
+
+```bash
+export SENTRY_DSN="https://..."
+export SENTRY_ENVIRONMENT="production"
+export SENTRY_RELEASE="my-app@1.2.3"
+cefari logs export sentry --once --level debug
+```
+
+Expected Sentry results:
+
+- exported logs appear under the configured environment and release
+- `log` level rows appear as Sentry `info`
+- structured properties remain queryable as log attributes
+- `cefari.scope`, `cefari.log_id`, and `cefari.pid` are present on each row
 
 ## Deep Link Verification
 

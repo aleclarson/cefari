@@ -10,13 +10,14 @@ have the native bridge unless a test installs a mock bridge.
 
 ## Package Boundary
 
-The package exports five public TypeScript entrypoints:
+The package exports six public TypeScript entrypoints:
 
 - `cefari/app`: ergonomic wrappers, namespace APIs, bridge helpers, event
   helpers, error helpers, and generated IPC types.
 - `cefari/ipc`: generated IPC types only.
 - `cefari/daemon`: daemon-side stdio helpers for configured daemon programs.
 - `cefari/logs`: Deno-side structured log store and logger helpers.
+- `cefari/logs/sentry`: an official Sentry sink for exported Cefari log rows.
 - `cefari/worker`: helpers for Deno worker entry scripts.
 
 The default app object is `cefari`:
@@ -81,6 +82,30 @@ import { createLogger } from "cefari/logs";
 const logger = createLogger({ scope: "daemon" });
 logger.info("daemon.ready", { port: 53117 });
 ```
+
+Operator tooling can use `cefari/logs/sentry` when it needs to send exported
+rows to Sentry without wiring separate source-specific hooks:
+
+```ts
+import { createLogStore } from "cefari/logs";
+import { createSentryLogSink } from "cefari/logs/sentry";
+
+const store = createLogStore();
+const sink = createSentryLogSink({
+  dsn: process.env.SENTRY_DSN ?? "",
+  environment: "production",
+  release: "my-app@1.2.3",
+});
+
+const records = store.exportBatch({ exporter: "sentry", limit: 100 });
+await sink.export(records);
+if (await sink.flush()) {
+  store.ackExport("sentry", records.at(-1)?.id ?? 0);
+}
+```
+
+Most apps should use `cefari logs export sentry`; direct adapter use is for
+custom operator processes.
 
 Generated IPC types are re-exported for tools, tests, and bridge code:
 

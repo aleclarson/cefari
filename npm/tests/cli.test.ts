@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import { createLogStore, toSentryLogRecord } from "../src/logs.js";
+import { createLogStore, toSentryLogRecord, type SentryLogRecord } from "../src/logs.js";
 import { runLogsExportSentry, type LogExportSentrySink } from "../src/logs-cli.js";
 
 const execFileAsync = promisify(execFile);
@@ -290,6 +290,47 @@ test("Sentry log export advances the cursor after successful flush", async () =>
   }
 });
 
+test("Sentry log export sends all Cefari scopes through one path", async () => {
+  const databasePath = await seedLogDatabase();
+  const exported: SentryLogRecord[] = [];
+
+  try {
+    await runLogsExportSentry({
+      databasePath,
+      dsn: "https://example@sentry.invalid/1",
+      once: true,
+      cursor: "sentry-all-scopes",
+      sinkFactory: () => fakeSink({
+        exportRecords: exported,
+      }),
+    });
+
+    assert.deepEqual(
+      exported.map((record) => [
+        record.level,
+        record.message,
+        record.attributes["cefari.scope"],
+        record.attributes["cefari.log_id"],
+      ]),
+      [
+        ["debug", "debug hidden", "app", 1],
+        ["info", "daemon ready", "daemon", 2],
+        ["warn", "worker warning", "worker:thumbnailer", 3],
+        ["error", "runtime failed", "cefari", 4],
+      ],
+    );
+
+    const store = createLogStore({ databasePath });
+    try {
+      assert.equal(store.exportCursor("sentry-all-scopes").lastExportedId, 4);
+    } finally {
+      store.close();
+    }
+  } finally {
+    await rm(dirname(databasePath), { recursive: true, force: true });
+  }
+});
+
 test("Sentry log export does not advance the cursor after send failure", async () => {
   const databasePath = await seedLogDatabase();
 
@@ -375,14 +416,18 @@ async function seedLogDatabase(): Promise<string> {
   return databasePath;
 }
 
-function fakeSink(options: { exportMessages?: string[]; failExport?: boolean } = {}): LogExportSentrySink {
+function fakeSink(
+  options: { exportMessages?: string[]; exportRecords?: SentryLogRecord[]; failExport?: boolean } = {},
+): LogExportSentrySink {
   return {
     async export(records) {
       if (options.failExport === true) {
         throw new Error("simulated Sentry send failure");
       }
       options.exportMessages?.push(...records.map((record) => record.message));
-      return records.map(toSentryLogRecord);
+      const sentryRecords = records.map(toSentryLogRecord);
+      options.exportRecords?.push(...sentryRecords);
+      return sentryRecords;
     },
     async flush() {
       return true;

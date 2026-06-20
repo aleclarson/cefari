@@ -350,6 +350,12 @@ frontend APIs.
   - `cefari logs expand` prints collapsed large values.
   - Log queries can filter by level, scope, text, regex, properties, cursors,
     and time.
+- The CLI can export logs from the same SQLite database.
+  - `cefari logs export sentry` sends rows to Sentry.
+  - `--dry-run` prints the Sentry-shaped payload without network access.
+  - Export cursors advance only after a successful send and flush.
+  - Exported rows keep structured properties plus stable Cefari attributes for
+    scope, log row ID, and process ID.
 
 ## Native Dialogs
 
