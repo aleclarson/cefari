@@ -94,3 +94,4 @@ work, but they should be deterministic outputs of capability-owned source.
 - [Develop Locally](guides/development.md)
 - [Build And Package](guides/build-and-package.md)
 - [Native Capabilities](guides/native-capabilities.md)
+- [Mobile Platform Readiness](proposals/mobile-platform-readiness.md)

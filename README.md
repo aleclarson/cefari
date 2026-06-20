@@ -68,6 +68,8 @@ Signing, notarization, update metadata, and release orchestration live under
 
 - [Architecture Boundary](docs/architecture.md): crate responsibilities and
   dependency boundaries.
+- [Mobile Platform Readiness](docs/proposals/mobile-platform-readiness.md):
+  high-level internal preparation for future iOS and Android hosts.
 - [Cefari IPC Protocol](docs/ipc.md): Specta-generated Rust-to-TypeScript native
   action contract.
 - [Runtime Notifications](docs/runtime/notifications.md): notification ownership
