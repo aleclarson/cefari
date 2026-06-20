@@ -1112,6 +1112,7 @@ mod tests {
         let mut manager = DesktopWorkerManager::with_spawner(
             worker_config_with_native("native/bin/thumb"),
             paths(),
+            test_log_router(),
             sink,
             spawner.clone(),
         );
@@ -1141,6 +1142,7 @@ mod tests {
         let mut manager = DesktopWorkerManager::with_spawner(
             worker_config_with_native("../native/bin/thumb"),
             paths(),
+            test_log_router(),
             Arc::new(RecordingSink::default()),
             spawner.clone(),
         );

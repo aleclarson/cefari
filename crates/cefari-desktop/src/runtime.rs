@@ -297,6 +297,14 @@ fn daemon_log_database_path(paths: &RuntimePaths) -> String {
         .to_string()
 }
 
+fn daemon_log_path(paths: &RuntimePaths) -> String {
+    RuntimeLogConfig::new(paths)
+        .daemon
+        .file_path()
+        .display()
+        .to_string()
+}
+
 fn daemon_environment(paths: &RuntimePaths, daemon: &DaemonConfig) -> Result<Vec<(OsString, OsString)>> {
     let mut environment = vec![(
         OsString::from(CEFARI_DAEMON_LOG_ENV),
@@ -429,8 +437,8 @@ mod tests {
     use std::{ffi::OsString, fs, path::PathBuf, sync::Mutex};
 
     use cefari_core::{
-        AppIdentity, CEFARI_LOG_DATABASE_ENV, CefariConfig, ConfigMode, DaemonConfig,
-        LogRoutingLevel, ModeEnabledConfig, RuntimePaths, SampleRateConfig,
+        AppIdentity, CEFARI_DAEMON_LOG_ENV, CEFARI_LOG_DATABASE_ENV, CefariConfig, ConfigMode,
+        DaemonConfig, LogRoutingLevel, ModeEnabledConfig, RuntimePaths, SampleRateConfig,
         SentryLogExporterConfig, UpdateCheckState,
     };
 

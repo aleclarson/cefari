@@ -308,6 +308,7 @@ mod tests {
                 "dialogs",
                 "downloads",
                 "files",
+                "logs",
                 "notifications",
                 "service",
                 "shell",

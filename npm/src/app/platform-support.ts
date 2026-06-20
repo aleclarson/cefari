@@ -59,6 +59,12 @@ export const ipcCapabilitySupport = [
     rationale: "Downloads exist across hosts, but destination visibility and storage policy differ.",
   },
   {
+    name: "logs",
+    support: "hostSpecific",
+    targets: ["desktop", "ios", "android"],
+    rationale: "Log capture is shared at the API level, but persistence and export routing differ by host.",
+  },
+  {
     name: "notifications",
     support: "hostSpecific",
     targets: ["desktop", "ios", "android"],
