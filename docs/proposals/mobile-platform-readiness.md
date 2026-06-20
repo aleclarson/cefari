@@ -54,8 +54,8 @@ The high-level crate and package split should become:
 crates/
   cefari-core/        shared config, paths, typed IPC, resources, capability metadata
   cefari-desktop/     desktop host implementation
-  cefari-ios/         future iOS host implementation
-  cefari-android/     future Android host implementation
+  cefari-ios/         future Rust support code for iOS protocol/config helpers
+  cefari-android/     future Rust support code for Android protocol/config helpers
 
 npm/
   src/app/            portable frontend API wrappers
@@ -64,8 +64,9 @@ npm/
 ```
 
 The exact module names can change, but the ownership rule should not:
-`cefari-core` defines cross-platform contracts, and each host crate owns native
-runtime behavior for one platform family.
+`cefari-core` defines cross-platform contracts, the desktop crate owns the
+desktop runtime, and mobile hosts should be owned by Swift and Kotlin with Rust
+limited to shared protocol, config, validation, and portable runtime helpers.
 
 Desktop remains the only implemented host until mobile runtime work begins. New
 desktop features should still use this shape so their contracts can be kept,
@@ -95,16 +96,24 @@ Each runtime host should not own:
 - Capability metadata shared across hosts.
 - Developer CLI orchestration that is not shipped in the app.
 
+Mobile host ownership should follow platform conventions. Swift should own the
+iOS host lifecycle, UIKit or SwiftUI integration, WKWebView setup, entitlements,
+and native permission flows. Kotlin should own the Android host lifecycle,
+Activity or service integration, WebView setup, manifest permissions, and native
+permission flows. Rust should support those hosts through shared contracts and
+portable helpers, not by forcing mobile lifecycle through a Rust-owned runtime.
+
 The core architectural test is whether a capability can be reasoned about
 without knowing whether the current host is desktop, iOS, or Android. If it can,
 the contract belongs in `cefari-core`. If it needs AppKit, UIKit, Android SDK,
-Tao, CEF, or desktop package state, the behavior belongs in the host crate.
+Tao, CEF, or desktop package state, the behavior belongs in the host
+implementation.
 
 ## Capability Model
 
 Every native capability should declare its platform support status. This
-metadata should live with the capability contract rather than in a distant
-registry.
+metadata should live in Rust beside each capability contract rather than in a
+distant registry or separate manifest.
 
 Recommended support classes:
 
@@ -132,7 +141,8 @@ Examples:
 | Tray and menus | `desktopOnly` | These should not leak into portable app code as required concepts. |
 | Downloads | `hostSpecific` | Mobile download visibility and storage location require explicit policy. |
 | Updates | `desktopOnly` initially | App-store updates should not share the desktop updater contract. |
-| Workers/daemon | `hostSpecific` | Long-running background work has strict mobile lifecycle limits. |
+| Workers | `hostSpecific` | Worker-like execution may exist across hosts, but lifecycle limits differ. |
+| Daemon | `desktopOnly` | Mobile background work should use separate constrained capabilities later. |
 
 Unsupported behavior should fail predictably:
 
@@ -145,6 +155,10 @@ Unsupported behavior should fail predictably:
 
 Unsupported behavior should not silently no-op, fall back to browser-only
 behavior, or depend on host detection in app code.
+
+Capability metadata should be hand-written near the Rust IPC contract for the
+capability. Generated TypeScript, documentation tables, and tests should consume
+that metadata instead of redefining platform support elsewhere.
 
 ## Frontend API Design
 
@@ -184,6 +198,9 @@ Guidelines:
   errors.
 - Keep desktop convenience APIs out of portable examples unless the example is
   explicitly desktop-scoped.
+- Clarify `cefari.window` and `cefari.windows` as desktop-scoped before mobile
+  support starts. Mobile should get route, screen, or presentation APIs later
+  rather than treating mobile views as desktop windows.
 
 ## Configuration And Manifests
 
@@ -256,6 +273,11 @@ cefari dev --target ios
 cefari package --target android
 ```
 
+The first iOS development workflow should launch the iOS simulator directly from
+the CLI. That makes SDK detection, simulator selection, project generation,
+native build errors, and launch failures part of the mobile developer experience
+rather than separate manual Xcode setup steps.
+
 ## Runtime Lifecycle
 
 Desktop lifecycle is centered on process, windows, tray, menus, and updater
@@ -285,14 +307,16 @@ networking, background execution, and process ownership.
 
 Preparation work:
 
-- Treat desktop daemon support as a host-specific capability.
+- Treat desktop daemon support as a desktop-only capability.
 - Keep frontend worker APIs separate from native background services.
-- Define which background operations are portable, permission-gated, or
-  unsupported.
+- Define separate mobile background-work capabilities later, with explicit OS
+  policy limits and permission requirements.
 - Do not assume one always-on companion process exists on mobile.
 
 Until that review is complete, daemon behavior should be documented and exposed
-as desktop runtime behavior rather than as a general Cefari app primitive.
+as desktop runtime behavior rather than as a general Cefari app primitive. Mobile
+background work should not share the daemon API unless a later proposal proves
+that the semantics are actually portable.
 
 ## Resources And Storage
 
@@ -364,19 +388,18 @@ work.
 7. Add tests that prevent new shared contracts from depending on desktop-only
    concepts.
 
-## Open Questions
+## Resolved Direction
 
-These decisions are intentionally deferred. They should be answered before
-mobile host implementation starts, but they should not block the readiness work
-above.
+These decisions clarify how the readiness work should be interpreted before
+mobile host implementation starts.
 
-- Should mobile hosts be Rust-first wrappers around Swift/Kotlin code, or should
-  Swift and Kotlin own the host with Rust limited to shared protocol code?
-- Should mobile apps support the same daemon API through constrained background
-  tasks, or should daemon stay desktop-only?
-- Should `cefari.window` remain a desktop namespace once mobile support starts,
-  or should it be renamed before public adoption grows?
-- Should capability metadata be hand-written Rust data, generated from module
-  conventions, or declared in a separate manifest format?
-- Should `cefari dev --target ios` launch simulators directly, or only prepare
-  an Xcode project/workspace at first?
+- Swift and Kotlin should own the mobile hosts. Rust should provide shared
+  protocol, config, validation, and portable helpers.
+- Daemon should stay desktop-only. Mobile background work should become separate
+  constrained capabilities later.
+- `cefari.window` and `cefari.windows` should be clarified as desktop-scoped
+  before mobile support starts.
+- Capability metadata should be declared in Rust beside each capability
+  contract.
+- `cefari dev --target ios` should launch the iOS simulator directly from the
+  CLI.
