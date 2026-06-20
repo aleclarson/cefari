@@ -30,6 +30,7 @@ export {
 } from "./platform.js";
 export {
   type CefariRuntimeTarget,
+  iosSimulatorPlan,
   runTargetedBuild,
   runTargetedDev,
   runTargetedPackage,

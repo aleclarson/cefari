@@ -14,8 +14,9 @@ Arguments and options:
 
 - `PATH`: project directory. Defaults to the current directory.
 - `--target TARGET`: runtime target. Supported values are `desktop`, `ios`, and
-  `android`. `desktop` is the default. Mobile targets are recognized but are not
-  implemented yet.
+  `android`. `desktop` is the default. `ios` validates simulator tooling and
+  reports the planned launch commands; the Swift-owned iOS host app bundle is
+  not generated yet. `android` is recognized but is not implemented yet.
 - `--vite-port PORT`: override `vite.devPort`.
 
 Dev mode starts Vite through its JavaScript API and the desktop runtime. When a
