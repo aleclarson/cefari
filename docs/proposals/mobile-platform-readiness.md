@@ -6,6 +6,10 @@ support is not implemented by this proposal. The goal is to make current desktop
 work land in places that can be shared, replaced, or explicitly scoped when
 mobile hosts arrive.
 
+This document is for runtime, CLI, and frontend API contributors. It is a
+readiness guide, not a mobile implementation plan: it defines the internal
+boundaries Cefari should protect while desktop support continues to evolve.
+
 ## Goals
 
 - Keep product-facing app APIs portable by default.
@@ -18,6 +22,7 @@ mobile hosts arrive.
   documentation boundaries.
 - Avoid baking CEF, Tao, desktop windowing, or desktop packaging assumptions
   into `cefari-core` or frontend APIs.
+- Give contributors a way to classify new work before mobile hosts exist.
 
 ## Non-Goals
 
@@ -62,6 +67,10 @@ The exact module names can change, but the ownership rule should not:
 `cefari-core` defines cross-platform contracts, and each host crate owns native
 runtime behavior for one platform family.
 
+Desktop remains the only implemented host until mobile runtime work begins. New
+desktop features should still use this shape so their contracts can be kept,
+adapted, or cleanly marked desktop-only later.
+
 ## Platform Host Boundary
 
 The desktop runtime currently owns CEF startup, Tao windows, native menus, tray
@@ -105,6 +114,11 @@ Recommended support classes:
 - `mobileOnly`: mobile concept with no desktop equivalent.
 - `deferred`: intentionally reserved but not implemented.
 
+`portable` should be used only when the user-visible promise can be written
+without mentioning one host. `hostSpecific` should be used when the same product
+intent can survive across hosts but details such as prompts, lifecycle timing,
+storage location, or native UI differ.
+
 Examples:
 
 | Capability | Likely status | Notes |
@@ -129,11 +143,19 @@ Unsupported behavior should fail predictably:
   packaging.
 - Documentation lists platform support for each public capability.
 
+Unsupported behavior should not silently no-op, fall back to browser-only
+behavior, or depend on host detection in app code.
+
 ## Frontend API Design
 
 The `cefari/app` package should stay portable by default. Desktop-specific APIs
 can exist, but they should be semantically and structurally separate from the
 common surface.
+
+Portable by default does not mean every exported namespace must work on every
+host. It means app code should be able to tell from the API shape, support
+metadata, and typed results whether a capability is common, host-specific, or
+unavailable.
 
 Recommended shape:
 
@@ -160,11 +182,16 @@ Guidelines:
   metadata used by runtime dispatch.
 - Treat mobile permissions as first-class API results, not incidental native
   errors.
+- Keep desktop convenience APIs out of portable examples unless the example is
+  explicitly desktop-scoped.
 
 ## Configuration And Manifests
 
 `cefari.config.ts` should grow toward target-aware configuration rather than a
 single desktop-shaped manifest.
+
+Target-aware config should separate cross-target app identity from the native
+bundle, package, manifest, and entitlement details each host requires.
 
 A future shape could be:
 
@@ -215,6 +242,10 @@ Needed structure:
 - Target-aware diagnostics that report missing SDKs, simulators, signing
   material, or platform permissions.
 
+Shared build helpers should produce frontend artifacts and validated metadata.
+Host adapters should decide how those artifacts become a desktop bundle, Xcode
+project or archive, Android project, APK, or app bundle.
+
 The CLI should avoid assuming that `cefari dev`, `cefari build`, or
 `cefari package` always means desktop. Desktop can remain the default while
 targets are added:
@@ -240,6 +271,9 @@ Preparation work:
 - Persist runtime state through host-owned lifecycle hooks rather than desktop
   shutdown paths.
 
+Lifecycle APIs should avoid promising exact event ordering across hosts unless
+that ordering can be enforced by every runtime.
+
 ## Daemon And Background Work
 
 Cefari's daemon and worker concepts need a mobile review before they become
@@ -257,6 +291,9 @@ Preparation work:
   unsupported.
 - Do not assume one always-on companion process exists on mobile.
 
+Until that review is complete, daemon behavior should be documented and exposed
+as desktop runtime behavior rather than as a general Cefari app primitive.
+
 ## Resources And Storage
 
 Resource loading and file access should be expressed through logical Cefari
@@ -273,6 +310,9 @@ Preparation work:
 - Avoid desktop path separators, absolute paths, and executable path assumptions
   in shared contracts.
 
+When a capability needs a real native path, the path should remain inside the
+host adapter unless exposing it is part of the user-facing contract.
+
 ## Testing Strategy
 
 Mobile readiness needs contract tests before mobile hosts exist.
@@ -286,6 +326,19 @@ Mobile readiness needs contract tests before mobile hosts exist.
   each mobile runtime lands.
 - Keep desktop smoke tests focused on desktop behavior so they do not become
   accidental cross-platform specifications.
+
+## Success Criteria
+
+This readiness work is effective when:
+
+- New IPC capabilities declare platform support when their contract is added.
+- `cefari-core` can be built and reasoned about without CEF, Tao, AppKit, UIKit,
+  Android SDK, package signing, or CLI orchestration.
+- Frontend APIs make non-portable capabilities discoverable before app code
+  calls them.
+- Target-aware config can reject impossible mobile or desktop combinations
+  before build or packaging work starts.
+- Desktop-only features remain easy to ship without pretending they are portable.
 
 ## Documentation Work
 
@@ -312,6 +365,10 @@ work.
    concepts.
 
 ## Open Questions
+
+These decisions are intentionally deferred. They should be answered before
+mobile host implementation starts, but they should not block the readiness work
+above.
 
 - Should mobile hosts be Rust-first wrappers around Swift/Kotlin code, or should
   Swift and Kotlin own the host with Rust limited to shared protocol code?
