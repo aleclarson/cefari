@@ -10,6 +10,9 @@ simple:
 capability! {
     name: files,
     order: 100,
+    support: hostSpecific,
+    targets: [desktop, ios, android],
+    rationale: "File access is shared at the API level but sandboxed and permission-mediated by host.",
     commands: [
         Files(FilesCommand),
     ],
@@ -23,6 +26,14 @@ capability! {
 
 Use `event_order` only when event ordering must differ from command/result
 ordering to preserve the generated TypeScript contract.
+
+Every capability must declare platform support metadata:
+
+- `support`: one of `portable`, `hostSpecific`, `desktopOnly`, `mobileOnly`, or
+  `deferred`.
+- `targets`: one or more of `desktop`, `ios`, and `android`.
+- `rationale`: a short product-facing explanation of why the capability has that
+  support classification.
 
 Run this check after editing metadata:
 

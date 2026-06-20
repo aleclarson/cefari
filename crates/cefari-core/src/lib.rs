@@ -7,8 +7,8 @@
 pub mod config;
 pub mod ipc;
 pub mod logging;
-pub mod platform;
 pub mod paths;
+pub mod platform;
 pub mod resources;
 pub mod services;
 pub mod updates;
@@ -17,9 +17,8 @@ mod error;
 
 pub use config::{
     AppConfig, BrowserConfig, CefariConfig, DaemonConfig, DeepLinkConfig, ServiceConfig,
-    UpdateConfig, WorkerConfig, WorkerDenoSourceConfig, WorkerEntryConfig,
-    WorkerExecutableConfig, WorkerPermissionConfig, WorkerPermissionsConfig, WorkerTargetConfig,
-    load_config, save_config,
+    UpdateConfig, WorkerConfig, WorkerDenoSourceConfig, WorkerEntryConfig, WorkerExecutableConfig,
+    WorkerPermissionConfig, WorkerPermissionsConfig, WorkerTargetConfig, load_config, save_config,
 };
 pub use error::{Error, Result};
 pub use ipc::*;
@@ -27,8 +26,8 @@ pub use logging::{
     CEFARI_DAEMON_LOG_ENV, LogFileConfig, LogFormat, LogRotation, LogStream, RuntimeLogConfig,
     prune_rotated_logs,
 };
-pub use platform::{CefariTarget, PlatformSupport};
 pub use paths::{AppIdentity, RuntimePaths};
+pub use platform::{CefariTarget, PlatformSupport};
 pub use resources::{PackageFormat, packaged_resources_dir, resolve_resource};
 pub use services::{
     CefariServiceSpec, ServiceOperation, default_service_level, install_service, program_exists,

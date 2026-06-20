@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+use crate::{CefariTarget, PlatformSupport};
+
 pub mod app;
 pub mod dialogs;
 pub mod downloads;
@@ -25,6 +27,14 @@ pub use windows::*;
 pub use workers::*;
 
 include!(concat!(env!("OUT_DIR"), "/ipc_generated.rs"));
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct IpcCapabilitySupport {
+    pub name: &'static str,
+    pub support: PlatformSupport,
+    pub targets: &'static [CefariTarget],
+    pub rationale: &'static str,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -63,8 +73,10 @@ mod tests {
         CefariIpcResponse, DeepLinkOpenEvent, DialogCommand, DialogDefaultDirectory, DialogFilter,
         DialogModality, DialogRequest, DialogResult, DialogSelectedPath, DownloadCommand,
         DownloadCompletedEvent, DownloadEvent, DownloadIdRequest, FileKind, NotificationCommand,
-        OpenExternalUrlRequest, WindowIdEvent, WindowSetTitleRequest, ipc_types,
+        OpenExternalUrlRequest, WindowIdEvent, WindowSetTitleRequest, ipc_capability_support,
+        ipc_types,
     };
+    use crate::{CefariTarget, PlatformSupport};
 
     #[test]
     fn serializes_command_payloads_with_stable_tags() {
@@ -244,6 +256,63 @@ mod tests {
         let checked_in = include_str!("../../bindings/ipc.ts");
 
         assert_eq!(output, checked_in);
+    }
+
+    #[test]
+    fn declares_platform_support_for_all_capabilities() {
+        let support = ipc_capability_support();
+        let names = support
+            .iter()
+            .map(|capability| capability.name)
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(
+            support.len(),
+            names.len(),
+            "capability names must be unique"
+        );
+        assert_eq!(
+            names,
+            std::collections::BTreeSet::from([
+                "app",
+                "dialogs",
+                "downloads",
+                "files",
+                "notifications",
+                "service",
+                "shell",
+                "tray",
+                "updates",
+                "windows",
+                "workers",
+            ])
+        );
+        for capability in support {
+            assert!(
+                !capability.targets.is_empty(),
+                "{} should declare at least one supported target",
+                capability.name
+            );
+            assert!(
+                !capability.rationale.is_empty(),
+                "{} should explain its support classification",
+                capability.name
+            );
+        }
+    }
+
+    #[test]
+    fn classifies_desktop_only_capabilities() {
+        let support = ipc_capability_support();
+
+        for name in ["service", "tray", "updates", "windows"] {
+            let capability = support
+                .iter()
+                .find(|capability| capability.name == name)
+                .expect("capability should exist");
+            assert_eq!(capability.support, PlatformSupport::DesktopOnly);
+            assert_eq!(capability.targets, &[CefariTarget::Desktop]);
+        }
     }
 
     #[test]

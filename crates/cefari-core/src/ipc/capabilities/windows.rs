@@ -1,6 +1,9 @@
 capability! {
     name: windows,
     order: 20,
+    support: desktopOnly,
+    targets: [desktop],
+    rationale: "Desktop windows should not be treated as mobile screens or routes.",
     commands: [
         WindowCurrent,
         WindowList,

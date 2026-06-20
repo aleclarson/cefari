@@ -9,6 +9,9 @@ struct Capability {
     name: String,
     order: u32,
     event_order: u32,
+    support: String,
+    targets: Vec<String>,
+    rationale: String,
     commands: Vec<String>,
     results: Vec<String>,
     events: Vec<String>,
@@ -48,6 +51,9 @@ fn read_capability(path: &Path) -> Capability {
     let mut name = None;
     let mut order = None;
     let mut event_order = None;
+    let mut support = None;
+    let mut targets = None;
+    let mut rationale = None;
     let mut commands = Vec::new();
     let mut results = Vec::new();
     let mut events = Vec::new();
@@ -81,6 +87,18 @@ fn read_capability(path: &Path) -> Capability {
             );
             continue;
         }
+        if let Some(value) = line.strip_prefix("support:") {
+            support = Some(clean_scalar(value));
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("targets:") {
+            targets = Some(clean_list(value));
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("rationale:") {
+            rationale = Some(clean_scalar(value));
+            continue;
+        }
         if let Some(section_name) = line.strip_suffix(": [") {
             section = Some(section_name.to_owned());
             continue;
@@ -112,6 +130,12 @@ fn read_capability(path: &Path) -> Capability {
         name: name.unwrap_or_else(|| panic!("missing capability name in {}", path.display())),
         order,
         event_order: event_order.unwrap_or(order),
+        support: support
+            .unwrap_or_else(|| panic!("missing capability support in {}", path.display())),
+        targets: targets
+            .unwrap_or_else(|| panic!("missing capability targets in {}", path.display())),
+        rationale: rationale
+            .unwrap_or_else(|| panic!("missing capability rationale in {}", path.display())),
         commands,
         results,
         events,
@@ -125,6 +149,20 @@ fn clean_scalar(value: &str) -> String {
         .trim()
         .trim_matches('"')
         .to_owned()
+}
+
+fn clean_list(value: &str) -> Vec<String> {
+    let value = value.trim().trim_end_matches(',').trim();
+    let value = value
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .expect("metadata list must be bracketed");
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.trim_matches('"').to_owned())
+        .collect()
 }
 
 fn validate_capabilities(capabilities: &[Capability]) {
@@ -145,9 +183,42 @@ fn validate_capabilities(capabilities: &[Capability]) {
             "duplicate IPC capability order {}",
             capability.order
         );
+        validate_support(capability);
         insert_variants(&mut command_variants, &capability.commands, "command");
         insert_variants(&mut result_variants, &capability.results, "result");
         insert_variants(&mut event_variants, &capability.events, "event");
+    }
+}
+
+fn validate_support(capability: &Capability) {
+    assert!(
+        matches!(
+            capability.support.as_str(),
+            "portable" | "hostSpecific" | "desktopOnly" | "mobileOnly" | "deferred"
+        ),
+        "unknown support class {} for IPC capability {}",
+        capability.support,
+        capability.name
+    );
+    assert!(
+        !capability.targets.is_empty(),
+        "missing targets for IPC capability {}",
+        capability.name
+    );
+    let mut targets = BTreeSet::new();
+    for target in &capability.targets {
+        assert!(
+            matches!(target.as_str(), "desktop" | "ios" | "android"),
+            "unknown target {} for IPC capability {}",
+            target,
+            capability.name
+        );
+        assert!(
+            targets.insert(target),
+            "duplicate target {} for IPC capability {}",
+            target,
+            capability.name
+        );
     }
 }
 
@@ -181,7 +252,7 @@ fn render_generated_glue(capabilities: &[Capability]) -> String {
         .collect::<Vec<_>>();
 
     format!(
-        "{}{}{}{}",
+        "{}{}{}{}{}",
         render_enum(
             "CefariIpcCommand",
             r#"#[serde(tag = "command", content = "payload", rename_all = "camelCase")]"#,
@@ -200,6 +271,7 @@ fn render_generated_glue(capabilities: &[Capability]) -> String {
             false,
             &events,
         ),
+        render_support_metadata(capabilities),
         r#"
 #[must_use]
 pub fn ipc_types() -> specta::Types {
@@ -210,6 +282,57 @@ pub fn ipc_types() -> specta::Types {
 }
 "#
     )
+}
+
+fn render_support_metadata(capabilities: &[Capability]) -> String {
+    let mut output = String::from(
+        "#[must_use]\n\
+         pub const fn ipc_capability_support() -> &'static [IpcCapabilitySupport] {\n\
+         \x20   &[\n",
+    );
+    for capability in capabilities {
+        output.push_str("        IpcCapabilitySupport {\n");
+        output.push_str(&format!("            name: {:?},\n", capability.name));
+        output.push_str(&format!(
+            "            support: PlatformSupport::{},\n",
+            support_variant(&capability.support)
+        ));
+        output.push_str("            targets: &[\n");
+        for target in &capability.targets {
+            output.push_str(&format!(
+                "                CefariTarget::{},\n",
+                target_variant(target)
+            ));
+        }
+        output.push_str("            ],\n");
+        output.push_str(&format!(
+            "            rationale: {:?},\n",
+            capability.rationale
+        ));
+        output.push_str("        },\n");
+    }
+    output.push_str("    ]\n}\n\n");
+    output
+}
+
+fn support_variant(value: &str) -> &'static str {
+    match value {
+        "portable" => "Portable",
+        "hostSpecific" => "HostSpecific",
+        "desktopOnly" => "DesktopOnly",
+        "mobileOnly" => "MobileOnly",
+        "deferred" => "Deferred",
+        _ => unreachable!("support value was validated"),
+    }
+}
+
+fn target_variant(value: &str) -> &'static str {
+    match value {
+        "desktop" => "Desktop",
+        "ios" => "Ios",
+        "android" => "Android",
+        _ => unreachable!("target value was validated"),
+    }
 }
 
 fn render_enum(name: &str, serde_attr: &str, eq: bool, variants: &[&str]) -> String {
