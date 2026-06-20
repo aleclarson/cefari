@@ -58,6 +58,9 @@ function configWithWorkers(root: string): ResolvedCefariConfig {
       name: "Worker App",
       identifier: "dev.cefari.worker",
     },
+    browser: {
+      webgpu: false,
+    },
     capabilities: [],
     workers: {
       thumbnailer: {

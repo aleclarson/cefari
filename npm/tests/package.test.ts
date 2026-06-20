@@ -139,7 +139,9 @@ test("package writes metadata and manifest for build artifacts", async () => {
 test("package omits daemon artifacts when daemon is not configured", async () => {
   const root = await projectWithPackageBuild({ daemon: false });
 
-  await runCefariPackage({ root }, packageDeps());
+  await withPackagePlatform([], async () => {
+    await runCefariPackage({ root });
+  });
 
   const metadata = await readFile(join(root, "dist/package/cargo-packager.toml"), "utf8");
   assert.doesNotMatch(metadata, /target = "daemon"/);
