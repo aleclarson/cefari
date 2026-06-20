@@ -1,6 +1,8 @@
 use std::{
     collections::BTreeSet,
-    env, fs,
+    env,
+    fmt::Write as _,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -273,7 +275,7 @@ fn render_generated_glue(capabilities: &[Capability]) -> String {
         ),
         render_support_metadata(capabilities),
         render_support_typescript_const(capabilities),
-        r#"
+        r"
 #[must_use]
 pub fn ipc_types() -> specta::Types {
     specta::Types::default()
@@ -281,35 +283,38 @@ pub fn ipc_types() -> specta::Types {
         .register::<CefariIpcResponse>()
         .register::<CefariIpcEvent>()
 }
-"#
+"
     )
 }
 
 fn render_support_metadata(capabilities: &[Capability]) -> String {
     let mut output = String::from(
-        "#[must_use]\n\
+        "#[allow(clippy::too_many_lines)]\n\
+         #[must_use]\n\
          pub const fn ipc_capability_support() -> &'static [IpcCapabilitySupport] {\n\
          \x20   &[\n",
     );
     for capability in capabilities {
         output.push_str("        IpcCapabilitySupport {\n");
-        output.push_str(&format!("            name: {:?},\n", capability.name));
-        output.push_str(&format!(
-            "            support: PlatformSupport::{},\n",
+        writeln!(output, "            name: {:?},", capability.name).expect("write string");
+        writeln!(
+            output,
+            "            support: PlatformSupport::{},",
             support_variant(&capability.support)
-        ));
+        )
+        .expect("write string");
         output.push_str("            targets: &[\n");
         for target in &capability.targets {
-            output.push_str(&format!(
-                "                CefariTarget::{},\n",
+            writeln!(
+                output,
+                "                CefariTarget::{},",
                 target_variant(target)
-            ));
+            )
+            .expect("write string");
         }
         output.push_str("            ],\n");
-        output.push_str(&format!(
-            "            rationale: {:?},\n",
-            capability.rationale
-        ));
+        writeln!(output, "            rationale: {:?},", capability.rationale)
+            .expect("write string");
         output.push_str("        },\n");
     }
     output.push_str("    ]\n}\n\n");
@@ -345,17 +350,17 @@ fn render_support_typescript(capabilities: &[Capability]) -> String {
 
     for capability in capabilities {
         output.push_str("  {\n");
-        output.push_str(&format!("    name: {:?},\n", capability.name));
-        output.push_str(&format!("    support: {:?},\n", capability.support));
+        writeln!(output, "    name: {:?},", capability.name).expect("write string");
+        writeln!(output, "    support: {:?},", capability.support).expect("write string");
         output.push_str("    targets: [");
         for (index, target) in capability.targets.iter().enumerate() {
             if index > 0 {
                 output.push_str(", ");
             }
-            output.push_str(&format!("{target:?}"));
+            write!(output, "{target:?}").expect("write string");
         }
         output.push_str("],\n");
-        output.push_str(&format!("    rationale: {:?},\n", capability.rationale));
+        writeln!(output, "    rationale: {:?},", capability.rationale).expect("write string");
         output.push_str("  },\n");
     }
 
