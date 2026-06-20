@@ -3,8 +3,11 @@ import {
   formatLogEntry,
   getCefariLogDatabasePath,
   type LogEntry,
+  type LogExportRecord,
   type LogLevel,
   type LogQuery,
+  type SentryLogRecord,
+  toSentryLogRecord,
 } from "./logs.js";
 
 export type LogOutputFormat = "text" | "json";
@@ -26,6 +29,30 @@ export type LogCliQueryOptions = {
 export type LogTailOptions = LogCliQueryOptions & {
   once?: boolean;
   pollMs?: number;
+};
+
+export type LogExportSentrySink = {
+  export: (records: LogExportRecord[]) => Promise<SentryLogRecord[]>;
+  flush: (timeout?: number) => Promise<boolean>;
+};
+
+export type LogExportSentryOptions = LogCliQueryOptions & {
+  batchSize?: number;
+  cursor?: string;
+  databasePath?: string;
+  dryRun?: boolean;
+  dsn?: string;
+  environment?: string;
+  once?: boolean;
+  pollMs?: number;
+  release?: string;
+  sampleRate?: number;
+  sinkFactory?: (options: {
+    dsn: string;
+    environment?: string;
+    release?: string;
+    sampleRate?: number;
+  }) => Promise<LogExportSentrySink> | LogExportSentrySink;
 };
 
 export function runLogsPath(): void {
@@ -72,6 +99,54 @@ export async function runLogsTail(options: LogTailOptions): Promise<void> {
   }
 }
 
+export async function runLogsExportSentry(options: LogExportSentryOptions): Promise<void> {
+  const dryRun = options.dryRun === true;
+  const cursor = options.cursor ?? "sentry";
+  const batchSize = options.batchSize ?? 100;
+  const dsn = options.dsn ?? process.env.SENTRY_DSN;
+  let sink: LogExportSentrySink | undefined;
+
+  if (batchSize < 1) {
+    throw new Error("--batch-size must be greater than zero");
+  }
+
+  if (!dryRun && (dsn === undefined || dsn.trim() === "")) {
+    throw new Error("logs export sentry requires --dsn or SENTRY_DSN");
+  }
+
+  while (true) {
+    const store = createLogStore({ databasePath: options.databasePath });
+    let records: LogExportRecord[] = [];
+    try {
+      records = store.exportBatch({
+        exporter: cursor,
+        limit: batchSize,
+        query: toLogQuery(options, { defaultLevel: undefined }),
+      });
+
+      if (dryRun) {
+        writeSentryRecords(records.map(toSentryLogRecord));
+      } else if (records.length > 0) {
+        sink = sink ?? await createSentrySink(options, dsn as string);
+        await sink.export(records);
+        const flushed = await sink.flush();
+        if (flushed !== true) {
+          throw new Error("Sentry log flush did not complete");
+        }
+        store.ackExport(cursor, records.at(-1)?.id ?? 0);
+      }
+    } finally {
+      store.close();
+    }
+
+    if (dryRun || options.once === true) {
+      return;
+    }
+
+    await delay(options.pollMs ?? 1000);
+  }
+}
+
 export function runLogsExpand(id: string, options: { json?: boolean } = {}): void {
   const store = createLogStore();
   try {
@@ -91,13 +166,13 @@ export function runLogsExpand(id: string, options: { json?: boolean } = {}): voi
   }
 }
 
-function toLogQuery(options: LogCliQueryOptions): LogQuery {
+function toLogQuery(options: LogCliQueryOptions, defaults: { defaultLevel?: LogLevel } = { defaultLevel: "info" }): LogQuery {
   return {
     afterId: options.afterId,
     beforeId: options.beforeId,
     debugScope: options.debugScope,
     grep: options.grep,
-    level: options.level ?? "info",
+    level: options.level ?? defaults.defaultLevel,
     limit: options.limit,
     properties: parsePropertyFilters(options.properties ?? []),
     regex: options.regex,
@@ -130,6 +205,29 @@ function normalizeSince(value: string): string {
     : unit === "h" ? 60 * 60 * 1000
     : 24 * 60 * 60 * 1000;
   return new Date(Date.now() - amount * multiplier).toISOString();
+}
+
+async function createSentrySink(options: LogExportSentryOptions, dsn: string): Promise<LogExportSentrySink> {
+  if (options.sinkFactory !== undefined) {
+    return await options.sinkFactory({
+      dsn,
+      environment: options.environment ?? process.env.SENTRY_ENVIRONMENT,
+      release: options.release ?? process.env.SENTRY_RELEASE,
+      sampleRate: options.sampleRate,
+    });
+  }
+
+  const { createSentryLogSink } = await import("./sentry-logs.js");
+  return createSentryLogSink({
+    dsn,
+    environment: options.environment ?? process.env.SENTRY_ENVIRONMENT,
+    release: options.release ?? process.env.SENTRY_RELEASE,
+    sampleRate: options.sampleRate,
+  });
+}
+
+function writeSentryRecords(records: SentryLogRecord[]): void {
+  console.log(JSON.stringify(records, null, 2));
 }
 
 function writeOutput(entries: LogEntry[], format: LogOutputFormat): void {

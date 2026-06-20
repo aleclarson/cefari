@@ -15,9 +15,11 @@ import {
 } from "cmd-ts";
 import {
   runLogsExpand,
+  runLogsExportSentry,
   runLogsPage,
   runLogsPath,
   runLogsTail,
+  type LogExportSentryOptions,
   type LogTailOptions,
 } from "./logs-cli.js";
 import type { CefariBuildTarget } from "./platform.js";
@@ -501,6 +503,86 @@ const logsExpand = command({
   },
 });
 
+const logsExportSentry = command({
+  name: "sentry",
+  description: "Export Cefari log rows to Sentry.",
+  args: {
+    dsn: option({
+      type: optional(string),
+      long: "dsn",
+      env: "SENTRY_DSN",
+      description: "Sentry DSN. Defaults to SENTRY_DSN.",
+    }),
+    environment: option({
+      type: optional(string),
+      long: "environment",
+      env: "SENTRY_ENVIRONMENT",
+      description: "Sentry environment. Defaults to SENTRY_ENVIRONMENT.",
+    }),
+    release: option({
+      type: optional(string),
+      long: "release",
+      env: "SENTRY_RELEASE",
+      description: "Sentry release. Defaults to SENTRY_RELEASE.",
+    }),
+    cursor: option({
+      type: optional(string),
+      long: "cursor",
+      description: "Export cursor name. Defaults to sentry.",
+    }),
+    batchSize: option({
+      type: optional(number),
+      long: "batch-size",
+      description: "Maximum rows to export per batch.",
+    }),
+    level: option({
+      type: optional(oneOf(["debug", "info", "log", "warn", "error"] as const)),
+      long: "level",
+      description: "Minimum level to export: debug, info, log, warn, or error.",
+    }),
+    scope: option({
+      type: optional(string),
+      long: "scope",
+      description: "Only export rows from this scope.",
+    }),
+    sampleRate: option({
+      type: optional(number),
+      long: "sample-rate",
+      description: "Sentry SDK sample rate.",
+    }),
+    once: flag({
+      long: "once",
+      description: "Export one polling pass and exit.",
+      defaultValue: () => false,
+    }),
+    pollMs: option({
+      type: optional(number),
+      long: "poll-ms",
+      description: "Polling interval in milliseconds.",
+    }),
+    dryRun: flag({
+      long: "dry-run",
+      description: "Print Sentry-shaped records without sending or advancing the cursor.",
+      defaultValue: () => false,
+    }),
+  },
+  handler: async (args) => {
+    const options: LogExportSentryOptions = {
+      ...args,
+      properties: [],
+    };
+    await runLogsExportSentry(options);
+  },
+});
+
+const logsExportCommands = subcommands({
+  name: "export",
+  description: "Export Cefari logs to external stores.",
+  cmds: {
+    sentry: logsExportSentry,
+  },
+});
+
 const logsCommands = subcommands({
   name: "logs",
   description: "Inspect Cefari logs.",
@@ -509,6 +591,7 @@ const logsCommands = subcommands({
     page: logsPage,
     tail: logsTail,
     expand: logsExpand,
+    export: logsExportCommands,
   },
 });
 

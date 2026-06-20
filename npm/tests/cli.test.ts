@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import { createLogStore } from "../src/logs.js";
+import { createLogStore, toSentryLogRecord } from "../src/logs.js";
+import { runLogsExportSentry, type LogExportSentrySink } from "../src/logs-cli.js";
 
 const execFileAsync = promisify(execFile);
 const testDir = dirname(fileURLToPath(import.meta.url));
@@ -100,6 +101,21 @@ test("documents bare package command options", async () => {
   const { stdout } = await cefari(["package", "package", "--help"]);
 
   assert.match(stdout, /--release-version/);
+});
+
+test("documents Sentry log export command options", async () => {
+  const { stdout } = await cefari(["logs", "export", "sentry", "--help"]);
+
+  assert.match(stdout, /--dsn/);
+  assert.match(stdout, /--environment/);
+  assert.match(stdout, /--release/);
+  assert.match(stdout, /--cursor/);
+  assert.match(stdout, /--batch-size/);
+  assert.match(stdout, /--level/);
+  assert.match(stdout, /--scope/);
+  assert.match(stdout, /--once/);
+  assert.match(stdout, /--poll-ms/);
+  assert.match(stdout, /--dry-run/);
 });
 
 test("prints canonical log database path", async () => {
@@ -198,6 +214,131 @@ test("expands collapsed log values", async () => {
   }
 });
 
+test("dry-runs Sentry log export without sending or advancing the cursor", async () => {
+  const databasePath = await seedLogDatabase();
+
+  try {
+    const { stdout } = await cefari([
+      "logs",
+      "export",
+      "sentry",
+      "--dry-run",
+      "--level",
+      "info",
+      "--scope",
+      "daemon",
+    ], {
+      env: { CEFARI_LOG_DATABASE: databasePath },
+    });
+    const records = JSON.parse(stdout) as Array<{
+      level: string;
+      message: string;
+      timestamp: number;
+      attributes: Record<string, unknown>;
+    }>;
+
+    assert.equal(Number.isFinite(records[0]?.timestamp), true);
+    assert.deepEqual(records, [
+      {
+        level: "info",
+        message: "daemon ready",
+        timestamp: records[0]?.timestamp,
+        attributes: {
+          method: "start",
+          "cefari.scope": "daemon",
+          "cefari.log_id": 2,
+          "cefari.pid": process.pid,
+        },
+      },
+    ]);
+
+    const store = createLogStore({ databasePath });
+    try {
+      assert.equal(store.exportCursor("sentry").lastExportedId, 0);
+    } finally {
+      store.close();
+    }
+  } finally {
+    await rm(dirname(databasePath), { recursive: true, force: true });
+  }
+});
+
+test("Sentry log export advances the cursor after successful flush", async () => {
+  const databasePath = await seedLogDatabase();
+  const exported: string[] = [];
+
+  try {
+    await runLogsExportSentry({
+      databasePath,
+      dsn: "https://example@sentry.invalid/1",
+      once: true,
+      batchSize: 2,
+      sinkFactory: () => fakeSink({
+        exportMessages: exported,
+      }),
+    });
+
+    assert.deepEqual(exported, ["debug hidden", "daemon ready"]);
+    const store = createLogStore({ databasePath });
+    try {
+      assert.equal(store.exportCursor("sentry").lastExportedId, 2);
+    } finally {
+      store.close();
+    }
+  } finally {
+    await rm(dirname(databasePath), { recursive: true, force: true });
+  }
+});
+
+test("Sentry log export does not advance the cursor after send failure", async () => {
+  const databasePath = await seedLogDatabase();
+
+  try {
+    await assert.rejects(
+      runLogsExportSentry({
+        databasePath,
+        dsn: "https://example@sentry.invalid/1",
+        once: true,
+        sinkFactory: () => fakeSink({
+          failExport: true,
+        }),
+      }),
+      /simulated Sentry send failure/,
+    );
+
+    const store = createLogStore({ databasePath });
+    try {
+      assert.equal(store.exportCursor("sentry").lastExportedId, 0);
+    } finally {
+      store.close();
+    }
+  } finally {
+    await rm(dirname(databasePath), { recursive: true, force: true });
+  }
+});
+
+test("Sentry log export filters by level and scope", async () => {
+  const databasePath = await seedLogDatabase();
+  const exported: string[] = [];
+
+  try {
+    await runLogsExportSentry({
+      databasePath,
+      dsn: "https://example@sentry.invalid/1",
+      once: true,
+      level: "warn",
+      scope: "worker:thumbnailer",
+      sinkFactory: () => fakeSink({
+        exportMessages: exported,
+      }),
+    });
+
+    assert.deepEqual(exported, ["worker warning"]);
+  } finally {
+    await rm(dirname(databasePath), { recursive: true, force: true });
+  }
+});
+
 async function testLogDatabasePath(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "cefari-cli-logs-"));
   return join(root, "cefari.sqlite");
@@ -232,4 +373,19 @@ async function seedLogDatabase(): Promise<string> {
   });
   store.close();
   return databasePath;
+}
+
+function fakeSink(options: { exportMessages?: string[]; failExport?: boolean } = {}): LogExportSentrySink {
+  return {
+    async export(records) {
+      if (options.failExport === true) {
+        throw new Error("simulated Sentry send failure");
+      }
+      options.exportMessages?.push(...records.map((record) => record.message));
+      return records.map(toSentryLogRecord);
+    },
+    async flush() {
+      return true;
+    },
+  };
 }

@@ -47,7 +47,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc -p tsconfig.json --noEmit && deno check src/app/mod.ts tests/app/cefari_app_test.ts",
-    "test": "pnpm build && node --test dist/tests/*.test.js && deno test tests/app"
+    "test": "pnpm build && node --test dist/tests/*.test.js && deno test -A tests/app"
   },
   "dependencies": {
     "@sentry/node": "^10.59.0",
