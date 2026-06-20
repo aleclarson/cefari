@@ -10,14 +10,17 @@ use std::{
 
 use anyhow::{Context, Result};
 use cefari_core::{
-    CefariIpcError, CefariIpcEvent, RuntimePaths, WorkerCommand, WorkerConfig, WorkerEntryConfig,
-    WorkerErrorEvent, WorkerEvent, WorkerExitEvent, WorkerInvokeRequest, WorkerInvokeResult,
-    NativeResourceConfig, WorkerListResult, WorkerMessageEvent, WorkerPermissionConfig,
-    WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState, WorkerStatus,
-    WorkerTargetConfig,
+    CEFARI_LOG_DATABASE_ENV, CefariIpcError, CefariIpcEvent, LOG_PROPERTY_WORKER,
+    LOG_PROPERTY_WORKER_ID, NativeResourceConfig, RuntimeLogConfig, RuntimePaths, WorkerCommand,
+    WorkerConfig, WorkerEntryConfig, WorkerErrorEvent, WorkerEvent, WorkerExitEvent,
+    WorkerInvokeRequest, WorkerInvokeResult, WorkerListResult, WorkerMessageEvent,
+    WorkerPermissionConfig, WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState,
+    WorkerStatus, WorkerTargetConfig, worker_log_scope,
 };
 use serde::Deserialize;
 use tracing::{debug, error};
+
+use crate::logging;
 
 #[derive(Clone)]
 pub(crate) struct DesktopWorkerManager {
@@ -50,7 +53,9 @@ pub(crate) trait WorkerProcessSpawner: Send + Sync {
 }
 
 pub(crate) trait WorkerChild: Send {
+    fn process_id(&self) -> Option<u32>;
     fn take_stdout(&mut self) -> Option<Box<dyn BufRead + Send>>;
+    fn take_stderr(&mut self) -> Option<Box<dyn BufRead + Send>>;
     fn write_stdin(&mut self, line: &str) -> std::io::Result<()>;
     fn kill(&mut self) -> std::io::Result<()>;
     fn has_exited(&mut self) -> std::io::Result<bool>;
@@ -64,6 +69,7 @@ pub(crate) struct WorkerProcessSpec {
     pub input: String,
     pub id: String,
     pub worker: String,
+    pub log_database_path: PathBuf,
 }
 
 #[derive(Debug, Deserialize)]
@@ -163,6 +169,7 @@ impl DesktopWorkerManager {
                 command: "worker.spawn".to_owned(),
                 reason: error.to_string(),
             })?;
+        let process_id = child.process_id();
         if let Some(stdout) = child.take_stdout() {
             spawn_stdout_reader(
                 self.events.clone(),
@@ -170,6 +177,15 @@ impl DesktopWorkerManager {
                 id.clone(),
                 request.worker.clone(),
                 stdout,
+            );
+        }
+        if let Some(stderr) = child.take_stderr() {
+            spawn_stderr_reader(
+                RuntimeLogConfig::new(&self.paths).database.file_path(),
+                id.clone(),
+                request.worker.clone(),
+                process_id,
+                stderr,
             );
         }
         let child = std::sync::Arc::new(std::sync::Mutex::new(child));
@@ -397,6 +413,7 @@ impl DesktopWorkerManager {
                     input,
                     id: id.to_owned(),
                     worker: worker.to_owned(),
+                    log_database_path: RuntimeLogConfig::new(&self.paths).database.file_path(),
                 })
             }
             WorkerTargetConfig::Executable(executable) => {
@@ -409,6 +426,7 @@ impl DesktopWorkerManager {
                     input,
                     id: id.to_owned(),
                     worker: worker.to_owned(),
+                    log_database_path: RuntimeLogConfig::new(&self.paths).database.file_path(),
                 })
             }
         }
@@ -561,6 +579,58 @@ fn spawn_stdout_reader(
     });
 }
 
+fn spawn_stderr_reader(
+    database_path: PathBuf,
+    id: String,
+    worker: String,
+    process_id: Option<u32>,
+    stderr: Box<dyn BufRead + Send>,
+) {
+    thread::spawn(move || {
+        for line in stderr.lines() {
+            match line {
+                Ok(line) if line.trim().is_empty() => {}
+                Ok(line) => {
+                    if let Err(error) =
+                        append_worker_stderr_line(&database_path, &id, &worker, process_id, &line)
+                    {
+                        error!(%error, %id, %worker, "failed to write worker stderr log");
+                    }
+                }
+                Err(error) => {
+                    error!(%error, %id, %worker, "failed to read worker stderr");
+                    break;
+                }
+            }
+        }
+    });
+}
+
+fn append_worker_stderr_line(
+    database_path: &Path,
+    id: &str,
+    worker: &str,
+    process_id: Option<u32>,
+    line: &str,
+) -> Result<()> {
+    let mut properties = serde_json::json!({
+        LOG_PROPERTY_WORKER: worker,
+        LOG_PROPERTY_WORKER_ID: id,
+        "stream": "stderr",
+    });
+    if let Some(process_id) = process_id {
+        properties["childPid"] = serde_json::json!(process_id);
+    }
+
+    logging::append_log_entry(
+        database_path,
+        &worker_log_scope(worker),
+        "log",
+        line,
+        properties,
+    )
+}
+
 fn handle_worker_stdout_line(
     events: &dyn WorkerEventSink,
     pending: &Mutex<BTreeMap<String, mpsc::Sender<WorkerInvokeOutcome>>>,
@@ -664,7 +734,8 @@ impl WorkerProcessSpawner for DenoWorkerProcessSpawner {
             .current_dir(&spec.cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
+            .env(CEFARI_LOG_DATABASE_ENV, &spec.log_database_path)
             .spawn()
             .with_context(|| format!("failed to spawn {}", spec.program))?;
         if let Some(stdin) = child.stdin.as_mut() {
@@ -685,11 +756,22 @@ struct StdWorkerChild {
 }
 
 impl WorkerChild for StdWorkerChild {
+    fn process_id(&self) -> Option<u32> {
+        Some(self.child.id())
+    }
+
     fn take_stdout(&mut self) -> Option<Box<dyn BufRead + Send>> {
         self.child
             .stdout
             .take()
             .map(|stdout| Box::new(BufReader::new(stdout)) as Box<dyn BufRead + Send>)
+    }
+
+    fn take_stderr(&mut self) -> Option<Box<dyn BufRead + Send>> {
+        self.child
+            .stderr
+            .take()
+            .map(|stderr| Box::new(BufReader::new(stderr)) as Box<dyn BufRead + Send>)
     }
 
     fn write_stdin(&mut self, line: &str) -> std::io::Result<()> {
@@ -748,6 +830,7 @@ mod tests {
 "#
                     .to_vec(),
                 ))),
+                stderr: None,
                 stdin: Vec::new(),
                 killed: false,
                 exited: false,
@@ -757,14 +840,23 @@ mod tests {
 
     struct FakeWorkerChild {
         stdout: Option<Box<dyn BufRead + Send>>,
+        stderr: Option<Box<dyn BufRead + Send>>,
         stdin: Vec<String>,
         killed: bool,
         exited: bool,
     }
 
     impl WorkerChild for FakeWorkerChild {
+        fn process_id(&self) -> Option<u32> {
+            None
+        }
+
         fn take_stdout(&mut self) -> Option<Box<dyn BufRead + Send>> {
             self.stdout.take()
+        }
+
+        fn take_stderr(&mut self) -> Option<Box<dyn BufRead + Send>> {
+            self.stderr.take()
         }
 
         fn write_stdin(&mut self, line: &str) -> std::io::Result<()> {
@@ -794,6 +886,7 @@ mod tests {
         fn spawn(&self, _spec: WorkerProcessSpec) -> Result<Box<dyn WorkerChild>> {
             let child = Arc::new(Mutex::new(FakeWorkerChild {
                 stdout: None,
+                stderr: None,
                 stdin: Vec::new(),
                 killed: false,
                 exited: false,
@@ -806,8 +899,16 @@ mod tests {
     struct SharedFakeChild(SharedFakeWorkerChild);
 
     impl WorkerChild for SharedFakeChild {
+        fn process_id(&self) -> Option<u32> {
+            self.0.lock().unwrap().process_id()
+        }
+
         fn take_stdout(&mut self) -> Option<Box<dyn BufRead + Send>> {
             self.0.lock().unwrap().take_stdout()
+        }
+
+        fn take_stderr(&mut self) -> Option<Box<dyn BufRead + Send>> {
+            self.0.lock().unwrap().take_stderr()
         }
 
         fn write_stdin(&mut self, line: &str) -> std::io::Result<()> {
@@ -865,6 +966,10 @@ mod tests {
                 .to_string()
         );
         assert_eq!(start["resources"]["native"], serde_json::json!({}));
+        assert_eq!(
+            specs[0].log_database_path,
+            paths().log_dir.join("cefari.sqlite")
+        );
     }
 
     #[test]
@@ -910,6 +1015,55 @@ mod tests {
                 .display()
                 .to_string()
         );
+        assert_eq!(
+            specs[0].log_database_path,
+            paths().log_dir.join("cefari.sqlite")
+        );
+    }
+
+    #[test]
+    fn appends_worker_stderr_lines_to_worker_scope() {
+        let root = std::env::temp_dir().join(format!("cefari-worker-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("temp dir should exist");
+        let database_path = root.join("cefari.sqlite");
+
+        append_worker_stderr_line(
+            &database_path,
+            "thumbnailer-1",
+            "thumbnailer",
+            Some(1234),
+            "worker warning",
+        )
+        .expect("worker stderr should append");
+
+        let connection = rusqlite::Connection::open(&database_path).expect("database should open");
+        let row = connection
+            .query_row(
+                "SELECT scope, level, message, properties_json FROM log_entries",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                },
+            )
+            .expect("log row should exist");
+
+        assert_eq!(row.0, "worker:thumbnailer");
+        assert_eq!(row.1, "log");
+        assert_eq!(row.2, "worker warning");
+        let properties: serde_json::Value =
+            serde_json::from_str(&row.3).expect("properties should be json");
+        assert_eq!(properties["worker"], "thumbnailer");
+        assert_eq!(properties["workerId"], "thumbnailer-1");
+        assert_eq!(properties["childPid"], 1234);
+        assert_eq!(properties["stream"], "stderr");
+
+        std::fs::remove_dir_all(root).expect("temp dir should be removable");
     }
 
     #[test]
@@ -1233,6 +1387,7 @@ mod tests {
         fn spawn(&self, _spec: WorkerProcessSpec) -> Result<Box<dyn WorkerChild>> {
             Ok(Box::new(FakeWorkerChild {
                 stdout: None,
+                stderr: None,
                 stdin: Vec::new(),
                 killed: false,
                 exited: true,

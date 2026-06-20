@@ -1,6 +1,6 @@
 use std::{
     ffi::OsString,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Arc,
@@ -8,6 +8,9 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use cefari_core::{DAEMON_LOG_SCOPE, LOG_PROPERTY_CONNECTION_ID, RuntimeLogConfig, RuntimePaths};
+
+use crate::logging;
 
 pub const CEFARI_DAEMON_ENV: &str = "CEFARI_DAEMON";
 
@@ -72,7 +75,7 @@ impl DaemonSpawner for SystemDaemonSpawner {
             .current_dir(&config.working_directory)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .env(CEFARI_DAEMON_ENV, "1");
         for (key, value) in &config.environment {
             command.env(key, value);
@@ -81,6 +84,7 @@ impl DaemonSpawner for SystemDaemonSpawner {
         let mut child = command
             .spawn()
             .with_context(|| format!("failed to spawn daemon at {}", config.program.display()))?;
+        let process_id = child.id();
         let stdin = child
             .stdin
             .take()
@@ -89,11 +93,17 @@ impl DaemonSpawner for SystemDaemonSpawner {
             .stdout
             .take()
             .context("spawned daemon did not expose stdout")?;
+        let stderr = child
+            .stderr
+            .take()
+            .context("spawned daemon did not expose stderr")?;
 
         Ok(DaemonChild::new(
             Box::new(ChildProcess { child }),
             Box::new(stdin),
             Box::new(stdout),
+            Box::new(BufReader::new(stderr)),
+            Some(process_id),
         ))
     }
 }
@@ -102,6 +112,8 @@ pub struct DaemonChild {
     process: Box<dyn DaemonChildProcess>,
     stdin: Box<dyn Write + Send>,
     stdout: Box<dyn Read + Send>,
+    stderr: Box<dyn BufRead + Send>,
+    process_id: Option<u32>,
 }
 
 impl DaemonChild {
@@ -109,11 +121,15 @@ impl DaemonChild {
         process: Box<dyn DaemonChildProcess>,
         stdin: Box<dyn Write + Send>,
         stdout: Box<dyn Read + Send>,
+        stderr: Box<dyn BufRead + Send>,
+        process_id: Option<u32>,
     ) -> Self {
         Self {
             process,
             stdin,
             stdout,
+            stderr,
+            process_id,
         }
     }
 }
@@ -140,6 +156,7 @@ struct ActiveDaemonConnection {
 
 pub struct DaemonManager {
     config: Option<DaemonProcessConfig>,
+    paths: RuntimePaths,
     spawner: Arc<dyn DaemonSpawner>,
     sink: Arc<dyn DaemonEventSink>,
     next_id: u64,
@@ -149,11 +166,13 @@ pub struct DaemonManager {
 impl DaemonManager {
     pub fn new(
         config: Option<DaemonProcessConfig>,
+        paths: RuntimePaths,
         spawner: Arc<dyn DaemonSpawner>,
         sink: Arc<dyn DaemonEventSink>,
     ) -> Self {
         Self {
             config,
+            paths,
             spawner,
             sink,
             next_id: 1,
@@ -173,8 +192,16 @@ impl DaemonManager {
         let id = DaemonConnectionId::next(&mut self.next_id);
         let child = self.spawner.spawn_daemon(config)?;
         let stdout = child.stdout;
+        let stderr = child.stderr;
+        let process_id = child.process_id;
         let sink = self.sink.clone();
         thread::spawn(move || read_daemon_stdout(id, stdout, sink));
+        spawn_daemon_stderr_reader(
+            RuntimeLogConfig::new(&self.paths).database.file_path(),
+            id,
+            process_id,
+            stderr,
+        );
         self.active = Some(ActiveDaemonConnection {
             id,
             process: child.process,
@@ -233,6 +260,49 @@ impl DaemonManager {
     }
 }
 
+fn spawn_daemon_stderr_reader(
+    database_path: PathBuf,
+    connection_id: DaemonConnectionId,
+    process_id: Option<u32>,
+    stderr: Box<dyn BufRead + Send>,
+) {
+    thread::spawn(move || {
+        for line in stderr.lines() {
+            match line {
+                Ok(line) if line.trim().is_empty() => {}
+                Ok(line) => {
+                    if let Err(error) =
+                        append_daemon_stderr_line(&database_path, connection_id, process_id, &line)
+                    {
+                        eprintln!("failed to write daemon stderr log: {error}");
+                    }
+                }
+                Err(error) => {
+                    eprintln!("failed to read daemon stderr: {error}");
+                    break;
+                }
+            }
+        }
+    });
+}
+
+fn append_daemon_stderr_line(
+    database_path: &std::path::Path,
+    connection_id: DaemonConnectionId,
+    process_id: Option<u32>,
+    line: &str,
+) -> Result<()> {
+    let mut properties = serde_json::json!({
+        LOG_PROPERTY_CONNECTION_ID: connection_id.as_u64(),
+        "stream": "stderr",
+    });
+    if let Some(process_id) = process_id {
+        properties["childPid"] = serde_json::json!(process_id);
+    }
+
+    logging::append_log_entry(database_path, DAEMON_LOG_SCOPE, "log", line, properties)
+}
+
 impl Drop for DaemonManager {
     fn drop(&mut self) {
         if let Some(mut active) = self.active.take() {
@@ -281,9 +351,10 @@ mod tests {
     };
 
     use super::{
-        DaemonChild, DaemonChildProcess, DaemonEvent, DaemonEventSink, DaemonManager,
-        DaemonProcessConfig, DaemonSpawner,
+        DaemonChild, DaemonChildProcess, DaemonConnectionId, DaemonEvent, DaemonEventSink,
+        DaemonManager, DaemonProcessConfig, DaemonSpawner, append_daemon_stderr_line,
     };
+    use cefari_core::{AppIdentity, RuntimePaths};
 
     #[test]
     fn connect_rejects_unconfigured_daemon() {
@@ -299,6 +370,7 @@ mod tests {
         let sink = RecordingSink::default();
         let mut manager = DaemonManager::new(
             Some(test_config()),
+            test_paths(),
             Arc::new(FakeSpawner::new(Vec::from("pong"))),
             Arc::new(sink.clone()),
         );
@@ -324,6 +396,7 @@ mod tests {
         let spawner = Arc::new(FakeSpawner::with_stdin(Vec::new(), stdin.clone()));
         let mut manager = DaemonManager::new(
             Some(test_config()),
+            test_paths(),
             spawner,
             Arc::new(RecordingSink::default()),
         );
@@ -373,6 +446,7 @@ mod tests {
         {
             let mut manager = DaemonManager::new(
                 Some(test_config()),
+                test_paths(),
                 spawner,
                 Arc::new(RecordingSink::default()),
             );
@@ -389,6 +463,7 @@ mod tests {
         let spawner = Arc::new(FakeSpawner::with_process(Vec::new(), process));
         let mut manager = DaemonManager::new(
             Some(test_config()),
+            test_paths(),
             spawner,
             Arc::new(RecordingSink::default()),
         );
@@ -402,9 +477,14 @@ mod tests {
     fn test_manager(config: Option<DaemonProcessConfig>, stdout: Vec<u8>) -> DaemonManager {
         DaemonManager::new(
             config,
+            test_paths(),
             Arc::new(FakeSpawner::new(stdout)),
             Arc::new(RecordingSink::default()),
         )
+    }
+
+    fn test_paths() -> RuntimePaths {
+        RuntimePaths::resolve(&AppIdentity::cefari()).expect("runtime paths should resolve")
     }
 
     fn test_config() -> DaemonProcessConfig {
@@ -414,6 +494,49 @@ mod tests {
             working_directory: PathBuf::from("/tmp"),
             environment: Vec::new(),
         }
+    }
+
+    #[test]
+    fn appends_daemon_stderr_lines_to_daemon_scope() {
+        let root = std::env::temp_dir().join(format!("cefari-daemon-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("temp dir should exist");
+        let database_path = root.join("cefari.sqlite");
+
+        append_daemon_stderr_line(
+            &database_path,
+            DaemonConnectionId::from_u64(7),
+            Some(4321),
+            "daemon warning",
+        )
+        .expect("daemon stderr should append");
+
+        let connection = rusqlite::Connection::open(&database_path).expect("database should open");
+        let row = connection
+            .query_row(
+                "SELECT scope, level, message, properties_json FROM log_entries",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                },
+            )
+            .expect("log row should exist");
+
+        assert_eq!(row.0, "daemon");
+        assert_eq!(row.1, "log");
+        assert_eq!(row.2, "daemon warning");
+        let properties: serde_json::Value =
+            serde_json::from_str(&row.3).expect("properties should be json");
+        assert_eq!(properties["connectionId"], 7);
+        assert_eq!(properties["childPid"], 4321);
+        assert_eq!(properties["stream"], "stderr");
+
+        std::fs::remove_dir_all(root).expect("temp dir should be removable");
     }
 
     #[derive(Clone, Default)]
@@ -483,6 +606,8 @@ mod tests {
                 Box::new(self.process.clone().unwrap_or_default()),
                 Box::new(self.stdin.clone()),
                 Box::new(Cursor::new(self.stdout.clone())),
+                Box::new(Cursor::new(Vec::new())),
+                None,
             ))
         }
     }

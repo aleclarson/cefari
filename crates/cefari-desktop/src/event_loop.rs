@@ -126,12 +126,12 @@ pub(crate) fn run_native_shell(
         deep_link_forwarder,
         menu,
         shell_ui.clone(),
-        paths,
+        paths.clone(),
         runtime_operations,
         worker_manager,
         devtools_enabled,
         window_state_store,
-        desktop_daemon::DaemonManager::new(daemon_config, daemon_spawner, daemon_event_sink),
+        desktop_daemon::DaemonManager::new(daemon_config, paths, daemon_spawner, daemon_event_sink),
     )
 }
 

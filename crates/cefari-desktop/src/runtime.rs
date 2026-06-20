@@ -6,9 +6,10 @@ use std::{
 
 use anyhow::Result;
 use cefari_core::{
-    AppConfig, BrowserConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, DaemonConfig,
-    NativeResourceConfig, PendingUpdate, RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
-    WorkerConfig, check_for_update, install_service, install_update, load_config,
+    AppConfig, BrowserConfig, CEFARI_DAEMON_LOG_ENV, CEFARI_LOG_DATABASE_ENV, CefariConfig,
+    CefariServiceSpec, DaemonConfig, NativeResourceConfig, PendingUpdate, RuntimeLogConfig,
+    RuntimePaths, UpdateCheckConfig, UpdateCheckState, WorkerConfig, check_for_update,
+    install_service, install_update, load_config,
     packaged_resources_dir, resolve_resource, service_manager, service_status, start_service,
     stop_service, update_id,
 };
@@ -192,6 +193,10 @@ impl RuntimeOperations {
             if let Some(resources) = std::env::var_os(CEFARI_DAEMON_RESOURCES_ENV) {
                 environment.push((CEFARI_DAEMON_RESOURCES_ENV.into(), resources));
             }
+            environment.push((
+                CEFARI_LOG_DATABASE_ENV.into(),
+                daemon_log_database_path(&self.paths).into(),
+            ));
             return Ok(DaemonProcessConfig {
                 program: PathBuf::from("deno"),
                 args: vec![OsString::from("run"), OsString::from("-A"), entry],
@@ -260,9 +265,9 @@ fn daemon_executable_path(config: &DaemonConfig, resource_dir: &Path) -> Result<
     Ok(resource_dir.join(executable_path))
 }
 
-fn daemon_log_path(paths: &RuntimePaths) -> String {
+fn daemon_log_database_path(paths: &RuntimePaths) -> String {
     RuntimeLogConfig::new(paths)
-        .daemon
+        .database
         .file_path()
         .display()
         .to_string()
@@ -276,6 +281,10 @@ fn daemon_environment(paths: &RuntimePaths, daemon: &DaemonConfig) -> Result<Vec
     environment.push((
         OsString::from(CEFARI_DAEMON_RESOURCES_ENV),
         OsString::from(daemon_resources_json(paths, &daemon.native)?),
+    ));
+    environment.push((
+        OsString::from(CEFARI_LOG_DATABASE_ENV),
+        OsString::from(daemon_log_database_path(paths)),
     ));
     Ok(environment)
 }
@@ -371,7 +380,7 @@ mod tests {
     use std::{ffi::OsString, fs, path::PathBuf, sync::Mutex};
 
     use cefari_core::{
-        AppIdentity, CEFARI_DAEMON_LOG_ENV, CefariConfig, DaemonConfig, RuntimePaths,
+        AppIdentity, CEFARI_LOG_DATABASE_ENV, CefariConfig, DaemonConfig, RuntimePaths,
         UpdateCheckState,
     };
 
@@ -480,6 +489,10 @@ mod tests {
                         "resourceDir": paths.resource_dir.display().to_string(),
                     })
                     .to_string(),
+                ),
+                (
+                    CEFARI_LOG_DATABASE_ENV.to_owned(),
+                    paths.log_dir.join("cefari.sqlite").display().to_string()
                 ),
             ]
         );
