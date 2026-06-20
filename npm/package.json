@@ -29,6 +29,10 @@
       "types": "./dist/src/logs.d.ts",
       "import": "./dist/src/logs.js"
     },
+    "./logs/sentry": {
+      "types": "./dist/src/sentry-logs.d.ts",
+      "import": "./dist/src/sentry-logs.js"
+    },
     "./worker": {
       "types": "./dist/src/worker.d.ts",
       "import": "./dist/src/worker.js"
@@ -46,6 +50,7 @@
     "test": "pnpm build && node --test dist/tests/*.test.js && deno test tests/app"
   },
   "dependencies": {
+    "@sentry/node": "^10.59.0",
     "cmd-ts": "^0.15.0",
     "vite": "^8.0.16"
   },
