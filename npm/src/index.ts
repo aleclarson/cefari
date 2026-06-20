@@ -29,6 +29,15 @@ export {
   parseCefariBuildTarget,
 } from "./platform.js";
 export {
+  type CefariRuntimeTarget,
+  runTargetedBuild,
+  runTargetedDev,
+  runTargetedPackage,
+  type TargetedBuildOptions,
+  type TargetedDevOptions,
+  type TargetedPackageOptions,
+} from "./target-adapters.js";
+export {
   cefariCli,
   type CliPackageCommand,
   type CliTopLevelCommand,

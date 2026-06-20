@@ -7,12 +7,15 @@ Use project commands for day-to-day app development.
 Run the local development environment:
 
 ```bash
-cefari dev [PATH] [--vite-port PORT]
+cefari dev [PATH] [--target TARGET] [--vite-port PORT]
 ```
 
 Arguments and options:
 
 - `PATH`: project directory. Defaults to the current directory.
+- `--target TARGET`: runtime target. Supported values are `desktop`, `ios`, and
+  `android`. `desktop` is the default. Mobile targets are recognized but are not
+  implemented yet.
 - `--vite-port PORT`: override `vite.devPort`.
 
 Dev mode starts Vite through its JavaScript API and the desktop runtime. When a
@@ -33,9 +36,11 @@ Arguments and options:
 - `PATH`: project directory. Defaults to the current directory.
 - `--release`: use Cargo's release profile when Cefari builds the desktop
   runtime from source.
-- `--target TARGET`: build for a specific platform and architecture. Supported
-  targets are `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`,
-  `windows-x64`, and `windows-arm64`. Defaults to the host target.
+- `--target TARGET`: runtime target or desktop platform/architecture target.
+  Runtime targets are `desktop`, `ios`, and `android`. Desktop build targets are
+  `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `windows-x64`, and
+  `windows-arm64`. Desktop is the default runtime target. Mobile targets are
+  recognized but are not implemented yet.
 
 Installed Cefari CLI distributions should bundle a matching `cefari-desktop`
 runtime beside the `cefari` executable. Source-checkout CLI builds
@@ -54,12 +59,15 @@ Build output is written under `build/`. See
 Prepare native package assembly for a built project:
 
 ```bash
-cefari package [PATH] [--release] [--release-version VERSION]
+cefari package [PATH] [--target TARGET] [--release] [--release-version VERSION]
 ```
 
 Arguments and options:
 
 - `PATH`: project directory. Defaults to the current directory.
+- `--target TARGET`: runtime target. Supported values are `desktop`, `ios`, and
+  `android`. `desktop` is the default. Mobile targets are recognized but are not
+  implemented yet.
 - `--release`: package release-profile build output when the desktop runtime
   was built from source.
 - `--release-version VERSION`: package version written to native package

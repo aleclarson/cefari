@@ -1,22 +1,42 @@
-import { binary, command, flag, number, oneOf, option, optional, positional, run, string, subcommands } from "cmd-ts";
-import { runCefariBuild } from "./build.js";
-import { runCefariDev } from "./dev.js";
+import {
+  binary,
+  command,
+  flag,
+  number,
+  oneOf,
+  option,
+  optional,
+  positional,
+  run,
+  string,
+  subcommands,
+} from "cmd-ts";
 import type { CefariBuildTarget } from "./platform.js";
 import {
-  runCefariPackage,
+  type ReleaseMode,
   runPackageNotarize,
   runPackageRelease,
   runPackageSign,
   runPackageUpdate,
-  type ReleaseMode,
   type SignPlatform,
   type UpdatePackageFormat,
 } from "./package.js";
+import {
+  type CefariRuntimeTarget,
+  runTargetedBuild,
+  runTargetedDev,
+  runTargetedPackage,
+} from "./target-adapters.js";
 
 export const VERSION = "0.1.0";
 
 export type CliTopLevelCommand = "dev" | "build" | "package" | "unknown";
-export type CliPackageCommand = "package" | "sign" | "notarize" | "update" | "release";
+export type CliPackageCommand =
+  | "package"
+  | "sign"
+  | "notarize"
+  | "update"
+  | "release";
 
 type PlaceholderCommand =
   | "dev"
@@ -45,17 +65,29 @@ const release = flag({
 
 const buildTarget = option({
   type: optional(
-    oneOf([
-      "darwin-arm64",
-      "darwin-x64",
-      "linux-x64",
-      "linux-arm64",
-      "windows-x64",
-      "windows-arm64",
-    ] as const),
+    oneOf(
+      [
+        "desktop",
+        "ios",
+        "android",
+        "darwin-arm64",
+        "darwin-x64",
+        "linux-x64",
+        "linux-arm64",
+        "windows-x64",
+        "windows-arm64",
+      ] as const,
+    ),
   ),
   long: "target",
-  description: "Build target: darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, or windows-arm64.",
+  description:
+    "Runtime target or desktop build target: desktop, ios, android, darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, or windows-arm64.",
+});
+
+const runtimeTarget = option({
+  type: optional(oneOf(["desktop", "ios", "android"] as const)),
+  long: "target",
+  description: "Runtime target: desktop, ios, or android.",
 });
 
 const releaseVersion = option({
@@ -137,11 +169,13 @@ const dev = command({
     devtoolsPort: option({
       type: optional(number),
       long: "devtools-port",
-      description: "Chrome DevTools Protocol port for the embedded CEF browser.",
+      description:
+        "Chrome DevTools Protocol port for the embedded CEF browser.",
     }),
+    target: runtimeTarget,
   },
-  handler: async ({ path, vitePort, devtoolsPort }) => {
-    await runCefariDev({ root: path, vitePort, devtoolsPort });
+  handler: async ({ path, vitePort, devtoolsPort, target }) => {
+    await runTargetedDev({ root: path, vitePort, devtoolsPort, target });
   },
 });
 
@@ -154,7 +188,13 @@ const build = command({
     target: buildTarget,
   },
   handler: async ({ path, release, target }) => {
-    await runCefariBuild({ root: path, release, target: target as CefariBuildTarget | undefined });
+    const { runtimeTarget, desktopBuildTarget } = splitBuildTarget(target);
+    await runTargetedBuild({
+      root: path,
+      release,
+      target: runtimeTarget,
+      desktopBuildTarget,
+    });
   },
 });
 
@@ -165,9 +205,10 @@ const packageApp = command({
     path: projectPath,
     release,
     releaseVersion,
+    target: runtimeTarget,
   },
-  handler: async ({ path, release, releaseVersion }) => {
-    await runCefariPackage({ root: path, release, releaseVersion });
+  handler: async ({ path, release, releaseVersion, target }) => {
+    await runTargetedPackage({ root: path, release, releaseVersion, target });
   },
 });
 
@@ -183,7 +224,11 @@ const packageSign = command({
     if (artifact === undefined) {
       throw new Error("package sign requires an artifact");
     }
-    runPackageSign({ artifact, config, platform: platform as SignPlatform | undefined });
+    runPackageSign({
+      artifact,
+      config,
+      platform: platform as SignPlatform | undefined,
+    });
   },
 });
 
@@ -214,7 +259,9 @@ const packageUpdate = command({
     keyEnv,
     outputDir,
   },
-  handler: async ({ archive, url, version, target, format, keyEnv, outputDir }) => {
+  handler: async (
+    { archive, url, version, target, format, keyEnv, outputDir },
+  ) => {
     if (archive === undefined || url === undefined || version === undefined) {
       throw new Error("package update requires archive, --url, and --version");
     }
@@ -324,23 +371,59 @@ export const cefariCli = subcommands({
   },
 });
 
-const packageSubcommands = new Set(["sign", "notarize", "update", "release", "package"]);
+const packageSubcommands = new Set([
+  "sign",
+  "notarize",
+  "update",
+  "release",
+  "package",
+]);
 const helpArgs = new Set(["--help", "-h", "--version", "-v"]);
 
+function splitBuildTarget(value: string | undefined): {
+  runtimeTarget: CefariRuntimeTarget | undefined;
+  desktopBuildTarget: CefariBuildTarget | undefined;
+} {
+  if (value === undefined) {
+    return { runtimeTarget: undefined, desktopBuildTarget: undefined };
+  }
+  if (value === "desktop" || value === "ios" || value === "android") {
+    return { runtimeTarget: value, desktopBuildTarget: undefined };
+  }
+  return {
+    runtimeTarget: "desktop",
+    desktopBuildTarget: value as CefariBuildTarget,
+  };
+}
+
 function normalizeArgv(argv: string[]): string[] {
-  const packageIndex = argv[0] === "package" ? 0 : argv[2] === "package" ? 2 : -1;
+  const packageIndex = argv[0] === "package"
+    ? 0
+    : argv[2] === "package"
+    ? 2
+    : -1;
   if (packageIndex === -1) {
     return argv;
   }
 
   const next = argv[packageIndex + 1];
-  if (next === undefined || (!helpArgs.has(next) && (next.startsWith("-") || !packageSubcommands.has(next)))) {
-    return [...argv.slice(0, packageIndex + 1), "package", ...argv.slice(packageIndex + 1)];
+  if (
+    next === undefined ||
+    (!helpArgs.has(next) &&
+      (next.startsWith("-") || !packageSubcommands.has(next)))
+  ) {
+    return [
+      ...argv.slice(0, packageIndex + 1),
+      "package",
+      ...argv.slice(packageIndex + 1),
+    ];
   }
 
   return argv;
 }
 
-export async function runCefariCli(argv: string[] = process.argv): Promise<void> {
+export async function runCefariCli(
+  argv: string[] = process.argv,
+): Promise<void> {
   await run(binary(cefariCli), normalizeArgv(argv));
 }

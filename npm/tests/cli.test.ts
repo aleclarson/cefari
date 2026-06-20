@@ -54,6 +54,7 @@ test("documents Vite dev port flag", async () => {
   const { stdout } = await cefari(["dev", "--help"]);
 
   assert.match(stdout, /--vite-port/);
+  assert.match(stdout, /--target/);
   assert.equal(stdout.includes(`--${"frontend"}-port`), false);
 });
 
@@ -61,7 +62,23 @@ test("documents build target flag", async () => {
   const { stdout } = await cefari(["build", "--help"]);
 
   assert.match(stdout, /--target/);
+  assert.match(stdout, /ios/);
   assert.match(stdout, /windows-x64/);
+});
+
+test("recognizes unsupported mobile runtime targets", async () => {
+  await assert.rejects(
+    cefari(["dev", "--target", "android"]),
+    /android runtime support is not implemented yet/,
+  );
+  await assert.rejects(
+    cefari(["build", "--target", "ios"]),
+    /ios runtime support is not implemented yet/,
+  );
+  await assert.rejects(
+    cefari(["package", "--target", "android"]),
+    /android runtime support is not implemented yet/,
+  );
 });
 
 test("documents nested package release subcommand", async () => {
