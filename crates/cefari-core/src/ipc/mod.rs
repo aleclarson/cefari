@@ -72,9 +72,9 @@ mod tests {
         CefariIpcCommand, CefariIpcError, CefariIpcEvent, CefariIpcOutcome, CefariIpcRequest,
         CefariIpcResponse, DeepLinkOpenEvent, DialogCommand, DialogDefaultDirectory, DialogFilter,
         DialogModality, DialogRequest, DialogResult, DialogSelectedPath, DownloadCommand,
-        DownloadCompletedEvent, DownloadEvent, DownloadIdRequest, FileKind, NotificationCommand,
-        OpenExternalUrlRequest, WindowIdEvent, WindowSetTitleRequest, ipc_capability_support,
-        ipc_types,
+        DownloadCompletedEvent, DownloadEvent, DownloadIdRequest, FileKind,
+        IPC_CAPABILITY_SUPPORT_TYPESCRIPT, NotificationCommand, OpenExternalUrlRequest,
+        WindowIdEvent, WindowSetTitleRequest, ipc_capability_support, ipc_types,
     };
     use crate::{CefariTarget, PlatformSupport};
 
@@ -256,6 +256,13 @@ mod tests {
         let checked_in = include_str!("../../bindings/ipc.ts");
 
         assert_eq!(output, checked_in);
+    }
+
+    #[test]
+    fn generated_platform_support_typescript_is_current() {
+        let checked_in = include_str!("../../../../npm/src/app/platform-support.ts");
+
+        assert_eq!(IPC_CAPABILITY_SUPPORT_TYPESCRIPT, checked_in);
     }
 
     #[test]

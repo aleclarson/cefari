@@ -2,10 +2,12 @@ import {
   cefari,
   type CefariBridge,
   CefariError,
+  capabilitySupport,
   type CefariIpcCommand,
   type CefariIpcEvent,
   type CefariIpcResponse,
   type NotificationResponseEvent,
+  supportsTarget,
   type WindowKind,
   type WindowState,
 } from "../../src/app/mod.ts";
@@ -50,6 +52,13 @@ Deno.test("reports unavailable outside the Cefari shell", async () => {
 
 Deno.test("reports daemon helper availability outside Cefari daemon", () => {
   assertEquals(isCefariDaemon(), false);
+});
+
+Deno.test("exposes platform support metadata", () => {
+  assertEquals(supportsTarget("windows", "desktop"), true);
+  assertEquals(supportsTarget("windows", "ios"), false);
+  assertEquals(supportsTarget("notifications", "android"), true);
+  assertEquals(capabilitySupport("tray")?.support, "desktopOnly");
 });
 
 Deno.test("wraps typed namespace commands", async () => {

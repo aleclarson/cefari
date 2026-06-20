@@ -1,4 +1,12 @@
 export type * from "./ipc.ts";
+export {
+  capabilitySupport,
+  ipcCapabilitySupport,
+  supportsTarget,
+  type CefariTarget,
+  type IpcCapabilitySupport,
+  type PlatformSupport,
+} from "./platform-support.ts";
 export type { AppApi } from "./app.ts";
 export { CefariError, type CefariResult, isCefariError } from "./errors.ts";
 export type { CefariBridge, CefariWindow, Unsubscribe } from "./transport.ts";
