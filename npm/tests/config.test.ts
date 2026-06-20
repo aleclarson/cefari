@@ -297,7 +297,20 @@ test("normalizes configured workers", async () => {
         read: ["$appData/uploads"],
         write: ["$appData/cache"],
         net: "none",
+        ffi: ["$resource/workers/thumbnailer/native/lib/libthumb.dylib"],
       },
+      native: [
+        {
+          src: "native/darwin-arm64/libthumb.dylib",
+          target: "lib/libthumb.dylib",
+          platforms: ["darwin-arm64"],
+        },
+        {
+          src: "native/shared/helper",
+          target: "bin/helper",
+          executable: true,
+        },
+      ],
     },
   },`));
 
@@ -312,7 +325,22 @@ test("normalizes configured workers", async () => {
         net: "none",
         env: "none",
         run: "none",
+        ffi: ["$resource/workers/thumbnailer/native/lib/libthumb.dylib"],
       },
+      native: [
+        {
+          src: "native/darwin-arm64/libthumb.dylib",
+          target: "lib/libthumb.dylib",
+          platforms: ["darwin-arm64"],
+          executable: false,
+        },
+        {
+          src: "native/shared/helper",
+          target: "bin/helper",
+          platforms: [],
+          executable: true,
+        },
+      ],
     },
   });
 });
@@ -368,19 +396,6 @@ test("rejects invalid worker config", async () => {
         thumbnailer: {
           entry: "workers/thumbnailer.ts",
           permissions: {
-            ffi: ["sqlite"],
-          },
-        },
-      },`)),
-    }),
-    /workers\.thumbnailer\.permissions\.ffi is not supported/,
-  );
-  await assert.rejects(
-    loadCefariConfig({
-      root: await projectWithConfig(baseConfig(`workers: {
-        thumbnailer: {
-          entry: "workers/thumbnailer.ts",
-          permissions: {
             read: [],
           },
         },
@@ -400,6 +415,81 @@ test("rejects invalid worker config", async () => {
       },`)),
     }),
     /workers\.thumbnailer\.permissions\.read\[0\] must be a relative path or Cefari permission token/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {},
+          native: "native/tool",
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.native must be an array/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {},
+          native: [{ src: "/tmp/tool", target: "bin/tool" }],
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.native\[0\]\.src must be a relative path inside the project/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {},
+          native: [{ src: "native/tool", target: "../bin/tool" }],
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.native\[0\]\.target must be a relative resource path/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {},
+          native: [
+            { src: "native/tool-a", target: "bin/tool" },
+            { src: "native/tool-b", target: "bin/tool" },
+          ],
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.native\[1\]\.target duplicates worker native target "bin\/tool"/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {},
+          native: [{ src: "native/tool", target: "bin/tool", platforms: ["freebsd-x64"] }],
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.native\[0\]\.platforms\[0\] must be a supported Cefari build target/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`workers: {
+        thumbnailer: {
+          entry: "workers/thumbnailer.ts",
+          permissions: {},
+          native: [{ src: "native/tool", target: "bin/tool", codesign: true }],
+        },
+      },`)),
+    }),
+    /workers\.thumbnailer\.native\[0\]\.codesign is not supported/,
   );
 });
 
@@ -540,7 +630,15 @@ test("creates a serializable projection", async () => {
       entry: "workers/thumbnailer.ts",
       permissions: {
         read: ["$appData/uploads"],
+        ffi: ["$resource/workers/thumbnailer/native/lib/libthumb.dylib"],
       },
+      native: [
+        {
+          src: "native/darwin-arm64/libthumb.dylib",
+          target: "lib/libthumb.dylib",
+          platforms: ["darwin-arm64"],
+        },
+      ],
     },
   },
   vite: { root: "ui", configFile: false, devPort: 3000 },`));
@@ -558,6 +656,17 @@ test("creates a serializable projection", async () => {
   });
   assert.deepEqual(serializable.workers.thumbnailer.permissions.read, [
     "$appData/uploads",
+  ]);
+  assert.deepEqual(serializable.workers.thumbnailer.permissions.ffi, [
+    "$resource/workers/thumbnailer/native/lib/libthumb.dylib",
+  ]);
+  assert.deepEqual(serializable.workers.thumbnailer.native, [
+    {
+      src: "native/darwin-arm64/libthumb.dylib",
+      target: "lib/libthumb.dylib",
+      platforms: ["darwin-arm64"],
+      executable: false,
+    },
   ]);
   assert.equal(
     JSON.parse(JSON.stringify(serializable)).app.name,

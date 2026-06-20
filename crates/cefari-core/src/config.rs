@@ -125,6 +125,7 @@ pub struct WorkerPermissionsConfig {
     pub net: WorkerPermissionConfig,
     pub env: WorkerPermissionConfig,
     pub run: WorkerPermissionConfig,
+    pub ffi: WorkerPermissionConfig,
 }
 
 impl Default for WorkerPermissionsConfig {
@@ -135,6 +136,7 @@ impl Default for WorkerPermissionsConfig {
             net: WorkerPermissionConfig::default(),
             env: WorkerPermissionConfig::default(),
             run: WorkerPermissionConfig::default(),
+            ffi: WorkerPermissionConfig::default(),
         }
     }
 }

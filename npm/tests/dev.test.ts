@@ -173,6 +173,7 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
               net: "none",
               env: "none",
               run: "none",
+              ffi: "none",
             },
           },
         },

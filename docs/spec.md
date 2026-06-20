@@ -28,6 +28,8 @@ frontend APIs.
   - Each worker has a stable ID.
   - Each worker has a source entrypoint.
   - Each worker declares explicit Deno permissions.
+  - Each worker can declare native executable or dynamic-library payloads.
+  - Worker native payloads are selected by the effective Cefari build target.
   - Workers are separate from the daemon.
 - The config can define package metadata.
   - It sets the packaged product name.
@@ -130,6 +132,7 @@ frontend APIs.
   - It checks runtime config.
   - It checks worker resource output.
   - It checks configured worker executables.
+  - It includes selected worker native payloads as package resources.
   - It checks CEF resource metadata.
   - It checks for locale files.
   - It includes configured tray icons.

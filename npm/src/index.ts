@@ -93,6 +93,8 @@ export {
   type ViteConfigInput,
   type WorkerConfig,
   type WorkerConfigInput,
+  type WorkerNativePayloadInput,
+  type WorkerNativePayload,
   type WorkerPermissions,
   type WorkerPermissionsInput,
   type WorkerPermissionValue,

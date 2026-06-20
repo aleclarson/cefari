@@ -159,6 +159,7 @@ function workerPermissionArgs(root: string, worker: WorkerConfig): string[] {
     ...namePermissionArgs("net", worker.permissions.net),
     ...namePermissionArgs("env", worker.permissions.env),
     ...pathPermissionArgs(root, "run", worker.permissions.run),
+    ...pathPermissionArgs(root, "ffi", worker.permissions.ffi),
   ];
 }
 

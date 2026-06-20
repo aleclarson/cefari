@@ -83,7 +83,9 @@ function configWithWorkers(root: string): ResolvedCefariConfig {
           net: "none",
           env: "none",
           run: "none",
+          ffi: "none",
         },
+        native: [],
       },
     },
     vite: {

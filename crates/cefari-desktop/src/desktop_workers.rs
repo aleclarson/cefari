@@ -423,6 +423,7 @@ fn permission_args(
     push_name_permission(&mut args, "net", &permissions.net)?;
     push_name_permission(&mut args, "env", &permissions.env)?;
     push_path_permission(&mut args, "run", paths, &permissions.run)?;
+    push_path_permission(&mut args, "ffi", paths, &permissions.ffi)?;
     Ok(args)
 }
 
@@ -1083,6 +1084,7 @@ mod tests {
                             net: WorkerPermissionConfig::None("none".to_owned()),
                             env: WorkerPermissionConfig::None("none".to_owned()),
                             run: WorkerPermissionConfig::None("none".to_owned()),
+                            ffi: WorkerPermissionConfig::None("none".to_owned()),
                         },
                     }),
                 },

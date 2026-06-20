@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { CliPackageCommand, CliTopLevelCommand } from "./cli.js";
+import { isCefariBuildTarget, type CefariBuildTarget } from "./platform.js";
 
 export type ConfigMode = "development" | "production";
 
@@ -55,11 +56,20 @@ export interface WorkerPermissionsInput {
   net?: WorkerPermissionValueInput;
   env?: WorkerPermissionValueInput;
   run?: WorkerPermissionValueInput;
+  ffi?: WorkerPermissionValueInput;
 }
 
 export interface WorkerConfigInput {
   entry: string;
   permissions: WorkerPermissionsInput;
+  native?: WorkerNativePayloadInput[];
+}
+
+export interface WorkerNativePayloadInput {
+  src: string;
+  target: string;
+  platforms?: CefariBuildTarget[];
+  executable?: boolean;
 }
 
 export interface PackageConfigInput {
@@ -130,11 +140,20 @@ export interface WorkerPermissions {
   net: WorkerPermissionValue;
   env: WorkerPermissionValue;
   run: WorkerPermissionValue;
+  ffi: WorkerPermissionValue;
 }
 
 export interface WorkerConfig {
   entry: string;
   permissions: WorkerPermissions;
+  native: WorkerNativePayload[];
+}
+
+export interface WorkerNativePayload {
+  src: string;
+  target: string;
+  platforms: CefariBuildTarget[];
+  executable: boolean;
 }
 
 export interface PackageConfig extends PackageConfigInput {}
@@ -403,13 +422,14 @@ function normalizeWorkers(value: unknown): Record<string, WorkerConfig> {
       throw new Error(`${field} must use an id matching ^[a-z][a-z0-9-]*$`);
     }
     const worker = asRecord(config, field);
-    assertOnlyFields(worker, field, ["entry", "permissions"]);
+    assertOnlyFields(worker, field, ["entry", "permissions", "native"]);
     normalized[id] = {
       entry: relativePath(worker.entry, `${field}.entry`),
       permissions: normalizeWorkerPermissions(
         worker.permissions,
         `${field}.permissions`,
       ),
+      native: normalizeWorkerNativePayloads(worker.native, `${field}.native`),
     };
   }
   return normalized;
@@ -420,7 +440,7 @@ function normalizeWorkerPermissions(
   field: string,
 ): WorkerPermissions {
   const permissions = asRecord(value, field);
-  assertOnlyFields(permissions, field, ["read", "write", "net", "env", "run"]);
+  assertOnlyFields(permissions, field, ["read", "write", "net", "env", "run", "ffi"]);
   return {
     read: normalizeWorkerPermissionValue(
       permissions.read,
@@ -447,7 +467,51 @@ function normalizeWorkerPermissions(
       `${field}.run`,
       "path",
     ),
+    ffi: normalizeWorkerPermissionValue(permissions.ffi, `${field}.ffi`, "path"),
   };
+}
+
+function normalizeWorkerNativePayloads(value: unknown, field: string): WorkerNativePayload[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${field} must be an array`);
+  }
+
+  const targets = new Set<string>();
+  return value.map((entry, index) => {
+    const payloadField = `${field}[${index}]`;
+    const payload = asRecord(entry, payloadField);
+    assertOnlyFields(payload, payloadField, ["src", "target", "platforms", "executable"]);
+    const target = relativeResourcePath(payload.target, `${payloadField}.target`);
+    if (targets.has(target)) {
+      throw new Error(`${payloadField}.target duplicates worker native target "${target}"`);
+    }
+    targets.add(target);
+    return {
+      src: relativePath(payload.src, `${payloadField}.src`),
+      target,
+      platforms: normalizeWorkerNativePlatforms(payload.platforms, `${payloadField}.platforms`),
+      executable: optionalBoolean(payload.executable, `${payloadField}.executable`, false),
+    };
+  });
+}
+
+function normalizeWorkerNativePlatforms(value: unknown, field: string): CefariBuildTarget[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${field} must be a non-empty Cefari build target array`);
+  }
+  return value.map((entry, index) => {
+    const target = requiredString(entry, `${field}[${index}]`);
+    if (!isCefariBuildTarget(target)) {
+      throw new Error(`${field}[${index}] must be a supported Cefari build target`);
+    }
+    return target;
+  });
 }
 
 function normalizeWorkerPermissionValue(
@@ -706,7 +770,14 @@ function cloneWorkers(
           net: clonePermissionValue(worker.permissions.net),
           env: clonePermissionValue(worker.permissions.env),
           run: clonePermissionValue(worker.permissions.run),
+          ffi: clonePermissionValue(worker.permissions.ffi),
         },
+        native: worker.native.map((payload) => ({
+          src: payload.src,
+          target: payload.target,
+          platforms: [...payload.platforms],
+          executable: payload.executable,
+        })),
       },
     ]),
   );
@@ -793,6 +864,14 @@ function relativePath(value: unknown, field: string): string {
     throw new Error(`${field} must be a relative path inside the project`);
   }
   return path;
+}
+
+function relativeResourcePath(value: unknown, field: string): string {
+  const path = requiredString(value, field);
+  if (path.startsWith("/") || path.split(/[\\/]/).includes("..")) {
+    throw new Error(`${field} must be a relative resource path`);
+  }
+  return path.replaceAll("\\", "/");
 }
 
 function port(value: unknown, field: string): number {

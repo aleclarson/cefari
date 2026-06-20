@@ -10,8 +10,23 @@ export default defineConfig({
       permissions: {
         read: ["$appData/uploads"],
         write: ["$appData/cache"],
+        run: ["$resource/workers/thumbnailer/native/bin/thumbnail"],
+        ffi: ["$resource/workers/thumbnailer/native/lib/libthumb.dylib"],
         net: "none",
       },
+      native: [
+        {
+          src: "native/darwin-arm64/thumbnail",
+          target: "bin/thumbnail",
+          platforms: ["darwin-arm64"],
+          executable: true,
+        },
+        {
+          src: "native/darwin-arm64/libthumb.dylib",
+          target: "lib/libthumb.dylib",
+          platforms: ["darwin-arm64"],
+        },
+      ],
     },
   },
 });
@@ -44,12 +59,13 @@ Each worker must declare `permissions`. Supported keys are:
 - `net`
 - `env`
 - `run`
+- `ffi`
 
 Each key is either `"none"` or a non-empty string array. Omitted permission keys
 default to `"none"`.
 
-Path permissions for `read`, `write`, and `run` accept project-relative paths
-or Cefari runtime tokens:
+Path permissions for `read`, `write`, `run`, and `ffi` accept
+project-relative paths or Cefari runtime tokens:
 
 - `$appData`
 - `$cache`
@@ -68,6 +84,35 @@ Runtime path tokens such as `$appData`, `$cache`, and `$resource` refer to
 paths that are only known after installation. For compiled workers, those token
 permissions are compiled as category-level Deno permissions such as
 `--allow-read`.
+
+`ffi` enables Deno FFI for dynamic libraries. Native libraries execute outside
+Deno's JavaScript sandbox, so `ffi` should only be granted to libraries the app
+author intentionally bundles and trusts.
+
+## Native Payloads
+
+Workers can declare native executables or dynamic libraries in `native`. Native
+payloads are owned by the worker that declares them and are packaged separately
+from the compiled Deno worker executable.
+
+Each native payload supports:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `src` | Yes | Project-relative source file to copy into the package. |
+| `target` | Yes | Worker-native resource path used inside the package. |
+| `platforms` | No | Cefari build targets that should include this payload. Omit to include the payload for every target. |
+| `executable` | No | Whether Cefari should preserve or set executable mode for this payload. Defaults to `false`. |
+
+`src` must stay inside the project. `target` must be a relative resource path
+and cannot use parent traversal. Native payload selection uses the effective
+`CefariBuildTarget` from `cefari build --target`; cross-target release jobs
+should run one build/package pass per target.
+
+Deno compilation does not bundle external native executables or dynamic
+libraries automatically. Apps that use `Deno.Command` or `Deno.dlopen` must
+declare those native files as worker native payloads and grant the corresponding
+`run` or `ffi` permission.
 
 ## Worker Scripts
 
