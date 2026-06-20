@@ -1,7 +1,9 @@
 import {
+  array,
   binary,
   command,
   flag,
+  multioption,
   number,
   oneOf,
   option,
@@ -11,6 +13,13 @@ import {
   string,
   subcommands,
 } from "cmd-ts";
+import {
+  runLogsExpand,
+  runLogsPage,
+  runLogsPath,
+  runLogsTail,
+  type LogTailOptions,
+} from "./logs-cli.js";
 import type { CefariBuildTarget } from "./platform.js";
 import {
   type ReleaseMode,
@@ -30,7 +39,12 @@ import {
 
 export const VERSION = "0.1.0";
 
-export type CliTopLevelCommand = "dev" | "build" | "package" | "unknown";
+export type CliTopLevelCommand =
+  | "dev"
+  | "build"
+  | "package"
+  | "logs"
+  | "unknown";
 export type CliPackageCommand =
   | "package"
   | "sign"
@@ -155,6 +169,65 @@ const outputDir = option({
   long: "output-dir",
   description: "Directory where update artifacts are written.",
 });
+
+const logsQueryArgs = {
+  afterId: option({
+    type: optional(number),
+    long: "after-id",
+    description: "Only include rows after this log row id.",
+  }),
+  beforeId: option({
+    type: optional(number),
+    long: "before-id",
+    description: "Only include rows before this log row id.",
+  }),
+  debugScope: option({
+    type: optional(string),
+    long: "debug-scope",
+    description: "Only include debug rows for this debug scope prefix.",
+  }),
+  grep: option({
+    type: optional(string),
+    long: "grep",
+    description: "Filter rows by message or serialized properties.",
+  }),
+  json: flag({
+    long: "json",
+    description: "Print JSON output.",
+    defaultValue: () => false,
+  }),
+  level: option({
+    type: optional(oneOf(["debug", "info", "log", "warn", "error"] as const)),
+    long: "level",
+    description: "Minimum level: debug, info, log, warn, or error. Defaults to info.",
+  }),
+  limit: option({
+    type: optional(number),
+    long: "limit",
+    description: "Maximum number of rows to print.",
+  }),
+  property: multioption({
+    type: array(string),
+    long: "property",
+    description: "Filter by a log property using key=value syntax.",
+    defaultValue: () => [],
+  }),
+  regex: option({
+    type: optional(string),
+    long: "regex",
+    description: "Filter rows by a JavaScript regular expression.",
+  }),
+  scope: option({
+    type: optional(string),
+    long: "scope",
+    description: "Only include rows from this scope.",
+  }),
+  since: option({
+    type: optional(string),
+    long: "since",
+    description: "Only include rows after an ISO timestamp or duration like 10m, 2h, or 1d.",
+  }),
+};
 
 const dev = command({
   name: "dev",
@@ -360,6 +433,85 @@ const packageCommands = subcommands({
   },
 });
 
+const logsPath = command({
+  name: "path",
+  description: "Print the Cefari SQLite log database path.",
+  args: {},
+  handler: () => {
+    runLogsPath();
+  },
+});
+
+const logsPage = command({
+  name: "page",
+  description: "Print a page of Cefari log rows.",
+  args: logsQueryArgs,
+  handler: (args) => {
+    runLogsPage({
+      ...args,
+      properties: args.property,
+    });
+  },
+});
+
+const logsTail = command({
+  name: "tail",
+  description: "Follow Cefari log rows.",
+  args: {
+    ...logsQueryArgs,
+    once: flag({
+      long: "once",
+      description: "Print one polling pass and exit.",
+      defaultValue: () => false,
+    }),
+    pollMs: option({
+      type: optional(number),
+      long: "poll-ms",
+      description: "Polling interval in milliseconds.",
+    }),
+  },
+  handler: async (args) => {
+    const options: LogTailOptions = {
+      ...args,
+      once: args.once,
+      pollMs: args.pollMs,
+      properties: args.property,
+    };
+    await runLogsTail(options);
+  },
+});
+
+const logsExpand = command({
+  name: "expand",
+  description: "Print a collapsed log value.",
+  args: {
+    id: positional({
+      type: string,
+      displayName: "id",
+      description: "Collapsed value id.",
+    }),
+    text: flag({
+      long: "text",
+      description: "Print only the expanded body as text.",
+      defaultValue: () => false,
+    }),
+  },
+  handler: ({ id, text }) => {
+    runLogsExpand(id, { json: text !== true });
+  },
+});
+
+const logsCommands = subcommands({
+  name: "logs",
+  description: "Inspect Cefari logs.",
+  cmds: {
+    path: logsPath,
+    page: logsPage,
+    tail: logsTail,
+    expand: logsExpand,
+  },
+});
+
 export const cefariCli = subcommands({
   name: "cefari",
   version: VERSION,
@@ -368,6 +520,7 @@ export const cefariCli = subcommands({
     dev,
     build,
     package: packageCommands,
+    logs: logsCommands,
   },
 });
 
