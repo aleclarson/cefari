@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -18,7 +18,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
 
 async function projectWithBuildConfig(
-  options: { daemon?: boolean } = { daemon: true },
+  options: { daemon?: boolean; workerNative?: boolean } = { daemon: true },
 ): Promise<{ root: string; runtime: string; cefResources: string }> {
   const root = await mkdtemp(join(tmpdir(), "cefari-build-"));
   const runtime = join(root, "cefari-desktop");
@@ -33,6 +33,10 @@ async function projectWithBuildConfig(
   await writeFile(join(root, "deno.json"), JSON.stringify({ imports: { "cefari/worker": "./.cefari/worker.ts" } }));
   await writeFile(join(root, "ui/deno.json"), JSON.stringify({ imports: { "local/app": "../src/app.ts" } }));
   await writeFile(join(root, "workers/thumbnailer.ts"), "console.log('thumbnailer');\n");
+  if (options.workerNative) {
+    await mkdir(join(root, "native/windows-x64"), { recursive: true });
+    await writeFile(join(root, "native/windows-x64/thumb.exe"), "windows-tool");
+  }
   await writeFile(runtime, "desktop-runtime");
   await writeFile(
     join(cefResources, "archive.json"),
@@ -68,7 +72,22 @@ export default defineConfig({
       entry: "workers/thumbnailer.ts",
       permissions: {
         read: ["$appData/uploads"],
+        ${options.workerNative ? `run: ["$resource/workers/thumbnailer/native/bin/thumb.exe"],` : ""}
       },
+      ${options.workerNative ? `native: [
+        {
+          src: "native/windows-x64/thumb.exe",
+          target: "bin/thumb.exe",
+          platforms: ["windows-x64"],
+          executable: true,
+        },
+        {
+          src: "native/linux-x64/missing-tool",
+          target: "bin/thumb",
+          platforms: ["linux-x64"],
+          executable: true,
+        },
+      ],` : ""}
     },
   },
   ${options.daemon === false ? "" : `daemon: {
@@ -359,6 +378,89 @@ test("builds Windows target executables and metadata with target-specific runtim
   assert.equal(cefManifest.target, "windows-x64");
   assert.equal(cefManifest.target_os, "windows");
   assert.equal(cefManifest.target_arch, "x64");
+});
+
+test("copies worker native payloads for the requested build target", async () => {
+  const { root, cefResources } = await projectWithBuildConfig({ workerNative: true });
+  const target: CefariBuildTarget = "windows-x64";
+  const runtime = join(root, "cefari-desktop-windows.exe");
+  await writeFile(runtime, "windows-runtime");
+
+  await withPlatformForTest(
+    {
+      async viteBuild() {
+        await mkdir(join(root, "build/frontend"), { recursive: true });
+        await writeFile(join(root, "build/frontend/index.html"), "<!doctype html>");
+      },
+      spawnSync(command, args) {
+        const outputIndex = args.indexOf("--output");
+        if (command === "deno" && outputIndex !== -1) {
+          const output = args[outputIndex + 1];
+          if (typeof output === "string") {
+            writeFileSync(output, "compiled-executable");
+          }
+        }
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME_windows_x64: runtime,
+        CEFARI_CEF_RESOURCES_DIR: cefResources,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
+      },
+    },
+    async () => {
+      await runCefariBuild({ root, target });
+    },
+  );
+
+  const nativePayload = join(root, "build/workers/thumbnailer/native/bin/thumb.exe");
+  assert.equal(await readFile(nativePayload, "utf8"), "windows-tool");
+  assert.notEqual((await stat(nativePayload)).mode & 0o111, 0);
+  assert.equal(existsSync(join(root, "build/workers/thumbnailer/native/bin/thumb")), false);
+});
+
+test("build rejects missing selected worker native payloads", async () => {
+  const { root, cefResources } = await projectWithBuildConfig({ workerNative: true });
+  const runtime = join(root, "cefari-desktop-linux");
+  await writeFile(runtime, "linux-runtime");
+
+  await withPlatformForTest(
+    {
+      async viteBuild() {
+        await mkdir(join(root, "build/frontend"), { recursive: true });
+        await writeFile(join(root, "build/frontend/index.html"), "<!doctype html>");
+      },
+      spawnSync(command, args) {
+        const outputIndex = args.indexOf("--output");
+        if (command === "deno" && outputIndex !== -1) {
+          const output = args[outputIndex + 1];
+          if (typeof output === "string") {
+            writeFileSync(output, "compiled-executable");
+          }
+        }
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME_linux_x64: runtime,
+        CEFARI_CEF_RESOURCES_DIR: cefResources,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
+      },
+    },
+    async () => {
+      await assert.rejects(
+        runCefariBuild({ root, target: "linux-x64" }),
+        /worker native payload does not exist: .*native\/linux-x64\/missing-tool/,
+      );
+    },
+  );
 });
 
 test("non-host build target requires a target-specific desktop runtime", async () => {

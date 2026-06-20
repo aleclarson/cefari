@@ -1,12 +1,13 @@
-import { cp, mkdir, readFile, rm, writeFile, copyFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rm, stat, writeFile, copyFile } from "node:fs/promises";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { DaemonConfig, ResolvedCefariConfig, WorkerConfig, WorkerPermissionValue } from "./config.js";
 import { resolveDesktopRuntime } from "./dev.js";
 import type { DesktopWorkerExecutableEntry } from "./desktop-config.js";
 import { writeDesktopConfig } from "./desktop-config.js";
+import { selectedWorkerNativePayloads, workerNativePayloadBuildPath } from "./native-payloads.js";
 import {
   cefariBuildTargetInfo,
   currentPlatform,
@@ -52,6 +53,7 @@ export async function runCefariBuild(options: BuildOptions = {}): Promise<void> 
 
   await viteBuild(createViteBuildConfig(config, frontendOut));
   const packagedWorkers = await buildWorkers(config, workersOut, target);
+  await copyWorkerNativePayloads(config, buildDir, target);
   await writeDesktopConfig(config, configOut, {
     workers: packagedWorkers,
     daemon:
@@ -68,6 +70,29 @@ export async function runCefariBuild(options: BuildOptions = {}): Promise<void> 
   await buildDesktop(config, desktopOut, Boolean(options.release), target);
 
   stdout.write(`built Cefari project at ${root}\n`);
+}
+
+async function copyWorkerNativePayloads(
+  config: ResolvedCefariConfig,
+  buildDir: string,
+  target: CefariBuildTarget,
+): Promise<void> {
+  for (const selected of selectedWorkerNativePayloads(config, target)) {
+    const source = resolve(config.root, selected.payload.src);
+    if (!existsSync(source)) {
+      throw new Error(`worker native payload does not exist: ${source}`);
+    }
+    const sourceStat = await stat(source);
+    if (!sourceStat.isFile()) {
+      throw new Error(`worker native payload must be a file: ${source}`);
+    }
+    const destination = workerNativePayloadBuildPath(buildDir, selected);
+    await mkdir(dirname(destination), { recursive: true });
+    await copyFile(source, destination);
+    if (selected.payload.executable) {
+      await chmod(destination, sourceStat.mode | 0o111);
+    }
+  }
 }
 
 export function createViteBuildConfig(config: ResolvedCefariConfig, outDir: string): InlineConfig {

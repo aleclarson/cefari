@@ -29,6 +29,7 @@ Supported build targets are `darwin-arm64`, `darwin-x64`, `linux-x64`,
 - `build/daemon/<projectName>-daemon`, when `daemon.entry` is configured
 - `build/desktop/<projectName>`
 - `build/workers/<workerId>/<workerExecutableName>`
+- `build/workers/<workerId>/native/`, when selected worker native payloads are configured
 - `build/cef/resources/`
 - `build/cef/resources/archive.json`
 - `build/cef/manifest.json`
@@ -93,6 +94,10 @@ Cefari passes per-worker permissions from `cefari.config.ts` to
 `deno compile`; packaged worker permissions are baked into the executable.
 Changing worker permissions requires rebuilding.
 
+Worker native payloads selected for the build target are copied under
+`build/workers/<workerId>/native/`. Payloads for other targets are ignored for
+that build and do not need to exist locally.
+
 ## CEF Resources
 
 `cefari build` prepares CEF resources as part of the build. The package step
@@ -104,7 +109,8 @@ Packaging verifies that the desktop binary used as the CEF subprocess is present
 that `build/config/cefari.json` exists, that `archive.json` exists, that the CEF
 resource directory contains runtime payload files, and that `cef/locales/`
 contains at least one locale file. It also includes `build/workers/` as the
-package resource target `workers` and validates configured worker executables.
+package resource target `workers`, validates configured worker executables, and
+validates selected worker native payloads.
 
 On macOS, packages that include `Chromium Embedded Framework.framework` must be
 signed and notarized with that framework payload intact. Run
@@ -128,6 +134,10 @@ metadata in place and reports that native package generation was skipped.
 
 Configured deep-link schemes are written to Cargo Packager metadata during this
 step. Packaged apps use that metadata for OS protocol registration.
+
+Configured worker native payloads are included through the `workers` package
+resource and listed in `dist/package/manifest.json` under
+`worker_native_payloads`.
 
 For release-profile packaging:
 

@@ -11,7 +11,7 @@ import { withPlatformForTest } from "../src/platform.js";
 const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
 
-async function projectWithPackageBuild(options: { daemon?: boolean } = { daemon: true }): Promise<string> {
+async function projectWithPackageBuild(options: { daemon?: boolean; workerNative?: boolean } = { daemon: true }): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "cefari-package-"));
   await mkdir(join(root, "build/frontend"), { recursive: true });
   await mkdir(join(root, "build/config"), { recursive: true });
@@ -21,6 +21,9 @@ async function projectWithPackageBuild(options: { daemon?: boolean } = { daemon:
   }
   await mkdir(join(root, "build/desktop"), { recursive: true });
   await mkdir(join(root, "build/workers/thumbnailer"), { recursive: true });
+  if (options.workerNative) {
+    await mkdir(join(root, "build/workers/thumbnailer/native/bin"), { recursive: true });
+  }
   await mkdir(join(root, "build/cef/resources"), { recursive: true });
   await mkdir(join(root, "assets"), { recursive: true });
   await writeFile(join(root, "assets/app.png"), "app-icon");
@@ -32,6 +35,9 @@ async function projectWithPackageBuild(options: { daemon?: boolean } = { daemon:
   );
   await writeFile(join(root, "build/desktop/package-app"), "desktop");
   await writeFile(join(root, "build/workers/thumbnailer/thumbnailer"), "worker");
+  if (options.workerNative) {
+    await writeFile(join(root, "build/workers/thumbnailer/native/bin/thumb.exe"), "windows-tool");
+  }
   await writeFile(
     join(root, "build/cef/resources/archive.json"),
     JSON.stringify({ name: "cef.tar.bz2", sha1: "fixture-sha1" }),
@@ -55,6 +61,20 @@ export default defineConfig({
     thumbnailer: {
       entry: "workers/thumbnailer.ts",
       permissions: {},
+      ${options.workerNative ? `native: [
+        {
+          src: "native/windows-x64/thumb.exe",
+          target: "bin/thumb.exe",
+          platforms: ["windows-x64"],
+          executable: true,
+        },
+        {
+          src: "native/linux-x64/thumb",
+          target: "bin/thumb",
+          platforms: ["linux-x64"],
+          executable: true,
+        },
+      ],` : ""}
     },
   },
   ${options.daemon === false ? "" : `daemon: {
@@ -171,6 +191,67 @@ test("package uses build manifest target for format and executable names", async
   assert.equal(manifest.desktop_binary, "package-app.exe");
   assert.match(manifest.daemon_executable, /package-app-daemon\.exe/);
   assert.match(manifest.worker_executables.thumbnailer, /thumbnailer\.exe/);
+});
+
+test("package includes worker native payloads selected by build target", async () => {
+  const root = await projectWithPackageBuild({ workerNative: true });
+  await writeFile(join(root, "build/desktop/package-app.exe"), "desktop");
+  await writeFile(join(root, "build/daemon/package-app-daemon.exe"), "daemon");
+  await writeFile(join(root, "build/workers/thumbnailer/thumbnailer.exe"), "worker");
+  await writeFile(
+    join(root, "build/cef/manifest.json"),
+    JSON.stringify({ target: "windows-x64", target_os: "windows", target_arch: "x64" }),
+  );
+
+  await withPackagePlatform([], async () => {
+    await runCefariPackage({ root });
+  });
+
+  const metadata = await readFile(join(root, "dist/package/cargo-packager.toml"), "utf8");
+  assert.match(metadata, /target = "workers"/);
+  const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
+  assert.deepEqual(manifest.worker_native_payloads.thumbnailer, [
+    {
+      target: "bin/thumb.exe",
+      resource_path: "workers/thumbnailer/native/bin/thumb.exe",
+      path: join(root, "build/workers/thumbnailer/native/bin/thumb.exe").replaceAll("\\", "/"),
+      executable: true,
+    },
+  ]);
+});
+
+test("package ignores worker native payloads for other build targets", async () => {
+  const root = await projectWithPackageBuild({ workerNative: true });
+  await writeFile(
+    join(root, "build/cef/manifest.json"),
+    JSON.stringify({ target: "darwin-arm64", target_os: "darwin", target_arch: "arm64" }),
+  );
+
+  await withPackagePlatform([], async () => {
+    await runCefariPackage({ root });
+  });
+
+  const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
+  assert.deepEqual(manifest.worker_native_payloads.thumbnailer, []);
+});
+
+test("package rejects missing selected worker native payloads", async () => {
+  const root = await projectWithPackageBuild({ workerNative: true });
+  await writeFile(join(root, "build/desktop/package-app.exe"), "desktop");
+  await writeFile(join(root, "build/daemon/package-app-daemon.exe"), "daemon");
+  await writeFile(join(root, "build/workers/thumbnailer/thumbnailer.exe"), "worker");
+  await rm(join(root, "build/workers/thumbnailer/native/bin/thumb.exe"));
+  await writeFile(
+    join(root, "build/cef/manifest.json"),
+    JSON.stringify({ target: "windows-x64", target_os: "windows", target_arch: "x64" }),
+  );
+
+  await withPackagePlatform([], async () => {
+    await assert.rejects(
+      runCefariPackage({ root }),
+      /artifact does not exist: .*build\/workers\/thumbnailer\/native\/bin\/thumb\.exe/,
+    );
+  });
 });
 
 test("package rejects missing executables for build manifest target", async () => {

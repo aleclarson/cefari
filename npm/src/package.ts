@@ -4,6 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { loadCefariConfig } from "./config.js";
 import type { ResolvedCefariConfig } from "./config.js";
 import { runCefariBuild } from "./build.js";
+import { selectedWorkerNativePayloads, workerNativePayloadBuildPath } from "./native-payloads.js";
 import {
   currentPlatform,
   executableNameForTarget,
@@ -190,6 +191,9 @@ function ensureBuildArtifacts(
   for (const worker of Object.keys(config.workers)) {
     ensureArtifact(join(buildDir, "workers", worker, executableNameForTarget(worker, target)));
   }
+  for (const selected of selectedWorkerNativePayloads(config, target)) {
+    ensureArtifact(workerNativePayloadBuildPath(buildDir, selected));
+  }
 }
 
 async function writePackageMetadata(
@@ -265,6 +269,19 @@ async function writePackageManifest(
       Object.keys(config.workers).map((worker) => [
         worker,
         normalizePath(join(buildDir, "workers", worker, executableNameForTarget(worker, target))),
+      ]),
+    ),
+    worker_native_payloads: Object.fromEntries(
+      Object.keys(config.workers).map((worker) => [
+        worker,
+        selectedWorkerNativePayloads(config, target)
+          .filter((selected) => selected.worker === worker)
+          .map((selected) => ({
+            target: selected.payload.target,
+            resource_path: selected.resourcePath,
+            path: normalizePath(workerNativePayloadBuildPath(buildDir, selected)),
+            executable: selected.payload.executable,
+          })),
       ]),
     ),
     cef_resources: normalizePath(cefResources),
