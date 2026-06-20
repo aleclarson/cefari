@@ -471,7 +471,11 @@ mod tests {
         )
         .expect_err("invalid sample rate should be rejected");
 
-        assert!(error.to_string().contains("sample_rate must be from 0 to 1"));
+        assert!(
+            error
+                .to_string()
+                .contains("sample_rate must be from 0 to 1")
+        );
     }
 
     #[test]

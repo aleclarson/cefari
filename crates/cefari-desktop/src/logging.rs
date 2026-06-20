@@ -17,10 +17,102 @@ use tracing_subscriber::{
 };
 
 pub(crate) struct LogGuards {
-    _database: SharedLogDatabase,
+    _router: Arc<LogRouter>,
 }
 
 type SharedLogDatabase = Arc<Mutex<Connection>>;
+
+#[derive(Debug, Clone)]
+pub(crate) struct LogEvent {
+    pub(crate) scope: String,
+    pub(crate) level: String,
+    pub(crate) message: String,
+    pub(crate) properties: Value,
+    pub(crate) pid: i64,
+    pub(crate) at: String,
+}
+
+impl LogEvent {
+    pub(crate) fn new(
+        scope: impl Into<String>,
+        level: impl Into<String>,
+        message: impl Into<String>,
+        properties: Value,
+    ) -> Self {
+        Self {
+            scope: scope.into(),
+            level: level.into(),
+            message: message.into(),
+            properties,
+            pid: i64::from(std::process::id()),
+            at: iso_timestamp(),
+        }
+    }
+}
+
+pub(crate) trait LogSink: Send + Sync {
+    fn append(&self, event: &LogEvent) -> Result<()>;
+}
+
+pub(crate) struct LogRouter {
+    sinks: Vec<Arc<dyn LogSink>>,
+}
+
+impl LogRouter {
+    pub(crate) fn new(sinks: Vec<Arc<dyn LogSink>>) -> Self {
+        Self { sinks }
+    }
+
+    pub(crate) fn with_local_database(database_path: &Path) -> Result<Self> {
+        Ok(Self::new(vec![
+            Arc::new(SqliteLogSink::open(database_path)?) as Arc<dyn LogSink>,
+        ]))
+    }
+
+    pub(crate) fn with_optional_local_database(
+        database_path: &Path,
+        enabled: bool,
+    ) -> Result<Self> {
+        if enabled {
+            Self::with_local_database(database_path)
+        } else {
+            Ok(Self::new(Vec::new()))
+        }
+    }
+
+    pub(crate) fn route(&self, event: &LogEvent) -> Result<()> {
+        for sink in &self.sinks {
+            sink.append(event)?;
+        }
+        Ok(())
+    }
+}
+
+pub(crate) struct SqliteLogSink {
+    database: SharedLogDatabase,
+}
+
+impl SqliteLogSink {
+    pub(crate) fn open(path: &Path) -> Result<Self> {
+        Ok(Self {
+            database: open_log_database(path)?,
+        })
+    }
+
+    fn from_database(database: SharedLogDatabase) -> Self {
+        Self { database }
+    }
+}
+
+impl LogSink for SqliteLogSink {
+    fn append(&self, event: &LogEvent) -> Result<()> {
+        let connection = self
+            .database
+            .lock()
+            .map_err(|error| anyhow::anyhow!("failed to lock log database: {error}"))?;
+        insert_log_entry(&connection, event).context("failed to insert log entry")
+    }
+}
 
 pub(crate) fn init_logging(paths: &RuntimePaths) -> Result<LogGuards> {
     let log_config = RuntimeLogConfig::new(paths);
@@ -32,16 +124,17 @@ pub(crate) fn init_logging(paths: &RuntimePaths) -> Result<LogGuards> {
     })?;
 
     let database = open_log_database(&log_config.database.file_path())?;
-    let layer = SqliteLogLayer::new(database.clone());
+    let router = Arc::new(LogRouter::new(vec![
+        Arc::new(SqliteLogSink::from_database(database)) as Arc<dyn LogSink>,
+    ]));
+    let layer = RoutedLogLayer::new(router.clone());
 
     tracing_subscriber::registry()
         .with(layer)
         .try_init()
         .map_err(|error| anyhow::anyhow!("failed to initialize tracing subscriber: {error}"))?;
 
-    Ok(LogGuards {
-        _database: database,
-    })
+    Ok(LogGuards { _router: router })
 }
 
 fn open_log_database(path: &Path) -> Result<SharedLogDatabase> {
@@ -59,17 +152,17 @@ fn initialize_log_database(connection: &Connection) -> rusqlite::Result<()> {
 }
 
 #[derive(Clone)]
-struct SqliteLogLayer {
-    database: SharedLogDatabase,
+struct RoutedLogLayer {
+    router: Arc<LogRouter>,
 }
 
-impl SqliteLogLayer {
-    fn new(database: SharedLogDatabase) -> Self {
-        Self { database }
+impl RoutedLogLayer {
+    fn new(router: Arc<LogRouter>) -> Self {
+        Self { router }
     }
 }
 
-impl<S> Layer<S> for SqliteLogLayer
+impl<S> Layer<S> for RoutedLogLayer
 where
     S: Subscriber,
 {
@@ -97,24 +190,15 @@ where
             properties.insert("line".to_owned(), Value::Number(Number::from(line)));
         }
 
-        let input = LogEntryInput {
-            scope: CEFARI_LOG_SCOPE,
-            level: level_name(metadata.level()),
-            message: &message,
-            properties: Value::Object(properties),
-            pid: i64::from(std::process::id()),
-            at: iso_timestamp(),
-        };
+        let event = LogEvent::new(
+            CEFARI_LOG_SCOPE,
+            level_name(metadata.level()),
+            message,
+            Value::Object(properties),
+        );
 
-        match self.database.lock() {
-            Ok(connection) => {
-                if let Err(error) = insert_log_entry(&connection, &input) {
-                    eprintln!("failed to write Cefari runtime log: {error}");
-                }
-            }
-            Err(error) => {
-                eprintln!("failed to lock Cefari runtime log database: {error}");
-            }
+        if let Err(error) = self.router.route(&event) {
+            eprintln!("failed to route Cefari runtime log: {error}");
         }
     }
 }
@@ -126,41 +210,21 @@ pub(crate) fn append_log_entry(
     message: &str,
     properties: Value,
 ) -> Result<()> {
-    let database = open_log_database(database_path)?;
-    let connection = database
-        .lock()
-        .map_err(|error| anyhow::anyhow!("failed to lock log database: {error}"))?;
-    let input = LogEntryInput {
-        scope,
-        level,
-        message,
-        properties,
-        pid: i64::from(std::process::id()),
-        at: iso_timestamp(),
-    };
-    insert_log_entry(&connection, &input).context("failed to insert log entry")
+    let router = LogRouter::with_local_database(database_path)?;
+    router.route(&LogEvent::new(scope, level, message, properties))
 }
 
-struct LogEntryInput<'a> {
-    scope: &'a str,
-    level: &'a str,
-    message: &'a str,
-    properties: Value,
-    pid: i64,
-    at: String,
-}
-
-fn insert_log_entry(connection: &Connection, input: &LogEntryInput<'_>) -> rusqlite::Result<()> {
-    let properties_json = redact_log_value(&input.properties, None).to_string();
+fn insert_log_entry(connection: &Connection, event: &LogEvent) -> rusqlite::Result<()> {
+    let properties_json = redact_log_value(&event.properties, None).to_string();
     connection.execute(
         "INSERT INTO log_entries (at, scope, level, pid, message, properties_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
-            input.at,
-            input.scope,
-            input.level,
-            input.pid,
-            input.message,
+            event.at,
+            event.scope,
+            event.level,
+            event.pid,
+            event.message,
             properties_json
         ],
     )?;
@@ -287,7 +351,11 @@ fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{SqliteLogLayer, append_log_entry, initialize_log_database, iso_timestamp};
+    use super::{
+        LogEvent, LogRouter, LogSink, RoutedLogLayer, SqliteLogSink, append_log_entry,
+        initialize_log_database, iso_timestamp,
+    };
+    use anyhow::Result;
     use cefari_core::CEFARI_LOG_SCOPE;
     use rusqlite::Connection;
     use serde_json::Value;
@@ -317,7 +385,10 @@ mod tests {
             Connection::open_in_memory().expect("in-memory database"),
         ));
         initialize_log_database(&connection.lock().unwrap()).expect("schema should initialize");
-        let layer = SqliteLogLayer::new(connection.clone()).boxed();
+        let router = Arc::new(LogRouter::new(vec![Arc::new(
+            SqliteLogSink::from_database(connection.clone()),
+        )]));
+        let layer = RoutedLogLayer::new(router).boxed();
         let subscriber = tracing_subscriber::registry().with(layer);
 
         tracing::subscriber::with_default(subscriber, || {
@@ -407,6 +478,124 @@ mod tests {
         assert_eq!(properties["env"]["PATH"], "/bin");
 
         std::fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    #[test]
+    fn routes_one_event_to_local_sqlite() {
+        let connection = Arc::new(Mutex::new(
+            Connection::open_in_memory().expect("in-memory database"),
+        ));
+        initialize_log_database(&connection.lock().unwrap()).expect("schema should initialize");
+        let router = LogRouter::new(vec![Arc::new(SqliteLogSink::from_database(
+            connection.clone(),
+        ))]);
+
+        router
+            .route(&LogEvent::new(
+                "app",
+                "info",
+                "app.ready",
+                serde_json::json!({ "windowId": "main" }),
+            ))
+            .expect("event should route");
+
+        let connection = connection.lock().unwrap();
+        let count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM log_entries", [], |row| row.get(0))
+            .expect("row count should load");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn local_disabled_does_not_create_sqlite_database() {
+        let root =
+            std::env::temp_dir().join(format!("cefari-disabled-local-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("temp dir should exist");
+        let database_path = root.join("cefari.sqlite");
+        let router =
+            LogRouter::with_optional_local_database(&database_path, false).expect("router");
+
+        router
+            .route(&LogEvent::new(
+                "app",
+                "info",
+                "app.ready",
+                Value::Object(Default::default()),
+            ))
+            .expect("event should route with no local sink");
+
+        assert!(!database_path.exists());
+        std::fs::remove_dir_all(root).expect("temp dir should be removable");
+    }
+
+    #[test]
+    fn local_sink_redacts_secret_properties() {
+        let connection = Arc::new(Mutex::new(
+            Connection::open_in_memory().expect("in-memory database"),
+        ));
+        initialize_log_database(&connection.lock().unwrap()).expect("schema should initialize");
+        let router = LogRouter::new(vec![Arc::new(SqliteLogSink::from_database(
+            connection.clone(),
+        ))]);
+
+        router
+            .route(&LogEvent::new(
+                "app",
+                "warn",
+                "app.warning",
+                serde_json::json!({
+                    "token": "secret",
+                    "env": {
+                        "OPENAI_API_KEY": "secret",
+                        "PATH": "/bin"
+                    }
+                }),
+            ))
+            .expect("event should route");
+
+        let connection = connection.lock().unwrap();
+        let properties_json: String = connection
+            .query_row("SELECT properties_json FROM log_entries", [], |row| {
+                row.get(0)
+            })
+            .expect("properties should load");
+        let properties: Value =
+            serde_json::from_str(&properties_json).expect("properties should parse");
+        assert_eq!(properties["token"], "[redacted]");
+        assert_eq!(properties["env"]["OPENAI_API_KEY"], "[redacted]");
+        assert_eq!(properties["env"]["PATH"], "/bin");
+    }
+
+    #[derive(Default)]
+    struct CapturingSink {
+        events: Mutex<Vec<LogEvent>>,
+    }
+
+    impl LogSink for CapturingSink {
+        fn append(&self, event: &LogEvent) -> Result<()> {
+            self.events.lock().unwrap().push(event.clone());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn routes_events_to_multiple_sinks() {
+        let first = Arc::new(CapturingSink::default());
+        let second = Arc::new(CapturingSink::default());
+        let router = LogRouter::new(vec![first.clone(), second.clone()]);
+
+        router
+            .route(&LogEvent::new(
+                "daemon",
+                "log",
+                "daemon ready",
+                Value::Object(Default::default()),
+            ))
+            .expect("event should route");
+
+        assert_eq!(first.events.lock().unwrap().len(), 1);
+        assert_eq!(second.events.lock().unwrap().len(), 1);
     }
 
     #[test]
