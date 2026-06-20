@@ -23,6 +23,9 @@ async function projectWithPackageBuild(options: { daemon?: boolean; workerNative
   await mkdir(join(root, "build/workers/thumbnailer"), { recursive: true });
   if (options.workerNative) {
     await mkdir(join(root, "build/workers/thumbnailer/native/bin"), { recursive: true });
+    if (options.daemon !== false) {
+      await mkdir(join(root, "build/daemon/native/bin"), { recursive: true });
+    }
   }
   await mkdir(join(root, "build/cef/resources"), { recursive: true });
   await mkdir(join(root, "assets"), { recursive: true });
@@ -37,6 +40,9 @@ async function projectWithPackageBuild(options: { daemon?: boolean; workerNative
   await writeFile(join(root, "build/workers/thumbnailer/thumbnailer"), "worker");
   if (options.workerNative) {
     await writeFile(join(root, "build/workers/thumbnailer/native/bin/thumb.exe"), "windows-tool");
+    if (options.daemon !== false) {
+      await writeFile(join(root, "build/daemon/native/bin/thumb.exe"), "windows-tool");
+    }
   }
   await writeFile(
     join(root, "build/cef/resources/archive.json"),
@@ -57,28 +63,32 @@ export default defineConfig({
     tray({ icon: "assets/tray.png" }),
     deepLinks({ schemes: ["packageapp", "packageapp+dev"] }),
   ],
+  ${options.workerNative ? `nativeResources: {
+    "thumb-tool": {
+      target: "bin/thumb.exe",
+      sources: {
+        "windows-x64": "native/windows-x64/thumb.exe",
+      },
+      executable: true,
+    },
+    "linux-thumb-tool": {
+      target: "bin/thumb",
+      sources: {
+        "linux-x64": "native/linux-x64/thumb",
+      },
+      executable: true,
+    },
+  },` : ""}
   workers: {
     thumbnailer: {
       entry: "workers/thumbnailer.ts",
       permissions: {},
-      ${options.workerNative ? `native: [
-        {
-          src: "native/windows-x64/thumb.exe",
-          target: "bin/thumb.exe",
-          platforms: ["windows-x64"],
-          executable: true,
-        },
-        {
-          src: "native/linux-x64/thumb",
-          target: "bin/thumb",
-          platforms: ["linux-x64"],
-          executable: true,
-        },
-      ],` : ""}
+      ${options.workerNative ? `native: ["thumb-tool", "linux-thumb-tool"],` : ""}
     },
   },
   ${options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
+    ${options.workerNative ? `native: ["thumb-tool"],` : ""}
   },`}
   package: {
     productName: "Package App",
@@ -193,7 +203,7 @@ test("package uses build manifest target for format and executable names", async
   assert.match(manifest.worker_executables.thumbnailer, /thumbnailer\.exe/);
 });
 
-test("package includes worker native payloads selected by build target", async () => {
+test("package includes worker native resources selected by build target", async () => {
   const root = await projectWithPackageBuild({ workerNative: true });
   await writeFile(join(root, "build/desktop/package-app.exe"), "desktop");
   await writeFile(join(root, "build/daemon/package-app-daemon.exe"), "daemon");
@@ -210,8 +220,18 @@ test("package includes worker native payloads selected by build target", async (
   const metadata = await readFile(join(root, "dist/package/cargo-packager.toml"), "utf8");
   assert.match(metadata, /target = "workers"/);
   const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
-  assert.deepEqual(manifest.worker_native_payloads.thumbnailer, [
+  assert.deepEqual(manifest.daemon_native_resources, [
     {
+      id: "thumb-tool",
+      target: "bin/thumb.exe",
+      resource_path: "daemon/native/bin/thumb.exe",
+      path: join(root, "build/daemon/native/bin/thumb.exe").replaceAll("\\", "/"),
+      executable: true,
+    },
+  ]);
+  assert.deepEqual(manifest.native_resources.thumbnailer, [
+    {
+      id: "thumb-tool",
       target: "bin/thumb.exe",
       resource_path: "workers/thumbnailer/native/bin/thumb.exe",
       path: join(root, "build/workers/thumbnailer/native/bin/thumb.exe").replaceAll("\\", "/"),
@@ -220,7 +240,7 @@ test("package includes worker native payloads selected by build target", async (
   ]);
 });
 
-test("package ignores worker native payloads for other build targets", async () => {
+test("package ignores worker native resources for other build targets", async () => {
   const root = await projectWithPackageBuild({ workerNative: true });
   await writeFile(
     join(root, "build/cef/manifest.json"),
@@ -232,10 +252,10 @@ test("package ignores worker native payloads for other build targets", async () 
   });
 
   const manifest = JSON.parse(await readFile(join(root, "dist/package/manifest.json"), "utf8"));
-  assert.deepEqual(manifest.worker_native_payloads.thumbnailer, []);
+  assert.deepEqual(manifest.native_resources.thumbnailer, []);
 });
 
-test("package rejects missing selected worker native payloads", async () => {
+test("package rejects missing selected worker native resources", async () => {
   const root = await projectWithPackageBuild({ workerNative: true });
   await writeFile(join(root, "build/desktop/package-app.exe"), "desktop");
   await writeFile(join(root, "build/daemon/package-app-daemon.exe"), "daemon");

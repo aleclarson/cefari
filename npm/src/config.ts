@@ -17,6 +17,7 @@ export interface CefariConfigInput {
   app: AppConfigInput;
   browser?: BrowserConfigInput;
   capabilities?: CefariCapability[];
+  nativeResources?: Record<string, NativeResourceInput>;
   workers?: Record<string, WorkerConfigInput>;
   vite?: ViteConfigInput;
   daemon?: DaemonConfigInput;
@@ -46,6 +47,7 @@ export interface ViteConfigInput {
 
 export interface DaemonConfigInput {
   entry: string;
+  native?: string[];
 }
 
 export type WorkerPermissionValueInput = "none" | string[];
@@ -62,13 +64,12 @@ export interface WorkerPermissionsInput {
 export interface WorkerConfigInput {
   entry: string;
   permissions: WorkerPermissionsInput;
-  native?: WorkerNativePayloadInput[];
+  native?: string[];
 }
 
-export interface WorkerNativePayloadInput {
-  src: string;
+export interface NativeResourceInput {
   target: string;
-  platforms?: CefariBuildTarget[];
+  sources: Partial<Record<CefariBuildTarget, string>>;
   executable?: boolean;
 }
 
@@ -130,7 +131,10 @@ export interface ViteConfig {
   devPort: number;
 }
 
-export interface DaemonConfig extends DaemonConfigInput {}
+export interface DaemonConfig {
+  entry: string;
+  native: string[];
+}
 
 export type WorkerPermissionValue = "none" | string[];
 
@@ -146,13 +150,13 @@ export interface WorkerPermissions {
 export interface WorkerConfig {
   entry: string;
   permissions: WorkerPermissions;
-  native: WorkerNativePayload[];
+  native: string[];
 }
 
-export interface WorkerNativePayload {
-  src: string;
+export interface NativeResource {
+  id: string;
   target: string;
-  platforms: CefariBuildTarget[];
+  sources: Partial<Record<CefariBuildTarget, string>>;
   executable: boolean;
 }
 
@@ -189,6 +193,7 @@ export interface ResolvedCefariConfig {
   app: AppConfig;
   browser: BrowserConfig;
   capabilities: CefariCapability[];
+  nativeResources: Record<string, NativeResource>;
   workers: Record<string, WorkerConfig>;
   vite: ViteConfig;
   daemon?: DaemonConfig;
@@ -200,6 +205,7 @@ export interface SerializableProjectConfig {
   app: AppConfig;
   browser: BrowserConfig;
   capabilities: CefariCapability[];
+  nativeResources: Record<string, NativeResource>;
   workers: Record<string, WorkerConfig>;
   vite: ViteConfig;
   daemon?: DaemonConfig;
@@ -287,9 +293,12 @@ export function toSerializableProjectConfig(
     app: { ...config.app },
     browser: { ...config.browser },
     capabilities: config.capabilities.map((capability) => ({ ...capability })),
+    nativeResources: cloneNativeResources(config.nativeResources),
     workers: cloneWorkers(config.workers),
     vite: { ...config.vite },
-    ...(config.daemon === undefined ? {} : { daemon: { ...config.daemon } }),
+    ...(config.daemon === undefined
+      ? {}
+      : { daemon: cloneDaemon(config.daemon) }),
     targets: cloneTargets(config.targets),
     package: { ...config.package },
   };
@@ -308,17 +317,23 @@ function normalizeConfig(
 
   const app = normalizeApp(input.app);
   const browser = normalizeBrowser(input.browser);
+  const nativeResources = normalizeNativeResources(input.nativeResources);
   const topLevelCapabilities = normalizeCapabilities(
     input.capabilities,
     "capabilities",
   );
-  const workers = normalizeWorkers(input.workers);
+  const workers = normalizeWorkers(input.workers, nativeResources);
   const vite = normalizeVite(input.vite);
-  const topLevelDaemon = normalizeDaemon(input.daemon, "daemon");
+  const topLevelDaemon = normalizeDaemon(
+    input.daemon,
+    "daemon",
+    nativeResources,
+  );
   const targets = normalizeTargets(input.targets, {
     app,
     topLevelCapabilities,
     topLevelDaemon,
+    nativeResources,
   });
   const capabilities = targets.desktop.capabilities;
   const daemon = targets.desktop.daemon;
@@ -330,6 +345,7 @@ function normalizeConfig(
     app,
     browser,
     capabilities,
+    nativeResources,
     workers,
     vite,
     daemon,
@@ -409,7 +425,63 @@ function normalizeCapabilities(
   });
 }
 
-function normalizeWorkers(value: unknown): Record<string, WorkerConfig> {
+function normalizeNativeResources(
+  value: unknown,
+): Record<string, NativeResource> {
+  if (value === undefined) {
+    return {};
+  }
+
+  const resources = asRecord(value, "nativeResources");
+  const normalized: Record<string, NativeResource> = {};
+  for (const [id, entry] of Object.entries(resources)) {
+    const field = `nativeResources.${id}`;
+    if (!/^[a-z][a-z0-9-]*$/.test(id)) {
+      throw new Error(`${field} must use an id matching ^[a-z][a-z0-9-]*$`);
+    }
+    const resource = asRecord(entry, field);
+    assertOnlyFields(resource, field, ["target", "sources", "executable"]);
+    normalized[id] = {
+      id,
+      target: relativeResourcePath(resource.target, `${field}.target`),
+      sources: normalizeNativeResourceSources(
+        resource.sources,
+        `${field}.sources`,
+      ),
+      executable: optionalBoolean(
+        resource.executable,
+        `${field}.executable`,
+        false,
+      ),
+    };
+  }
+  return normalized;
+}
+
+function normalizeNativeResourceSources(
+  value: unknown,
+  field: string,
+): Partial<Record<CefariBuildTarget, string>> {
+  const sources = asRecord(value, field);
+  const normalized: Partial<Record<CefariBuildTarget, string>> = {};
+  for (const [target, source] of Object.entries(sources)) {
+    if (!isCefariBuildTarget(target)) {
+      throw new Error(
+        `${field}.${target} must be a supported Cefari build target`,
+      );
+    }
+    normalized[target] = relativePath(source, `${field}.${target}`);
+  }
+  if (Object.keys(normalized).length === 0) {
+    throw new Error(`${field} must include at least one Cefari build target`);
+  }
+  return normalized;
+}
+
+function normalizeWorkers(
+  value: unknown,
+  nativeResources: Record<string, NativeResource>,
+): Record<string, WorkerConfig> {
   if (value === undefined) {
     return {};
   }
@@ -429,7 +501,11 @@ function normalizeWorkers(value: unknown): Record<string, WorkerConfig> {
         worker.permissions,
         `${field}.permissions`,
       ),
-      native: normalizeWorkerNativePayloads(worker.native, `${field}.native`),
+      native: normalizeNativeResourceReferences(
+        worker.native,
+        `${field}.native`,
+        nativeResources,
+      ),
     };
   }
   return normalized;
@@ -440,7 +516,14 @@ function normalizeWorkerPermissions(
   field: string,
 ): WorkerPermissions {
   const permissions = asRecord(value, field);
-  assertOnlyFields(permissions, field, ["read", "write", "net", "env", "run", "ffi"]);
+  assertOnlyFields(permissions, field, [
+    "read",
+    "write",
+    "net",
+    "env",
+    "run",
+    "ffi",
+  ]);
   return {
     read: normalizeWorkerPermissionValue(
       permissions.read,
@@ -467,11 +550,19 @@ function normalizeWorkerPermissions(
       `${field}.run`,
       "path",
     ),
-    ffi: normalizeWorkerPermissionValue(permissions.ffi, `${field}.ffi`, "path"),
+    ffi: normalizeWorkerPermissionValue(
+      permissions.ffi,
+      `${field}.ffi`,
+      "path",
+    ),
   };
 }
 
-function normalizeWorkerNativePayloads(value: unknown, field: string): WorkerNativePayload[] {
+function normalizeNativeResourceReferences(
+  value: unknown,
+  field: string,
+  nativeResources: Record<string, NativeResource>,
+): string[] {
   if (value === undefined) {
     return [];
   }
@@ -479,38 +570,19 @@ function normalizeWorkerNativePayloads(value: unknown, field: string): WorkerNat
     throw new Error(`${field} must be an array`);
   }
 
-  const targets = new Set<string>();
+  const seen = new Set<string>();
   return value.map((entry, index) => {
-    const payloadField = `${field}[${index}]`;
-    const payload = asRecord(entry, payloadField);
-    assertOnlyFields(payload, payloadField, ["src", "target", "platforms", "executable"]);
-    const target = relativeResourcePath(payload.target, `${payloadField}.target`);
-    if (targets.has(target)) {
-      throw new Error(`${payloadField}.target duplicates worker native target "${target}"`);
+    const id = requiredString(entry, `${field}[${index}]`);
+    if (!Object.hasOwn(nativeResources, id)) {
+      throw new Error(
+        `${field}[${index}] references unknown native resource "${id}"`,
+      );
     }
-    targets.add(target);
-    return {
-      src: relativePath(payload.src, `${payloadField}.src`),
-      target,
-      platforms: normalizeWorkerNativePlatforms(payload.platforms, `${payloadField}.platforms`),
-      executable: optionalBoolean(payload.executable, `${payloadField}.executable`, false),
-    };
-  });
-}
-
-function normalizeWorkerNativePlatforms(value: unknown, field: string): CefariBuildTarget[] {
-  if (value === undefined) {
-    return [];
-  }
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${field} must be a non-empty Cefari build target array`);
-  }
-  return value.map((entry, index) => {
-    const target = requiredString(entry, `${field}[${index}]`);
-    if (!isCefariBuildTarget(target)) {
-      throw new Error(`${field}[${index}] must be a supported Cefari build target`);
+    if (seen.has(id)) {
+      throw new Error(`${field}[${index}] duplicates native resource "${id}"`);
     }
-    return target;
+    seen.add(id);
+    return id;
   });
 }
 
@@ -610,13 +682,16 @@ function normalizeViteConfigFile(value: unknown): string | false {
 function normalizeDaemon(
   value: unknown,
   field: string,
+  nativeResources: Record<string, NativeResource>,
 ): DaemonConfig | undefined {
   if (value === undefined) {
     return undefined;
   }
   const daemon = asRecord(value, field);
+  assertOnlyFields(daemon, field, ["entry", "native"]);
   return {
     entry: relativePath(daemon.entry, `${field}.entry`),
+    native: normalizeNativeResourceReferences(daemon.native, `${field}.native`, nativeResources),
   };
 }
 
@@ -626,6 +701,7 @@ function normalizeTargets(
     app: AppConfig;
     topLevelCapabilities: CefariCapability[];
     topLevelDaemon?: DaemonConfig;
+    nativeResources: Record<string, NativeResource>;
   },
 ): CefariTargetsConfig {
   if (value === undefined) {
@@ -657,6 +733,7 @@ function normalizeDesktopTarget(
   defaults: {
     topLevelCapabilities: CefariCapability[];
     topLevelDaemon?: DaemonConfig;
+    nativeResources: Record<string, NativeResource>;
   },
 ): DesktopTargetConfig {
   if (value === undefined) {
@@ -679,7 +756,11 @@ function normalizeDesktopTarget(
       ),
     daemon: desktop.daemon === undefined
       ? defaults.topLevelDaemon
-      : normalizeDaemon(desktop.daemon, "targets.desktop.daemon"),
+      : normalizeDaemon(
+        desktop.daemon,
+        "targets.desktop.daemon",
+        defaults.nativeResources,
+      ),
   };
 }
 
@@ -772,12 +853,23 @@ function cloneWorkers(
           run: clonePermissionValue(worker.permissions.run),
           ffi: clonePermissionValue(worker.permissions.ffi),
         },
-        native: worker.native.map((payload) => ({
-          src: payload.src,
-          target: payload.target,
-          platforms: [...payload.platforms],
-          executable: payload.executable,
-        })),
+        native: [...worker.native],
+      },
+    ]),
+  );
+}
+
+function cloneNativeResources(
+  resources: Record<string, NativeResource>,
+): Record<string, NativeResource> {
+  return Object.fromEntries(
+    Object.entries(resources).map(([id, resource]) => [
+      id,
+      {
+        id: resource.id,
+        target: resource.target,
+        sources: { ...resource.sources },
+        executable: resource.executable,
       },
     ]),
   );
@@ -789,6 +881,13 @@ function clonePermissionValue(
   return value === "none" ? "none" : [...value];
 }
 
+function cloneDaemon(daemon: DaemonConfig): DaemonConfig {
+  return {
+    entry: daemon.entry,
+    native: [...daemon.native],
+  };
+}
+
 function cloneTargets(targets: CefariTargetsConfig): CefariTargetsConfig {
   return {
     desktop: {
@@ -797,7 +896,7 @@ function cloneTargets(targets: CefariTargetsConfig): CefariTargetsConfig {
       })),
       ...(targets.desktop.daemon === undefined
         ? {}
-        : { daemon: { ...targets.desktop.daemon } }),
+        : { daemon: cloneDaemon(targets.desktop.daemon) }),
     },
     ...(targets.ios === undefined ? {} : {
       ios: {

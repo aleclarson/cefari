@@ -11,7 +11,7 @@ import {
   type WindowKind,
   type WindowState,
 } from "../../src/app/mod.ts";
-import { isCefariDaemon } from "../../src/daemon.ts";
+import { daemonNativePath, getDaemonResources, isCefariDaemon } from "../../src/daemon.ts";
 
 declare module "../../src/app/workers.ts" {
   interface CefariWorkerRegistry {
@@ -59,6 +59,39 @@ Deno.test("exposes platform support metadata", () => {
   assertEquals(supportsTarget("windows", "ios"), false);
   assertEquals(supportsTarget("notifications", "android"), true);
   assertEquals(capabilitySupport("tray")?.support, "desktopOnly");
+});
+
+Deno.test("resolves daemon native resources from Cefari daemon env", () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "Deno");
+  try {
+    Object.defineProperty(globalThis, "Deno", {
+      configurable: true,
+      value: {
+        env: {
+          get(name: string) {
+            return name === "CEFARI_DAEMON_RESOURCES"
+              ? JSON.stringify({
+                resourceDir: "/app/resources",
+                nativeDir: "/app/resources/daemon/native",
+                native: {
+                  "thumb-tool": "/app/resources/daemon/native/bin/thumb",
+                },
+              })
+              : undefined;
+          },
+        },
+      },
+    });
+
+    assertEquals(getDaemonResources().nativeDir, "/app/resources/daemon/native");
+    assertEquals(daemonNativePath("thumb-tool"), "/app/resources/daemon/native/bin/thumb");
+  } finally {
+    if (previous === undefined) {
+      delete (globalThis as { Deno?: unknown }).Deno;
+    } else {
+      Object.defineProperty(globalThis, "Deno", previous);
+    }
+  }
 });
 
 Deno.test("wraps typed namespace commands", async () => {

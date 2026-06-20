@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use cefari_core::{
     AppConfig, BrowserConfig, CEFARI_DAEMON_LOG_ENV, CefariConfig, CefariServiceSpec, DaemonConfig,
-    PendingUpdate, RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
+    NativeResourceConfig, PendingUpdate, RuntimeLogConfig, RuntimePaths, UpdateCheckConfig, UpdateCheckState,
     WorkerConfig, check_for_update, install_service, install_update, load_config,
     packaged_resources_dir, resolve_resource, service_manager, service_status, start_service,
     stop_service, update_id,
@@ -17,6 +17,7 @@ use crate::desktop_daemon::DaemonProcessConfig;
 
 const CEFARI_DAEMON_DEV_ENTRY_ENV: &str = "CEFARI_DAEMON_DEV_ENTRY";
 const CEFARI_DAEMON_DEV_CWD_ENV: &str = "CEFARI_DAEMON_DEV_CWD";
+const CEFARI_DAEMON_RESOURCES_ENV: &str = "CEFARI_DAEMON_RESOURCES";
 const CEFARI_CONFIG_FILE_ENV: &str = "CEFARI_CONFIG_FILE";
 
 pub struct RuntimeOperations {
@@ -167,10 +168,16 @@ impl RuntimeOperations {
 
     pub fn daemon_service_spec(&self) -> Result<CefariServiceSpec> {
         let daemon = self.daemon_process_config()?;
-        Ok(CefariServiceSpec::daemon(daemon.program)
+        let mut spec = CefariServiceSpec::daemon(daemon.program)
             .with_arg("--foreground")
-            .with_working_directory(daemon.working_directory)
-            .with_environment(CEFARI_DAEMON_LOG_ENV, daemon_log_path(&self.paths)))
+            .with_working_directory(daemon.working_directory);
+        for (key, value) in daemon.environment {
+            spec = spec.with_environment(
+                key.to_string_lossy().into_owned(),
+                value.to_string_lossy().into_owned(),
+            );
+        }
+        Ok(spec)
     }
 
     pub fn daemon_process_config(&self) -> Result<DaemonProcessConfig> {
@@ -178,14 +185,18 @@ impl RuntimeOperations {
             let working_directory = std::env::var_os(CEFARI_DAEMON_DEV_CWD_ENV)
                 .map(PathBuf::from)
                 .unwrap_or_else(|| self.paths.resource_dir.clone());
+            let mut environment = vec![(
+                CEFARI_DAEMON_LOG_ENV.into(),
+                daemon_log_path(&self.paths).into(),
+            )];
+            if let Some(resources) = std::env::var_os(CEFARI_DAEMON_RESOURCES_ENV) {
+                environment.push((CEFARI_DAEMON_RESOURCES_ENV.into(), resources));
+            }
             return Ok(DaemonProcessConfig {
                 program: PathBuf::from("deno"),
                 args: vec![OsString::from("run"), OsString::from("-A"), entry],
                 working_directory,
-                environment: vec![(
-                    CEFARI_DAEMON_LOG_ENV.into(),
-                    daemon_log_path(&self.paths).into(),
-                )],
+                environment,
             });
         }
 
@@ -193,10 +204,7 @@ impl RuntimeOperations {
             program: self.daemon_program()?,
             args: Vec::new(),
             working_directory: self.paths.data_dir.clone(),
-            environment: vec![(
-                CEFARI_DAEMON_LOG_ENV.into(),
-                daemon_log_path(&self.paths).into(),
-            )],
+            environment: daemon_environment(&self.paths, &self.config.daemon)?,
         })
     }
 
@@ -258,6 +266,46 @@ fn daemon_log_path(paths: &RuntimePaths) -> String {
         .file_path()
         .display()
         .to_string()
+}
+
+fn daemon_environment(paths: &RuntimePaths, daemon: &DaemonConfig) -> Result<Vec<(OsString, OsString)>> {
+    let mut environment = vec![(
+        OsString::from(CEFARI_DAEMON_LOG_ENV),
+        OsString::from(daemon_log_path(paths)),
+    )];
+    environment.push((
+        OsString::from(CEFARI_DAEMON_RESOURCES_ENV),
+        OsString::from(daemon_resources_json(paths, &daemon.native)?),
+    ));
+    Ok(environment)
+}
+
+fn daemon_resources_json(paths: &RuntimePaths, native: &[NativeResourceConfig]) -> Result<String> {
+    let native_paths = native
+        .iter()
+        .map(|resource| {
+            let path = daemon_native_resource_path(paths, resource)?;
+            Ok((resource.id.clone(), path.display().to_string()))
+        })
+        .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
+    serde_json::to_string(&serde_json::json!({
+        "resourceDir": paths.resource_dir.display().to_string(),
+        "nativeDir": paths.resource_dir.join("daemon").join("native").display().to_string(),
+        "native": native_paths,
+    }))
+    .map_err(Into::into)
+}
+
+fn daemon_native_resource_path(paths: &RuntimePaths, resource: &NativeResourceConfig) -> Result<PathBuf> {
+    let path = Path::new(&resource.path);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
+        anyhow::bail!("daemon native resource path must be a relative path inside resources");
+    }
+    Ok(paths.resource_dir.join(path))
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -328,7 +376,8 @@ mod tests {
     };
 
     use super::{
-        RuntimeOperations, RuntimeUpdateState, daemon_executable_path, load_desktop_config,
+        CEFARI_DAEMON_RESOURCES_ENV, RuntimeOperations, RuntimeUpdateState,
+        daemon_executable_path, load_desktop_config,
     };
 
     #[test]
@@ -403,6 +452,7 @@ mod tests {
             DaemonConfig {
                 enabled: true,
                 executable: Some("daemon/example-daemon".to_owned()),
+                native: Vec::new(),
             },
         );
         let spec = runtime
@@ -417,10 +467,21 @@ mod tests {
         assert_eq!(spec.working_directory, Some(paths.data_dir));
         assert_eq!(
             spec.environment,
-            vec![(
-                CEFARI_DAEMON_LOG_ENV.to_owned(),
-                paths.log_dir.join("daemon.log").display().to_string()
-            )]
+            vec![
+                (
+                    CEFARI_DAEMON_LOG_ENV.to_owned(),
+                    paths.log_dir.join("daemon.log").display().to_string()
+                ),
+                (
+                    CEFARI_DAEMON_RESOURCES_ENV.to_owned(),
+                    serde_json::json!({
+                        "native": {},
+                        "nativeDir": paths.resource_dir.join("daemon").join("native").display().to_string(),
+                        "resourceDir": paths.resource_dir.display().to_string(),
+                    })
+                    .to_string(),
+                ),
+            ]
         );
         assert_eq!(
             runtime
@@ -439,6 +500,7 @@ mod tests {
                 &DaemonConfig {
                     enabled: true,
                     executable: Some(executable.to_owned()),
+                    native: Vec::new(),
                 },
                 &paths.resource_dir,
             )

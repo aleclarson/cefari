@@ -52,6 +52,7 @@ pub struct UpdateConfig {
 pub struct DaemonConfig {
     pub enabled: bool,
     pub executable: Option<String>,
+    pub native: Vec<NativeResourceConfig>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
@@ -70,7 +71,7 @@ pub struct WorkerConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct WorkerEntryConfig {
     pub target: WorkerTargetConfig,
-    pub native: Vec<WorkerNativePayloadConfig>,
+    pub native: Vec<NativeResourceConfig>,
 }
 
 impl Default for WorkerEntryConfig {
@@ -84,7 +85,8 @@ impl Default for WorkerEntryConfig {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct WorkerNativePayloadConfig {
+pub struct NativeResourceConfig {
+    pub id: String,
     pub target: String,
     pub path: String,
     pub executable: bool,
@@ -298,6 +300,7 @@ mod tests {
             DaemonConfig {
                 enabled: true,
                 executable: Some("daemon/example-daemon".to_owned()),
+                native: Vec::new(),
             }
         );
     }
@@ -315,6 +318,7 @@ mod tests {
                     },
                     "native": [
                       {
+                        "id": "thumb-tool",
                         "target": "bin/thumb",
                         "path": "workers/thumbnailer/native/bin/thumb",
                         "executable": true
@@ -335,6 +339,10 @@ mod tests {
             "workers/thumbnailer/thumbnailer"
         );
         assert_eq!(config.workers.entries["thumbnailer"].native.len(), 1);
+        assert_eq!(
+            config.workers.entries["thumbnailer"].native[0].id,
+            "thumb-tool"
+        );
         assert_eq!(
             config.workers.entries["thumbnailer"].native[0].path,
             "workers/thumbnailer/native/bin/thumb"

@@ -125,10 +125,10 @@ export function getWorkerResources(): CefariWorkerResources {
   return currentWorkerResources;
 }
 
-export function workerNativePath(target: string): string {
-  const path = getWorkerResources().native[target];
+export function workerNativePath(id: string): string {
+  const path = getWorkerResources().native[id];
   if (path === undefined) {
-    throw new Error(`worker native payload ${JSON.stringify(target)} is not configured`);
+    throw new Error(`worker native resource ${JSON.stringify(id)} is not configured`);
   }
   return path;
 }

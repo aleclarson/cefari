@@ -57,7 +57,10 @@ test("loads an object config", async () => {
   assert.equal(config.app.projectName, "example-app");
   assert.ok(config.daemon);
   assert.equal(config.daemon.entry, "daemon/main.ts");
-  assert.deepEqual(config.targets.desktop.daemon, { entry: "daemon/main.ts" });
+  assert.deepEqual(config.targets.desktop.daemon, {
+    entry: "daemon/main.ts",
+    native: [],
+  });
   assert.equal(config.package.version, "0.1.0");
   assert.deepEqual(config.workers, {});
 });
@@ -137,7 +140,10 @@ export default defineConfig({
     type: "tray",
     icon: "assets/tray.png",
   }]);
-  assert.deepEqual(config.daemon, { entry: "desktop/daemon.ts" });
+  assert.deepEqual(config.daemon, {
+    entry: "desktop/daemon.ts",
+    native: [],
+  });
   assert.deepEqual(config.targets.ios, {
     bundleId: "dev.cefari.target.ios",
     permissions: ["notifications"],
@@ -148,6 +154,7 @@ export default defineConfig({
   });
   assert.deepEqual(serializable.targets.desktop.daemon, {
     entry: "desktop/daemon.ts",
+    native: [],
   });
 });
 
@@ -289,8 +296,24 @@ export default defineConfig({
   });
 });
 
-test("normalizes configured workers", async () => {
-  const root = await projectWithConfig(baseConfig(`workers: {
+test("normalizes configured native resources and workers", async () => {
+  const root = await projectWithConfig(baseConfig(`nativeResources: {
+    "thumb-lib": {
+      target: "lib/libthumb.dylib",
+      sources: {
+        "darwin-arm64": "native/darwin-arm64/libthumb.dylib",
+      },
+    },
+    "thumb-helper": {
+      target: "bin/helper",
+      sources: {
+        "darwin-arm64": "native/darwin-arm64/helper",
+        "linux-x64": "native/linux-x64/helper",
+      },
+      executable: true,
+    },
+  },
+  workers: {
     thumbnailer: {
       entry: "workers/thumbnailer.ts",
       permissions: {
@@ -299,23 +322,31 @@ test("normalizes configured workers", async () => {
         net: "none",
         ffi: ["$resource/workers/thumbnailer/native/lib/libthumb.dylib"],
       },
-      native: [
-        {
-          src: "native/darwin-arm64/libthumb.dylib",
-          target: "lib/libthumb.dylib",
-          platforms: ["darwin-arm64"],
-        },
-        {
-          src: "native/shared/helper",
-          target: "bin/helper",
-          executable: true,
-        },
-      ],
+      native: ["thumb-lib", "thumb-helper"],
     },
   },`));
 
   const config = await loadCefariConfig({ root });
 
+  assert.deepEqual(config.nativeResources, {
+    "thumb-lib": {
+      id: "thumb-lib",
+      target: "lib/libthumb.dylib",
+      sources: {
+        "darwin-arm64": "native/darwin-arm64/libthumb.dylib",
+      },
+      executable: false,
+    },
+    "thumb-helper": {
+      id: "thumb-helper",
+      target: "bin/helper",
+      sources: {
+        "darwin-arm64": "native/darwin-arm64/helper",
+        "linux-x64": "native/linux-x64/helper",
+      },
+      executable: true,
+    },
+  });
   assert.deepEqual(config.workers, {
     thumbnailer: {
       entry: "workers/thumbnailer.ts",
@@ -327,25 +358,69 @@ test("normalizes configured workers", async () => {
         run: "none",
         ffi: ["$resource/workers/thumbnailer/native/lib/libthumb.dylib"],
       },
-      native: [
-        {
-          src: "native/darwin-arm64/libthumb.dylib",
-          target: "lib/libthumb.dylib",
-          platforms: ["darwin-arm64"],
-          executable: false,
-        },
-        {
-          src: "native/shared/helper",
-          target: "bin/helper",
-          platforms: [],
-          executable: true,
-        },
-      ],
+      native: ["thumb-lib", "thumb-helper"],
     },
   });
 });
 
-test("rejects invalid worker config", async () => {
+test("normalizes daemon native resource references", async () => {
+  const root = await projectWithConfig(baseConfig(`nativeResources: {
+    sqlite: {
+      target: "bin/sqlite",
+      sources: { "linux-x64": "native/linux-x64/sqlite" },
+      executable: true,
+    },
+  },`).replace('entry: "daemon/main.ts",', 'entry: "daemon/main.ts",\n    native: ["sqlite"],'));
+
+  const config = await loadCefariConfig({ root });
+
+  assert.deepEqual(config.daemon?.native, ["sqlite"]);
+});
+
+test("rejects invalid native resource config", async () => {
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`nativeResources: {
+        Tool: { target: "bin/tool", sources: { "linux-x64": "native/tool" } },
+      },`)),
+    }),
+    /nativeResources\.Tool must use an id matching/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`nativeResources: {
+        tool: { target: "../bin/tool", sources: { "linux-x64": "native/tool" } },
+      },`)),
+    }),
+    /nativeResources\.tool\.target must be a relative resource path/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`nativeResources: {
+        tool: { target: "bin/tool", sources: { "freebsd-x64": "native/tool" } },
+      },`)),
+    }),
+    /nativeResources\.tool\.sources\.freebsd-x64 must be a supported Cefari build target/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`nativeResources: {
+        tool: { target: "bin/tool", sources: { "linux-x64": "/tmp/tool" } },
+      },`)),
+    }),
+    /nativeResources\.tool\.sources\.linux-x64 must be a relative path inside the project/,
+  );
+  await assert.rejects(
+    loadCefariConfig({
+      root: await projectWithConfig(baseConfig(`nativeResources: {
+        tool: { target: "bin/tool", sources: { "linux-x64": "native/tool" }, codesign: true },
+      },`)),
+    }),
+    /nativeResources\.tool\.codesign is not supported/,
+  );
+});
+
+test("rejects invalid native resource references", async () => {
   await assert.rejects(
     loadCefariConfig({
       root: await projectWithConfig(baseConfig(`workers: {
@@ -434,62 +509,35 @@ test("rejects invalid worker config", async () => {
         thumbnailer: {
           entry: "workers/thumbnailer.ts",
           permissions: {},
-          native: [{ src: "/tmp/tool", target: "bin/tool" }],
+          native: ["missing"],
         },
       },`)),
     }),
-    /workers\.thumbnailer\.native\[0\]\.src must be a relative path inside the project/,
+    /workers\.thumbnailer\.native\[0\] references unknown native resource "missing"/,
   );
   await assert.rejects(
     loadCefariConfig({
-      root: await projectWithConfig(baseConfig(`workers: {
+      root: await projectWithConfig(baseConfig(`nativeResources: {
+        tool: { target: "bin/tool", sources: { "linux-x64": "native/tool" } },
+      },
+      workers: {
         thumbnailer: {
           entry: "workers/thumbnailer.ts",
           permissions: {},
-          native: [{ src: "native/tool", target: "../bin/tool" }],
+          native: ["tool", "tool"],
         },
       },`)),
     }),
-    /workers\.thumbnailer\.native\[0\]\.target must be a relative resource path/,
+    /workers\.thumbnailer\.native\[1\] duplicates native resource "tool"/,
   );
   await assert.rejects(
     loadCefariConfig({
-      root: await projectWithConfig(baseConfig(`workers: {
-        thumbnailer: {
-          entry: "workers/thumbnailer.ts",
-          permissions: {},
-          native: [
-            { src: "native/tool-a", target: "bin/tool" },
-            { src: "native/tool-b", target: "bin/tool" },
-          ],
-        },
-      },`)),
+      root: await projectWithConfig(baseConfig(`daemon: {
+        entry: "daemon/main.ts",
+        native: ["missing"],
+      },`).replace('daemon: {\n    entry: "daemon/main.ts",\n  },', '')),
     }),
-    /workers\.thumbnailer\.native\[1\]\.target duplicates worker native target "bin\/tool"/,
-  );
-  await assert.rejects(
-    loadCefariConfig({
-      root: await projectWithConfig(baseConfig(`workers: {
-        thumbnailer: {
-          entry: "workers/thumbnailer.ts",
-          permissions: {},
-          native: [{ src: "native/tool", target: "bin/tool", platforms: ["freebsd-x64"] }],
-        },
-      },`)),
-    }),
-    /workers\.thumbnailer\.native\[0\]\.platforms\[0\] must be a supported Cefari build target/,
-  );
-  await assert.rejects(
-    loadCefariConfig({
-      root: await projectWithConfig(baseConfig(`workers: {
-        thumbnailer: {
-          entry: "workers/thumbnailer.ts",
-          permissions: {},
-          native: [{ src: "native/tool", target: "bin/tool", codesign: true }],
-        },
-      },`)),
-    }),
-    /workers\.thumbnailer\.native\[0\]\.codesign is not supported/,
+    /daemon\.native\[0\] references unknown native resource "missing"/,
   );
 });
 
@@ -625,20 +673,20 @@ test("rejects impossible mobile target config", async () => {
 });
 
 test("creates a serializable projection", async () => {
-  const root = await projectWithConfig(baseConfig(`workers: {
+  const root = await projectWithConfig(baseConfig(`nativeResources: {
+    "thumb-lib": {
+      target: "lib/libthumb.dylib",
+      sources: { "darwin-arm64": "native/darwin-arm64/libthumb.dylib" },
+    },
+  },
+  workers: {
     thumbnailer: {
       entry: "workers/thumbnailer.ts",
       permissions: {
         read: ["$appData/uploads"],
         ffi: ["$resource/workers/thumbnailer/native/lib/libthumb.dylib"],
       },
-      native: [
-        {
-          src: "native/darwin-arm64/libthumb.dylib",
-          target: "lib/libthumb.dylib",
-          platforms: ["darwin-arm64"],
-        },
-      ],
+      native: ["thumb-lib"],
     },
   },
   vite: { root: "ui", configFile: false, devPort: 3000 },`));
@@ -660,14 +708,13 @@ test("creates a serializable projection", async () => {
   assert.deepEqual(serializable.workers.thumbnailer.permissions.ffi, [
     "$resource/workers/thumbnailer/native/lib/libthumb.dylib",
   ]);
-  assert.deepEqual(serializable.workers.thumbnailer.native, [
-    {
-      src: "native/darwin-arm64/libthumb.dylib",
-      target: "lib/libthumb.dylib",
-      platforms: ["darwin-arm64"],
-      executable: false,
-    },
-  ]);
+  assert.deepEqual(serializable.nativeResources["thumb-lib"], {
+    id: "thumb-lib",
+    target: "lib/libthumb.dylib",
+    sources: { "darwin-arm64": "native/darwin-arm64/libthumb.dylib" },
+    executable: false,
+  });
+  assert.deepEqual(serializable.workers.thumbnailer.native, ["thumb-lib"]);
   assert.equal(
     JSON.parse(JSON.stringify(serializable)).app.name,
     "Example App",

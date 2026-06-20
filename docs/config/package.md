@@ -25,6 +25,8 @@ metadata for native packaging. Release automation can override `version` with
 The app identifier still comes from `app.identifier`, and executable names still
 come from `app.projectName`.
 
-Worker native payloads are configured under each worker's `native` list, not in
-the top-level `package` section. During package assembly, Cefari includes only
-native payloads selected for the build target recorded by `cefari build`.
+Native resources are configured under top-level `nativeResources`, not in the
+top-level `package` section. Workers and the daemon attach resources by listing
+resource IDs in their own `native` lists. During package assembly, Cefari
+includes only native resources selected for the build target recorded by
+`cefari build`.

@@ -67,6 +67,22 @@ export default defineConfig({
   capabilities: [
     deepLinks({ schemes: ["buildapp"] }),
   ],
+  ${options.workerNative ? `nativeResources: {
+    "thumb-tool": {
+      target: "bin/thumb.exe",
+      sources: {
+        "windows-x64": "native/windows-x64/thumb.exe",
+      },
+      executable: true,
+    },
+    "missing-tool": {
+      target: "bin/thumb",
+      sources: {
+        "linux-x64": "native/linux-x64/missing-tool",
+      },
+      executable: true,
+    },
+  },` : ""}
   workers: {
     thumbnailer: {
       entry: "workers/thumbnailer.ts",
@@ -74,24 +90,12 @@ export default defineConfig({
         read: ["$appData/uploads"],
         ${options.workerNative ? `run: ["$resource/workers/thumbnailer/native/bin/thumb.exe"],` : ""}
       },
-      ${options.workerNative ? `native: [
-        {
-          src: "native/windows-x64/thumb.exe",
-          target: "bin/thumb.exe",
-          platforms: ["windows-x64"],
-          executable: true,
-        },
-        {
-          src: "native/linux-x64/missing-tool",
-          target: "bin/thumb",
-          platforms: ["linux-x64"],
-          executable: true,
-        },
-      ],` : ""}
+      ${options.workerNative ? `native: ["thumb-tool", "missing-tool"],` : ""}
     },
   },
   ${options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
+    ${options.workerNative ? `native: ["thumb-tool"],` : ""}
   },`}
   package: {
     productName: "Build App",
@@ -195,6 +199,7 @@ test("builds frontend, daemon, desktop, and CEF outputs", async () => {
       denoTarget,
       "--allow-read",
       "--allow-net",
+      "--allow-env=CEFARI_DAEMON,CEFARI_DAEMON_LOG,CEFARI_DAEMON_RESOURCES",
       "--output",
       join(root, "build/daemon", daemonExecutable),
       join(root, "daemon/main.ts"),
@@ -365,6 +370,7 @@ test("builds Windows target executables and metadata with target-specific runtim
       "x86_64-pc-windows-msvc",
       "--allow-read",
       "--allow-net",
+      "--allow-env=CEFARI_DAEMON,CEFARI_DAEMON_LOG,CEFARI_DAEMON_RESOURCES",
       "--output",
       join(root, "build/daemon/build-app-daemon.exe"),
       join(root, "daemon/main.ts"),
@@ -380,7 +386,7 @@ test("builds Windows target executables and metadata with target-specific runtim
   assert.equal(cefManifest.target_arch, "x64");
 });
 
-test("copies worker native payloads for the requested build target", async () => {
+test("copies worker native resources for the requested build target", async () => {
   const { root, cefResources } = await projectWithBuildConfig({ workerNative: true });
   const target: CefariBuildTarget = "windows-x64";
   const runtime = join(root, "cefari-desktop-windows.exe");
@@ -420,10 +426,22 @@ test("copies worker native payloads for the requested build target", async () =>
   const nativePayload = join(root, "build/workers/thumbnailer/native/bin/thumb.exe");
   assert.equal(await readFile(nativePayload, "utf8"), "windows-tool");
   assert.notEqual((await stat(nativePayload)).mode & 0o111, 0);
+  const daemonNativeResource = join(root, "build/daemon/native/bin/thumb.exe");
+  assert.equal(await readFile(daemonNativeResource, "utf8"), "windows-tool");
+  assert.notEqual((await stat(daemonNativeResource)).mode & 0o111, 0);
   assert.equal(existsSync(join(root, "build/workers/thumbnailer/native/bin/thumb")), false);
   const config = JSON.parse(await readFile(join(root, "build/config/cefari.json"), "utf8"));
+  assert.deepEqual(config.daemon.native, [
+    {
+      id: "thumb-tool",
+      target: "bin/thumb.exe",
+      path: "daemon/native/bin/thumb.exe",
+      executable: true,
+    },
+  ]);
   assert.deepEqual(config.workers.entries.thumbnailer.native, [
     {
+      id: "thumb-tool",
       target: "bin/thumb.exe",
       path: "workers/thumbnailer/native/bin/thumb.exe",
       executable: true,
@@ -431,7 +449,7 @@ test("copies worker native payloads for the requested build target", async () =>
   ]);
 });
 
-test("build rejects missing selected worker native payloads", async () => {
+test("build rejects missing selected worker native resources", async () => {
   const { root, cefResources } = await projectWithBuildConfig({ workerNative: true });
   const runtime = join(root, "cefari-desktop-linux");
   await writeFile(runtime, "linux-runtime");
@@ -465,7 +483,7 @@ test("build rejects missing selected worker native payloads", async () => {
     async () => {
       await assert.rejects(
         runCefariBuild({ root, target: "linux-x64" }),
-        /worker native payload does not exist: .*native\/linux-x64\/missing-tool/,
+        /worker native resource "missing-tool" does not exist: .*native\/linux-x64\/missing-tool/,
       );
     },
   );

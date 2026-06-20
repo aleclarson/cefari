@@ -17,8 +17,8 @@ mod error;
 
 pub use config::{
     AppConfig, BrowserConfig, CefariConfig, DaemonConfig, DeepLinkConfig, ServiceConfig,
-    UpdateConfig, WorkerConfig, WorkerDenoSourceConfig, WorkerEntryConfig,
-    WorkerExecutableConfig, WorkerNativePayloadConfig, WorkerPermissionConfig,
+    NativeResourceConfig, UpdateConfig, WorkerConfig, WorkerDenoSourceConfig, WorkerEntryConfig,
+    WorkerExecutableConfig, WorkerPermissionConfig,
     WorkerPermissionsConfig, WorkerTargetConfig, load_config, save_config,
 };
 pub use error::{Error, Result};

@@ -8,7 +8,7 @@ import type { SpawnOptions } from "node:child_process";
 import test from "node:test";
 import { runCefariDev, startCefariDev } from "../src/index.js";
 import type { ChildLike, ViteServerLike } from "../src/index.js";
-import { withPlatformForTest } from "../src/platform.js";
+import { hostCefariBuildTarget, withPlatformForTest } from "../src/platform.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
@@ -51,24 +51,28 @@ export default defineConfig({
   capabilities: [
     tray({ icon: "assets/tray.png" }),
   ],
+  ${options.workerNative ? `nativeResources: {
+    "thumb-tool": {
+      target: "bin/thumb",
+      sources: {
+        "${hostCefariBuildTarget()}": "native/thumb",
+      },
+      executable: true,
+    },
+  },` : ""}
   workers: {
     thumbnailer: {
       entry: "workers/thumbnailer.ts",
       permissions: {
         read: ["$appData/uploads"],
       },
-      ${options.workerNative ? `native: [
-        {
-          src: "native/thumb",
-          target: "bin/thumb",
-          executable: true,
-        },
-      ],` : ""}
+      ${options.workerNative ? `native: ["thumb-tool"],` : ""}
     },
   },
   ${
       options.daemon === false ? "" : `daemon: {
     entry: "daemon/main.ts",
+    ${options.workerNative ? `native: ["thumb-tool"],` : ""}
   },`
     }
   package: {
@@ -223,7 +227,7 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
   assert.equal(closed, true);
 });
 
-test("writes source worker native payload paths for dev runtime config", async () => {
+test("writes source worker native resource paths for dev runtime config", async () => {
   const { root, runtime } = await projectWithDevConfig({ daemon: false, workerNative: true });
 
   await withPlatformForTest(
@@ -270,11 +274,65 @@ test("writes source worker native payload paths for dev runtime config", async (
   const config = JSON.parse(await readFile(join(root, ".cefari/config/cefari.json"), "utf8"));
   assert.deepEqual(config.workers.entries.thumbnailer.native, [
     {
+      id: "thumb-tool",
       target: "bin/thumb",
       path: "native/thumb",
       executable: true,
     },
   ]);
+});
+
+test("passes source daemon native resource paths in dev env", async () => {
+  const { root, runtime } = await projectWithDevConfig({ workerNative: true });
+  const spawned: Array<{ command: string; args: string[]; options: SpawnOptions; child: FakeChild }> = [];
+
+  await withPlatformForTest(
+    {
+      async createViteServer() {
+        return {
+          resolvedUrls: {
+            local: ["http://127.0.0.1:5555/"],
+            network: [],
+          },
+          async listen() {},
+          async close() {},
+        };
+      },
+      spawn(command, args, options) {
+        const child = new FakeChild();
+        spawned.push({ command, args, options, child });
+        return child;
+      },
+      spawnSync() {
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME: runtime,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
+      },
+      process: {
+        once() {
+          return undefined;
+        },
+        off() {
+          return undefined;
+        },
+      },
+    },
+    async () => {
+      const session = await startCefariDev({ root });
+      await session.close();
+    },
+  );
+
+  const env = spawned[0].options.env as NodeJS.ProcessEnv;
+  const resources = JSON.parse(env.CEFARI_DAEMON_RESOURCES ?? "{}");
+  assert.equal(resources.resourceDir, root);
+  assert.equal(resources.native["thumb-tool"], join(root, "native/thumb"));
 });
 
 test("starts Vite and desktop without a daemon when daemon is omitted", async () => {

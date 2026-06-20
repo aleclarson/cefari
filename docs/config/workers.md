@@ -4,6 +4,21 @@ Configure Deno source workers under the top-level `workers` object:
 
 ```ts
 export default defineConfig({
+  nativeResources: {
+    "thumbnail-tool": {
+      target: "bin/thumbnail",
+      sources: {
+        "darwin-arm64": "native/darwin-arm64/thumbnail",
+      },
+      executable: true,
+    },
+    "thumb-lib": {
+      target: "lib/libthumb.dylib",
+      sources: {
+        "darwin-arm64": "native/darwin-arm64/libthumb.dylib",
+      },
+    },
+  },
   workers: {
     thumbnailer: {
       entry: "workers/thumbnailer.ts",
@@ -14,19 +29,7 @@ export default defineConfig({
         ffi: ["$resource/workers/thumbnailer/native/lib/libthumb.dylib"],
         net: "none",
       },
-      native: [
-        {
-          src: "native/darwin-arm64/thumbnail",
-          target: "bin/thumbnail",
-          platforms: ["darwin-arm64"],
-          executable: true,
-        },
-        {
-          src: "native/darwin-arm64/libthumb.dylib",
-          target: "lib/libthumb.dylib",
-          platforms: ["darwin-arm64"],
-        },
-      ],
+      native: ["thumbnail-tool", "thumb-lib"],
     },
   },
 });
@@ -89,30 +92,29 @@ permissions are compiled as category-level Deno permissions such as
 Deno's JavaScript sandbox, so `ffi` should only be granted to libraries the app
 author intentionally bundles and trusts.
 
-## Native Payloads
+## Native Resources
 
-Workers can declare native executables or dynamic libraries in `native`. Native
-payloads are owned by the worker that declares them and are packaged separately
-from the compiled Deno worker executable.
+Apps declare native executables or dynamic libraries once in top-level
+`nativeResources`. Workers opt into specific resources by listing resource IDs
+in `workers.<workerId>.native`.
 
-Each native payload supports:
+Each native resource supports:
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `src` | Yes | Project-relative source file to copy into the package. |
-| `target` | Yes | Worker-native resource path used inside the package. |
-| `platforms` | No | Cefari build targets that should include this payload. Omit to include the payload for every target. |
-| `executable` | No | Whether Cefari should preserve or set executable mode for this payload. Defaults to `false`. |
+| `target` | Yes | Runtime-native resource path used inside the package. |
+| `sources` | Yes | Map of Cefari build target to project-relative source file. |
+| `executable` | No | Whether Cefari should preserve or set executable mode for this resource. Defaults to `false`. |
 
-`src` must stay inside the project. `target` must be a relative resource path
-and cannot use parent traversal. Native payload selection uses the effective
-`CefariBuildTarget` from `cefari build --target`; cross-target release jobs
-should run one build/package pass per target.
+Each `sources` entry must stay inside the project. `target` must be a relative
+resource path and cannot use parent traversal. Native resource selection uses
+the effective `CefariBuildTarget` from `cefari build --target`; cross-target
+release jobs should run one build/package pass per target.
 
 Deno compilation does not bundle external native executables or dynamic
 libraries automatically. Apps that use `Deno.Command` or `Deno.dlopen` must
-declare those native files as worker native payloads and grant the corresponding
-`run` or `ffi` permission.
+declare those native files as native resources, attach them to the worker, and
+grant the corresponding `run` or `ffi` permission.
 
 ## Worker Scripts
 
@@ -131,7 +133,7 @@ const worker = defineWorker((init: { cacheDir: string }) => ({
     context: { postMessage(message: { phase: string }): Promise<void> },
   ) {
     await context.postMessage({ phase: "started" });
-    const thumbnailTool = workerNativePath("bin/thumbnail");
+    const thumbnailTool = workerNativePath("thumbnail-tool");
     const command = new Deno.Command(thumbnailTool, {
       args: [input.path, `${init.cacheDir}/thumbnail.png`],
     });
@@ -152,13 +154,13 @@ if (import.meta.main) {
 `defineWorker()` infers the worker init input, method inputs, method outputs,
 and method messages used by generated frontend worker registry types.
 
-`workerNativePath(target)` returns the absolute path for a configured native
-payload target. In development it resolves to the configured source file. In a
+`workerNativePath(id)` returns the absolute path for a configured native
+resource id. In development it resolves to the configured source file. In a
 packaged app it resolves to the copied package resource. Use
 `getWorkerResources()` from `cefari/worker` when a worker needs the resource
-directory, native payload directory, or the full native payload target map.
+directory, native resource directory, or the full native resource path map.
 
 Prefer `Deno.Command` for bundled executable tools and `Deno.dlopen` for
 app-owned dynamic libraries with a stable ABI. Cefari does not provide special
-NAPI packaging support; native addons must still be packaged as explicit worker
-native payloads and loaded by worker code.
+NAPI packaging support; native addons must still be packaged as explicit native
+resources and loaded by worker code.

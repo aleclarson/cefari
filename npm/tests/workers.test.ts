@@ -74,6 +74,7 @@ function configWithWorkers(root: string): ResolvedCefariConfig {
       webgpu: false,
     },
     capabilities: [],
+    nativeResources: {},
     workers: {
       thumbnailer: {
         entry: "workers/thumbnailer.ts",
@@ -94,12 +95,14 @@ function configWithWorkers(root: string): ResolvedCefariConfig {
     },
     daemon: {
       entry: "daemon/main.ts",
+      native: [],
     },
     targets: {
       desktop: {
         capabilities: [],
         daemon: {
           entry: "daemon/main.ts",
+          native: [],
         },
       },
     },

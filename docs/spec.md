@@ -28,9 +28,12 @@ frontend APIs.
   - Each worker has a stable ID.
   - Each worker has a source entrypoint.
   - Each worker declares explicit Deno permissions.
-  - Each worker can declare native executable or dynamic-library payloads.
-  - Worker native payloads are selected by the effective Cefari build target.
+  - Each worker can attach configured native resources.
   - Workers are separate from the daemon.
+- The config can define native resources.
+  - Native resources can be executables or dynamic libraries.
+  - Native resources are selected by the effective Cefari build target.
+  - Workers and the daemon opt into resources by ID.
 - The config can define package metadata.
   - It sets the packaged product name.
   - It sets the app version used by package metadata and update checks.
@@ -132,7 +135,7 @@ frontend APIs.
   - It checks runtime config.
   - It checks worker resource output.
   - It checks configured worker executables.
-  - It includes selected worker native payloads as package resources.
+  - It includes selected worker and daemon native resources as package resources.
   - It checks CEF resource metadata.
   - It checks for locale files.
   - It includes configured tray icons.
@@ -243,7 +246,7 @@ frontend APIs.
 - Apps can define worker contracts with `cefari/worker`.
   - `defineWorker()` describes input, output, and message types.
   - `runCefariWorker()` runs the stdio protocol used by the desktop runtime.
-  - Worker helpers expose configured native payload paths to worker code.
+  - Worker helpers expose configured native resource paths to worker code.
 - Cefari generates worker registry types during dev and build.
   - Generated types live under `.cefari/workers.d.ts`.
   - `cefari.workers.spawn()` only accepts configured worker names.
@@ -402,6 +405,7 @@ frontend APIs.
   - The frontend `writable` sends bytes to daemon stdin.
   - The frontend `readable` receives bytes from daemon stdout.
   - Daemon stderr remains available for logs.
+- Daemon helpers expose configured native resource paths to daemon code.
 - The current frontend wrapper does not expose daemon start, stop, or restart
   commands.
 

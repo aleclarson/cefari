@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use cefari_core::{
     CefariIpcError, CefariIpcEvent, RuntimePaths, WorkerCommand, WorkerConfig, WorkerEntryConfig,
     WorkerErrorEvent, WorkerEvent, WorkerExitEvent, WorkerInvokeRequest, WorkerInvokeResult,
-    WorkerListResult, WorkerMessageEvent, WorkerNativePayloadConfig, WorkerPermissionConfig,
+    NativeResourceConfig, WorkerListResult, WorkerMessageEvent, WorkerPermissionConfig,
     WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState, WorkerStatus,
     WorkerTargetConfig,
 };
@@ -423,7 +423,7 @@ fn worker_resources(
     let native = entry
         .native
         .iter()
-        .map(|payload| native_payload_path(paths, payload).map(|path| (payload.target.clone(), path)))
+        .map(|payload| native_payload_path(paths, payload).map(|path| (payload.id.clone(), path)))
         .collect::<Result<BTreeMap<_, _>>>()?;
     Ok(serde_json::json!({
         "id": worker,
@@ -435,7 +435,7 @@ fn worker_resources(
 
 fn native_payload_path(
     paths: &RuntimePaths,
-    payload: &WorkerNativePayloadConfig,
+    payload: &NativeResourceConfig,
 ) -> Result<String> {
     Ok(safe_resource_path(&paths.resource_dir, &payload.path)?
         .display()
@@ -954,7 +954,7 @@ mod tests {
         let specs = spawner.specs.lock().unwrap();
         let start: serde_json::Value = serde_json::from_str(&specs[0].input).unwrap();
         assert_eq!(
-            start["resources"]["native"]["bin/thumb"],
+            start["resources"]["native"]["thumb-tool"],
             paths()
                 .resource_dir
                 .join("native/bin/thumb")
@@ -1218,7 +1218,8 @@ mod tests {
             .get_mut("thumbnailer")
             .expect("thumbnailer worker should exist")
             .native
-            .push(cefari_core::WorkerNativePayloadConfig {
+            .push(cefari_core::NativeResourceConfig {
+                id: "thumb-tool".to_owned(),
                 target: "bin/thumb".to_owned(),
                 path: path.to_owned(),
                 executable: true,

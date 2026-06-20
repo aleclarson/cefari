@@ -7,6 +7,7 @@ import type { InlineConfig } from "vite";
 import { loadCefariConfig } from "./config.js";
 import type { CefariCapability, ResolvedCefariConfig } from "./config.js";
 import { CEFARI_CONFIG_FILE_ENV, writeDesktopConfig } from "./desktop-config.js";
+import { selectedDaemonNativeResources } from "./native-payloads.js";
 import {
   currentPlatform,
   executableNameForTarget,
@@ -21,6 +22,7 @@ export type { ChildLike, ViteServerLike };
 const CEFARI_DAEMON_LOG_ENV = "CEFARI_DAEMON_LOG";
 const CEFARI_DAEMON_DEV_CWD_ENV = "CEFARI_DAEMON_DEV_CWD";
 const CEFARI_DAEMON_DEV_ENTRY_ENV = "CEFARI_DAEMON_DEV_ENTRY";
+const CEFARI_DAEMON_RESOURCES_ENV = "CEFARI_DAEMON_RESOURCES";
 const CEFARI_DESKTOP_RUNTIME_ENV = "CEFARI_DESKTOP_RUNTIME";
 const CEFARI_DEV_MODE_ENV = "CEFARI_DEV_MODE";
 const CEFARI_DEVTOOLS_PORT_ENV = "CEFARI_DEVTOOLS_PORT";
@@ -166,10 +168,21 @@ function daemonDevEnv(config: ResolvedCefariConfig): Record<string, string> {
   if (config.daemon === undefined) {
     return {};
   }
+  const native = Object.fromEntries(
+    selectedDaemonNativeResources(config, hostCefariBuildTarget()).map((selected) => [
+      selected.id,
+      resolve(config.root, selected.source),
+    ]),
+  );
   return {
     [CEFARI_DAEMON_DEV_ENTRY_ENV]: config.daemon.entry,
     [CEFARI_DAEMON_DEV_CWD_ENV]: config.root,
     [CEFARI_DAEMON_LOG_ENV]: join(config.root, ".cefari", "daemon.log"),
+    [CEFARI_DAEMON_RESOURCES_ENV]: JSON.stringify({
+      resourceDir: config.root,
+      nativeDir: join(config.root, "native"),
+      native,
+    }),
   };
 }
 

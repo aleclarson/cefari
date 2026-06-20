@@ -103,7 +103,7 @@ test("exposes worker resources from the start envelope", async () => {
   });
 });
 
-test("reports unconfigured worker native payload paths", async () => {
+test("reports unconfigured worker native resource paths", async () => {
   const worker = defineWorker(() => {
     workerNativePath("bin/missing");
     return {};
@@ -125,10 +125,10 @@ test("reports unconfigured worker native payload paths", async () => {
   ], stdout));
 
   assert.equal(exitCode, 1);
-  assert.match(JSON.parse(stdout[0]).error.message, /worker native payload "bin\/missing" is not configured/);
+  assert.match(JSON.parse(stdout[0]).error.message, /worker native resource "bin\/missing" is not configured/);
 });
 
-test("worker native payload paths can execute a bundled tool", async () => {
+test("worker native resource paths can execute a bundled tool", async () => {
   const stdout: string[] = [];
   const worker = defineWorker(() => ({
     version() {

@@ -4,7 +4,12 @@ import { basename, join, resolve } from "node:path";
 import { loadCefariConfig } from "./config.js";
 import type { ResolvedCefariConfig } from "./config.js";
 import { runCefariBuild } from "./build.js";
-import { selectedWorkerNativePayloads, workerNativePayloadBuildPath } from "./native-payloads.js";
+import {
+  nativeResourceBuildPath,
+  selectedDaemonNativeResources,
+  selectedNativeResourcesForBuild,
+  selectedWorkerNativeResources,
+} from "./native-payloads.js";
 import {
   currentPlatform,
   executableNameForTarget,
@@ -191,8 +196,8 @@ function ensureBuildArtifacts(
   for (const worker of Object.keys(config.workers)) {
     ensureArtifact(join(buildDir, "workers", worker, executableNameForTarget(worker, target)));
   }
-  for (const selected of selectedWorkerNativePayloads(config, target)) {
-    ensureArtifact(workerNativePayloadBuildPath(buildDir, selected));
+  for (const selected of selectedNativeResourcesForBuild(config, target)) {
+    ensureArtifact(nativeResourceBuildPath(buildDir, selected));
   }
 }
 
@@ -263,6 +268,13 @@ async function writePackageManifest(
       : {
           daemon_dir: normalizePath(join(buildDir, "daemon")),
           daemon_executable: normalizePath(join(buildDir, "daemon", daemonExecutableName(config, target))),
+          daemon_native_resources: selectedDaemonNativeResources(config, target).map((selected) => ({
+            id: selected.id,
+            target: selected.resource.target,
+            resource_path: selected.resourcePath,
+            path: normalizePath(nativeResourceBuildPath(buildDir, selected)),
+            executable: selected.resource.executable,
+          })),
         }),
     workers_dir: normalizePath(join(buildDir, "workers")),
     worker_executables: Object.fromEntries(
@@ -271,16 +283,17 @@ async function writePackageManifest(
         normalizePath(join(buildDir, "workers", worker, executableNameForTarget(worker, target))),
       ]),
     ),
-    worker_native_payloads: Object.fromEntries(
+    native_resources: Object.fromEntries(
       Object.keys(config.workers).map((worker) => [
         worker,
-        selectedWorkerNativePayloads(config, target)
-          .filter((selected) => selected.worker === worker)
+        selectedWorkerNativeResources(config, target)
+          .filter((selected) => selected.runtime === worker)
           .map((selected) => ({
-            target: selected.payload.target,
+            id: selected.id,
+            target: selected.resource.target,
             resource_path: selected.resourcePath,
-            path: normalizePath(workerNativePayloadBuildPath(buildDir, selected)),
-            executable: selected.payload.executable,
+            path: normalizePath(nativeResourceBuildPath(buildDir, selected)),
+            executable: selected.resource.executable,
           })),
       ]),
     ),

@@ -7,7 +7,12 @@ import type { DaemonConfig, ResolvedCefariConfig, WorkerConfig, WorkerPermission
 import { resolveDesktopRuntime } from "./dev.js";
 import type { DesktopWorkerExecutableEntry } from "./desktop-config.js";
 import { writeDesktopConfig } from "./desktop-config.js";
-import { selectedWorkerNativePayloads, workerNativePayloadBuildPath } from "./native-payloads.js";
+import {
+  nativeResourceBuildPath,
+  selectedDaemonNativeResources,
+  selectedNativeResourcesForBuild,
+  selectedWorkerNativeResources,
+} from "./native-payloads.js";
 import {
   cefariBuildTargetInfo,
   currentPlatform,
@@ -53,7 +58,7 @@ export async function runCefariBuild(options: BuildOptions = {}): Promise<void> 
 
   await viteBuild(createViteBuildConfig(config, frontendOut));
   const packagedWorkers = await buildWorkers(config, workersOut, target);
-  await copyWorkerNativePayloads(config, buildDir, target);
+  await copyNativeResources(config, buildDir, target);
   await writeDesktopConfig(config, configOut, {
     workers: packagedWorkers,
     daemon:
@@ -61,6 +66,12 @@ export async function runCefariBuild(options: BuildOptions = {}): Promise<void> 
         ? undefined
         : {
             executable: normalizeResourcePath(join("daemon", daemonExecutableName(config, target))),
+            native: selectedDaemonNativeResources(config, target).map((selected) => ({
+              id: selected.id,
+              target: selected.resource.target,
+              path: selected.resourcePath,
+              executable: selected.resource.executable,
+            })),
           },
   });
   if (config.daemon !== undefined) {
@@ -72,24 +83,24 @@ export async function runCefariBuild(options: BuildOptions = {}): Promise<void> 
   stdout.write(`built Cefari project at ${root}\n`);
 }
 
-async function copyWorkerNativePayloads(
+async function copyNativeResources(
   config: ResolvedCefariConfig,
   buildDir: string,
   target: CefariBuildTarget,
 ): Promise<void> {
-  for (const selected of selectedWorkerNativePayloads(config, target)) {
-    const source = resolve(config.root, selected.payload.src);
+  for (const selected of selectedNativeResourcesForBuild(config, target)) {
+    const source = resolve(config.root, selected.source);
     if (!existsSync(source)) {
-      throw new Error(`worker native payload does not exist: ${source}`);
+      throw new Error(`${selected.kind} native resource "${selected.id}" does not exist: ${source}`);
     }
     const sourceStat = await stat(source);
     if (!sourceStat.isFile()) {
-      throw new Error(`worker native payload must be a file: ${source}`);
+      throw new Error(`${selected.kind} native resource "${selected.id}" must be a file: ${source}`);
     }
-    const destination = workerNativePayloadBuildPath(buildDir, selected);
+    const destination = nativeResourceBuildPath(buildDir, selected);
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(source, destination);
-    if (selected.payload.executable) {
+    if (selected.resource.executable) {
       await chmod(destination, sourceStat.mode | 0o111);
     }
   }
@@ -154,12 +165,13 @@ async function buildWorkers(
     const destinationDir = join(outputDir, name);
     const executableName = executableNameForTarget(name, target);
     const executable = join(destinationDir, executableName);
-    const native = selectedWorkerNativePayloads(config, target)
-      .filter((selected) => selected.worker === name)
+    const native = selectedWorkerNativeResources(config, target)
+      .filter((selected) => selected.runtime === name)
       .map((selected) => ({
-        target: selected.payload.target,
+        id: selected.id,
+        target: selected.resource.target,
         path: selected.resourcePath,
-        executable: selected.payload.executable,
+        executable: selected.resource.executable,
       }));
     await mkdir(destinationDir, { recursive: true });
     runDenoCompile(
@@ -260,6 +272,7 @@ async function buildDaemon(
   await copyFile(source, sourceCopy);
 
   const executable = join(outputDir, daemonExecutableName(config, target));
+  const native = selectedDaemonNativeResources(config, target);
   runDenoCompile(
     [
       ...denoConfigArgs(config),
@@ -267,6 +280,8 @@ async function buildDaemon(
       cefariBuildTargetInfo(target).denoTarget,
       "--allow-read",
       "--allow-net",
+      "--allow-env=CEFARI_DAEMON,CEFARI_DAEMON_LOG,CEFARI_DAEMON_RESOURCES",
+      ...(native.length === 0 ? [] : ["--allow-run", "--allow-ffi"]),
       "--output",
       executable,
       source,

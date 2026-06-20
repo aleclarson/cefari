@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ResolvedCefariConfig, WorkerConfigInput } from "./config.js";
-import { selectedWorkerNativePayloads } from "./native-payloads.js";
+import { selectedWorkerNativeResources } from "./native-payloads.js";
 import { hostCefariBuildTarget } from "./platform.js";
 
 export const CEFARI_CONFIG_FILE_ENV = "CEFARI_CONFIG_FILE";
@@ -9,6 +9,7 @@ export const CEFARI_CONFIG_FILE_ENV = "CEFARI_CONFIG_FILE";
 export interface DesktopConfigOptions {
   daemon?: {
     executable: string;
+    native?: DesktopNativeResource[];
   };
   workers?: Record<string, DesktopWorkerEntryInput>;
 }
@@ -23,7 +24,7 @@ export interface DesktopWorkerDenoSourceEntry {
     entry: string;
     permissions: WorkerConfigInput["permissions"];
   };
-  native?: DesktopWorkerNativePayload[];
+  native?: DesktopNativeResource[];
 }
 
 export interface DesktopWorkerExecutableEntry {
@@ -31,10 +32,11 @@ export interface DesktopWorkerExecutableEntry {
     kind: "executable";
     program: string;
   };
-  native?: DesktopWorkerNativePayload[];
+  native?: DesktopNativeResource[];
 }
 
-export interface DesktopWorkerNativePayload {
+export interface DesktopNativeResource {
+  id: string;
   target: string;
   path: string;
   executable: boolean;
@@ -75,6 +77,7 @@ function desktopConfigJson(config: ResolvedCefariConfig, options: DesktopConfigO
         : {
             enabled: true,
             executable: options.daemon.executable,
+            ...(options.daemon.native === undefined || options.daemon.native.length === 0 ? {} : { native: options.daemon.native }),
           },
     workers: {
       entries: workerEntries(config, options.workers),
@@ -86,18 +89,19 @@ function workerEntries(
   config: ResolvedCefariConfig,
   workers: Record<string, DesktopWorkerEntryInput> = config.workers,
 ): Record<string, unknown> {
-  const sourceNativePayloads = selectedWorkerNativePayloads(config, hostCefariBuildTarget());
+  const sourceNativePayloads = selectedWorkerNativeResources(config, hostCefariBuildTarget());
   return Object.fromEntries(
     Object.entries(workers).map(([id, worker]) => {
       if ("target" in worker) {
         return [id, worker];
       }
       const native = sourceNativePayloads
-        .filter((selected) => selected.worker === id)
+        .filter((selected) => selected.runtime === id)
         .map((selected) => ({
-          target: selected.payload.target,
-          path: selected.payload.src,
-          executable: selected.payload.executable,
+          id: selected.id,
+          target: selected.resource.target,
+          path: selected.source,
+          executable: selected.resource.executable,
         }));
       return [
         id,
