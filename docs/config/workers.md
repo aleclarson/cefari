@@ -119,7 +119,11 @@ declare those native files as worker native payloads and grant the corresponding
 Worker scripts should use `cefari/worker`:
 
 ```ts
-import { defineWorker, runCefariWorker } from "cefari/worker";
+import {
+  defineWorker,
+  runCefariWorker,
+  workerNativePath,
+} from "cefari/worker";
 
 const worker = defineWorker((init: { cacheDir: string }) => ({
   async thumbnail(
@@ -127,6 +131,7 @@ const worker = defineWorker((init: { cacheDir: string }) => ({
     context: { postMessage(message: { phase: string }): Promise<void> },
   ) {
     await context.postMessage({ phase: "started" });
+    const thumbnailTool = workerNativePath("bin/thumbnail");
     await Deno.readTextFile(input.path);
     return { outputPath: `${init.cacheDir}/thumbnail.png` };
   },
@@ -139,3 +144,9 @@ if (import.meta.main) {
 
 `defineWorker()` infers the worker init input, method inputs, method outputs,
 and method messages used by generated frontend worker registry types.
+
+`workerNativePath(target)` returns the absolute path for a configured native
+payload target. In development it resolves to the configured source file. In a
+packaged app it resolves to the copied package resource. Use
+`getWorkerResources()` from `cefari/worker` when a worker needs the resource
+directory, native payload directory, or the full native payload target map.

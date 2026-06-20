@@ -154,6 +154,13 @@ async function buildWorkers(
     const destinationDir = join(outputDir, name);
     const executableName = executableNameForTarget(name, target);
     const executable = join(destinationDir, executableName);
+    const native = selectedWorkerNativePayloads(config, target)
+      .filter((selected) => selected.worker === name)
+      .map((selected) => ({
+        target: selected.payload.target,
+        path: selected.resourcePath,
+        executable: selected.payload.executable,
+      }));
     await mkdir(destinationDir, { recursive: true });
     runDenoCompile(
       [
@@ -172,6 +179,7 @@ async function buildWorkers(
         kind: "executable",
         program: normalizeResourcePath(["workers", name, executableName].join("/")),
       },
+      ...(native.length === 0 ? {} : { native }),
     };
   }
   return workers;

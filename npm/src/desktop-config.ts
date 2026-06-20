@@ -1,6 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ResolvedCefariConfig, WorkerConfigInput } from "./config.js";
+import { selectedWorkerNativePayloads } from "./native-payloads.js";
+import { hostCefariBuildTarget } from "./platform.js";
 
 export const CEFARI_CONFIG_FILE_ENV = "CEFARI_CONFIG_FILE";
 
@@ -21,6 +23,7 @@ export interface DesktopWorkerDenoSourceEntry {
     entry: string;
     permissions: WorkerConfigInput["permissions"];
   };
+  native?: DesktopWorkerNativePayload[];
 }
 
 export interface DesktopWorkerExecutableEntry {
@@ -28,6 +31,13 @@ export interface DesktopWorkerExecutableEntry {
     kind: "executable";
     program: string;
   };
+  native?: DesktopWorkerNativePayload[];
+}
+
+export interface DesktopWorkerNativePayload {
+  target: string;
+  path: string;
+  executable: boolean;
 }
 
 export async function writeDesktopConfig(
@@ -67,24 +77,39 @@ function desktopConfigJson(config: ResolvedCefariConfig, options: DesktopConfigO
             executable: options.daemon.executable,
           },
     workers: {
-      entries: workerEntries(options.workers ?? config.workers),
+      entries: workerEntries(config, options.workers),
     },
   };
 }
 
-function workerEntries(workers: Record<string, DesktopWorkerEntryInput>): Record<string, unknown> {
+function workerEntries(
+  config: ResolvedCefariConfig,
+  workers: Record<string, DesktopWorkerEntryInput> = config.workers,
+): Record<string, unknown> {
+  const sourceNativePayloads = selectedWorkerNativePayloads(config, hostCefariBuildTarget());
   return Object.fromEntries(
-    Object.entries(workers).map(([id, worker]) => [
-      id,
-      "target" in worker
-        ? worker
-        : {
-            target: {
-              kind: "denoSource",
-              entry: worker.entry,
-              permissions: worker.permissions,
-            },
+    Object.entries(workers).map(([id, worker]) => {
+      if ("target" in worker) {
+        return [id, worker];
+      }
+      const native = sourceNativePayloads
+        .filter((selected) => selected.worker === id)
+        .map((selected) => ({
+          target: selected.payload.target,
+          path: selected.payload.src,
+          executable: selected.payload.executable,
+        }));
+      return [
+        id,
+        {
+          target: {
+            kind: "denoSource",
+            entry: worker.entry,
+            permissions: worker.permissions,
           },
-    ]),
+          ...(native.length === 0 ? {} : { native }),
+        },
+      ];
+    }),
   );
 }

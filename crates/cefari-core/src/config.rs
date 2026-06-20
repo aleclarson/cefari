@@ -70,14 +70,24 @@ pub struct WorkerConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct WorkerEntryConfig {
     pub target: WorkerTargetConfig,
+    pub native: Vec<WorkerNativePayloadConfig>,
 }
 
 impl Default for WorkerEntryConfig {
     fn default() -> Self {
         Self {
             target: WorkerTargetConfig::default(),
+            native: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkerNativePayloadConfig {
+    pub target: String,
+    pub path: String,
+    pub executable: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -302,7 +312,14 @@ mod tests {
                     "target": {
                       "kind": "executable",
                       "program": "workers/thumbnailer/thumbnailer"
-                    }
+                    },
+                    "native": [
+                      {
+                        "target": "bin/thumb",
+                        "path": "workers/thumbnailer/native/bin/thumb",
+                        "executable": true
+                      }
+                    ]
                   }
                 }
               }
@@ -317,6 +334,12 @@ mod tests {
             },
             "workers/thumbnailer/thumbnailer"
         );
+        assert_eq!(config.workers.entries["thumbnailer"].native.len(), 1);
+        assert_eq!(
+            config.workers.entries["thumbnailer"].native[0].path,
+            "workers/thumbnailer/native/bin/thumb"
+        );
+        assert!(config.workers.entries["thumbnailer"].native[0].executable);
     }
 
     #[test]

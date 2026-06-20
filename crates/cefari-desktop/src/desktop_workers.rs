@@ -12,8 +12,9 @@ use anyhow::{Context, Result};
 use cefari_core::{
     CefariIpcError, CefariIpcEvent, RuntimePaths, WorkerCommand, WorkerConfig, WorkerEntryConfig,
     WorkerErrorEvent, WorkerEvent, WorkerExitEvent, WorkerInvokeRequest, WorkerInvokeResult,
-    WorkerListResult, WorkerMessageEvent, WorkerPermissionConfig, WorkerResult, WorkerSpawnRequest,
-    WorkerSpawnResult, WorkerState, WorkerStatus, WorkerTargetConfig,
+    WorkerListResult, WorkerMessageEvent, WorkerNativePayloadConfig, WorkerPermissionConfig,
+    WorkerResult, WorkerSpawnRequest, WorkerSpawnResult, WorkerState, WorkerStatus,
+    WorkerTargetConfig,
 };
 use serde::Deserialize;
 use tracing::{debug, error};
@@ -374,6 +375,7 @@ impl DesktopWorkerManager {
             "id": id,
             "input": serde_json::from_str::<serde_json::Value>(input_json)
                 .context("worker inputJson must be valid JSON")?,
+            "resources": worker_resources(&self.paths, worker, entry)?,
         })
         .to_string();
 
@@ -411,6 +413,33 @@ impl DesktopWorkerManager {
             }
         }
     }
+}
+
+fn worker_resources(
+    paths: &RuntimePaths,
+    worker: &str,
+    entry: &WorkerEntryConfig,
+) -> Result<serde_json::Value> {
+    let native = entry
+        .native
+        .iter()
+        .map(|payload| native_payload_path(paths, payload).map(|path| (payload.target.clone(), path)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    Ok(serde_json::json!({
+        "id": worker,
+        "resourceDir": paths.resource_dir.display().to_string(),
+        "nativeDir": paths.resource_dir.join("workers").join(worker).join("native").display().to_string(),
+        "native": native,
+    }))
+}
+
+fn native_payload_path(
+    paths: &RuntimePaths,
+    payload: &WorkerNativePayloadConfig,
+) -> Result<String> {
+    Ok(safe_resource_path(&paths.resource_dir, &payload.path)?
+        .display()
+        .to_string())
 }
 
 fn permission_args(
@@ -818,10 +847,24 @@ mod tests {
             "--allow-write={}",
             paths().data_dir.join("cache").display()
         )));
+        let start: serde_json::Value = serde_json::from_str(&specs[0].input).unwrap();
+        assert_eq!(start["type"], "start");
+        assert_eq!(start["id"], "thumbnailer-1");
+        assert_eq!(start["input"], serde_json::json!({ "imageId": "abc" }));
+        assert_eq!(start["resources"]["id"], "thumbnailer");
         assert_eq!(
-            specs[0].input,
-            r#"{"id":"thumbnailer-1","input":{"imageId":"abc"},"type":"start"}"#
+            start["resources"]["resourceDir"],
+            paths().resource_dir.display().to_string()
         );
+        assert_eq!(
+            start["resources"]["nativeDir"],
+            paths()
+                .resource_dir
+                .join("workers/thumbnailer/native")
+                .display()
+                .to_string()
+        );
+        assert_eq!(start["resources"]["native"], serde_json::json!({}));
     }
 
     #[test]
@@ -855,9 +898,17 @@ mod tests {
         );
         assert!(specs[0].args.is_empty());
         assert_eq!(specs[0].cwd, paths().resource_dir);
+        let start: serde_json::Value = serde_json::from_str(&specs[0].input).unwrap();
+        assert_eq!(start["type"], "start");
+        assert_eq!(start["id"], "thumbnailer-1");
+        assert_eq!(start["input"], serde_json::json!({ "imageId": "abc" }));
         assert_eq!(
-            specs[0].input,
-            r#"{"id":"thumbnailer-1","input":{"imageId":"abc"},"type":"start"}"#
+            start["resources"]["nativeDir"],
+            paths()
+                .resource_dir
+                .join("workers/thumbnailer/native")
+                .display()
+                .to_string()
         );
     }
 
@@ -866,6 +917,57 @@ mod tests {
         let spawner = Arc::new(RecordingSpawner::default());
         let mut manager = DesktopWorkerManager::with_spawner(
             executable_worker_config("../thumbnailer"),
+            paths(),
+            Arc::new(RecordingSink::default()),
+            spawner.clone(),
+        );
+
+        let error = manager
+            .dispatch(&WorkerCommand::Spawn(WorkerSpawnRequest {
+                worker: "thumbnailer".to_owned(),
+                input_json: "{}".to_owned(),
+            }))
+            .unwrap_err();
+
+        assert!(matches!(error, CefariIpcError::InvalidCommand { .. }));
+        assert!(spawner.specs.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn passes_worker_native_payload_paths_in_start_envelope() {
+        let sink = Arc::new(RecordingSink::default());
+        let spawner = Arc::new(RecordingSpawner::default());
+        let mut manager = DesktopWorkerManager::with_spawner(
+            worker_config_with_native("native/bin/thumb"),
+            paths(),
+            sink,
+            spawner.clone(),
+        );
+
+        manager
+            .dispatch(&WorkerCommand::Spawn(WorkerSpawnRequest {
+                worker: "thumbnailer".to_owned(),
+                input_json: "{}".to_owned(),
+            }))
+            .unwrap();
+
+        let specs = spawner.specs.lock().unwrap();
+        let start: serde_json::Value = serde_json::from_str(&specs[0].input).unwrap();
+        assert_eq!(
+            start["resources"]["native"]["bin/thumb"],
+            paths()
+                .resource_dir
+                .join("native/bin/thumb")
+                .display()
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn rejects_worker_native_payload_path_outside_resource_dir() {
+        let spawner = Arc::new(RecordingSpawner::default());
+        let mut manager = DesktopWorkerManager::with_spawner(
+            worker_config_with_native("../native/bin/thumb"),
             paths(),
             Arc::new(RecordingSink::default()),
             spawner.clone(),
@@ -1087,6 +1189,7 @@ mod tests {
                             ffi: WorkerPermissionConfig::None("none".to_owned()),
                         },
                     }),
+                    native: Vec::new(),
                 },
             )]),
         }
@@ -1102,9 +1205,25 @@ mod tests {
                     target: WorkerTargetConfig::Executable(WorkerExecutableConfig {
                         program: program.to_owned(),
                     }),
+                    native: Vec::new(),
                 },
             )]),
         }
+    }
+
+    fn worker_config_with_native(path: &str) -> WorkerConfig {
+        let mut config = worker_config();
+        config
+            .entries
+            .get_mut("thumbnailer")
+            .expect("thumbnailer worker should exist")
+            .native
+            .push(cefari_core::WorkerNativePayloadConfig {
+                target: "bin/thumb".to_owned(),
+                path: path.to_owned(),
+                executable: true,
+            });
+        config
     }
 
     struct ExitedSpawner;

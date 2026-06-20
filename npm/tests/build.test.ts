@@ -421,6 +421,14 @@ test("copies worker native payloads for the requested build target", async () =>
   assert.equal(await readFile(nativePayload, "utf8"), "windows-tool");
   assert.notEqual((await stat(nativePayload)).mode & 0o111, 0);
   assert.equal(existsSync(join(root, "build/workers/thumbnailer/native/bin/thumb")), false);
+  const config = JSON.parse(await readFile(join(root, "build/config/cefari.json"), "utf8"));
+  assert.deepEqual(config.workers.entries.thumbnailer.native, [
+    {
+      target: "bin/thumb.exe",
+      path: "workers/thumbnailer/native/bin/thumb.exe",
+      executable: true,
+    },
+  ]);
 });
 
 test("build rejects missing selected worker native payloads", async () => {

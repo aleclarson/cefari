@@ -46,10 +46,18 @@ export type InferCefariWorkerMethod<T> =
 export type WorkerInit<T> = InferCefariWorker<T>["init"];
 export type WorkerMethods<T> = InferCefariWorker<T>["methods"];
 
+export interface CefariWorkerResources {
+  id: string;
+  resourceDir: string;
+  nativeDir: string;
+  native: Record<string, string>;
+}
+
 export interface WorkerStartEnvelope<Init = unknown> {
   type: "start";
   id: string;
   input: Init;
+  resources?: CefariWorkerResources;
 }
 
 export interface WorkerRequestEnvelope<Input = unknown> {
@@ -102,10 +110,27 @@ interface DenoLike {
   };
 }
 
+let currentWorkerResources: CefariWorkerResources | null = null;
+
 export function defineWorker<Init, Methods extends CefariWorkerMethods>(
   definition: CefariWorkerFactory<Init, Methods>,
 ): CefariWorkerFactory<Init, Methods> {
   return definition;
+}
+
+export function getWorkerResources(): CefariWorkerResources {
+  if (currentWorkerResources === null) {
+    throw new Error("Cefari worker resources are unavailable before worker startup");
+  }
+  return currentWorkerResources;
+}
+
+export function workerNativePath(target: string): string {
+  const path = getWorkerResources().native[target];
+  if (path === undefined) {
+    throw new Error(`worker native payload ${JSON.stringify(target)} is not configured`);
+  }
+  return path;
 }
 
 export async function runCefariWorker<Init, Methods extends CefariWorkerMethods>(
@@ -116,6 +141,7 @@ export async function runCefariWorker<Init, Methods extends CefariWorkerMethods>
   try {
     const start = parseStartEnvelope<Init>(await readRequiredLine(io));
     workerId = start.id;
+    currentWorkerResources = start.resources ?? null;
     const methods = await worker(start.input);
     while (true) {
       const line = await io.readLine();
@@ -210,6 +236,20 @@ function parseStartEnvelope<Init>(source: string): WorkerStartEnvelope<Init> {
     type: "start",
     id: envelope.id,
     input: envelope.input as Init,
+    ...(envelope.resources === undefined ? {} : { resources: parseWorkerResources(envelope.resources, "worker protocol start resources") }),
+  };
+}
+
+function parseWorkerResources(value: unknown, field: string): CefariWorkerResources {
+  const resources = objectValue(value, field);
+  const native = objectValue(resources.native, `${field}.native`);
+  return {
+    id: stringValue(resources.id, `${field}.id`),
+    resourceDir: stringValue(resources.resourceDir, `${field}.resourceDir`),
+    nativeDir: stringValue(resources.nativeDir, `${field}.nativeDir`),
+    native: Object.fromEntries(
+      Object.entries(native).map(([target, path]) => [target, stringValue(path, `${field}.native.${target}`)]),
+    ),
   };
 }
 
@@ -243,10 +283,21 @@ function parseEnvelope(source: string, label: string): Record<string, unknown> {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`${label} must be JSON: ${message}`);
   }
+  return objectValue(value, label);
+}
+
+function objectValue(value: unknown, label: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
   }
   return value as Record<string, unknown>;
+}
+
+function stringValue(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  return value;
 }
 
 function requestOrNull(source: string): Pick<WorkerRequestEnvelope, "requestId" | "method"> | null {

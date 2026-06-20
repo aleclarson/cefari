@@ -23,7 +23,7 @@ class FakeChild extends EventEmitter implements ChildLike {
 }
 
 async function projectWithDevConfig(
-  options: { daemon?: boolean } = { daemon: true },
+  options: { daemon?: boolean; workerNative?: boolean } = { daemon: true },
 ): Promise<{ root: string; runtime: string }> {
   const root = await mkdtemp(join(tmpdir(), "cefari-dev-"));
   const runtime = join(root, "cefari-desktop");
@@ -57,6 +57,13 @@ export default defineConfig({
       permissions: {
         read: ["$appData/uploads"],
       },
+      ${options.workerNative ? `native: [
+        {
+          src: "native/thumb",
+          target: "bin/thumb",
+          executable: true,
+        },
+      ],` : ""}
     },
   },
   ${
@@ -214,6 +221,60 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
 
   assert.equal(spawned[0].child.killedWith, "SIGTERM");
   assert.equal(closed, true);
+});
+
+test("writes source worker native payload paths for dev runtime config", async () => {
+  const { root, runtime } = await projectWithDevConfig({ daemon: false, workerNative: true });
+
+  await withPlatformForTest(
+    {
+      async createViteServer() {
+        return {
+          resolvedUrls: {
+            local: ["http://127.0.0.1:5555/"],
+            network: [],
+          },
+          async listen() {},
+          async close() {},
+        };
+      },
+      spawn() {
+        return new FakeChild();
+      },
+      spawnSync() {
+        return { status: 0 };
+      },
+      env: {
+        CEFARI_DESKTOP_RUNTIME: runtime,
+      },
+      stdout: {
+        write() {
+          return true;
+        },
+      },
+      process: {
+        once() {
+          return undefined;
+        },
+        off() {
+          return undefined;
+        },
+      },
+    },
+    async () => {
+      const session = await startCefariDev({ root });
+      await session.close();
+    },
+  );
+
+  const config = JSON.parse(await readFile(join(root, ".cefari/config/cefari.json"), "utf8"));
+  assert.deepEqual(config.workers.entries.thumbnailer.native, [
+    {
+      target: "bin/thumb",
+      path: "native/thumb",
+      executable: true,
+    },
+  ]);
 });
 
 test("starts Vite and desktop without a daemon when daemon is omitted", async () => {

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   defineWorker,
+  getWorkerResources,
   runCefariWorker,
+  workerNativePath,
   type InferCefariWorker,
   type WorkerInit,
   type WorkerMethods,
@@ -49,6 +51,80 @@ test("runs worker methods from request envelopes and writes protocol lines", asy
       payload: { doubled: 42 },
     },
   ]);
+});
+
+test("exposes worker resources from the start envelope", async () => {
+  const stdout: string[] = [];
+  let nativePath = "";
+  let resourceDir = "";
+  const worker = defineWorker(() => {
+    nativePath = workerNativePath("bin/thumb");
+    resourceDir = getWorkerResources().resourceDir;
+    return {
+      paths() {
+        return { nativePath, resourceDir };
+      },
+    };
+  });
+
+  const exitCode = await runCefariWorker(worker, protocolIo([
+    {
+      type: "start",
+      id: "worker-1",
+      input: null,
+      resources: {
+        id: "thumbnailer",
+        resourceDir: "/app/resources",
+        nativeDir: "/app/resources/workers/thumbnailer/native",
+        native: {
+          "bin/thumb": "/app/resources/workers/thumbnailer/native/bin/thumb",
+        },
+      },
+    },
+    {
+      type: "request",
+      requestId: "request-1",
+      method: "paths",
+      input: null,
+    },
+  ], stdout));
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(stdout[0]), {
+    type: "result",
+    id: "worker-1",
+    requestId: "request-1",
+    method: "paths",
+    payload: {
+      nativePath: "/app/resources/workers/thumbnailer/native/bin/thumb",
+      resourceDir: "/app/resources",
+    },
+  });
+});
+
+test("reports unconfigured worker native payload paths", async () => {
+  const worker = defineWorker(() => {
+    workerNativePath("bin/missing");
+    return {};
+  });
+  const stdout: string[] = [];
+
+  const exitCode = await runCefariWorker(worker, protocolIo([
+    {
+      type: "start",
+      id: "worker-1",
+      input: null,
+      resources: {
+        id: "thumbnailer",
+        resourceDir: "/app/resources",
+        nativeDir: "/app/resources/workers/thumbnailer/native",
+        native: {},
+      },
+    },
+  ], stdout));
+
+  assert.equal(exitCode, 1);
+  assert.match(JSON.parse(stdout[0]).error.message, /worker native payload "bin\/missing" is not configured/);
 });
 
 test("writes protocol errors for malformed input", async () => {
