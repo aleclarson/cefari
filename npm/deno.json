@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "cmd-ts": "npm:cmd-ts@^0.15.0",
+    "vite": "npm:vite@^8.0.16"
+  },
+  "tasks": {
+    "bin:install": "deno install --config deno.json -f -g -n cefari --allow-all ./dist/bin/cefari.js"
+  }
+}

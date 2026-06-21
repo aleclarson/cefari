@@ -38,12 +38,14 @@
     "dist/app",
     "dist/bin",
     "dist/src",
+    "deno.json",
     "README.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc -p tsconfig.json --noEmit && deno check src/app/mod.ts tests/app/cefari_app_test.ts",
-    "test": "pnpm build && node --test dist/tests/*.test.js && deno test -A tests/app"
+    "test": "pnpm build && node --test dist/tests/*.test.js && deno test -A tests/app",
+    "bin:install": "deno install --config deno.json -f -g -n cefari --allow-all ./dist/bin/cefari.js"
   },
   "dependencies": {
     "cmd-ts": "^0.15.0",
