@@ -512,7 +512,7 @@ const logsCommands = subcommands({
   },
 });
 
-export const cefariCli = subcommands({
+export const cefariCli: ReturnType<typeof subcommands> = subcommands({
   name: "cefari",
   version: VERSION,
   description: "Develop, build, package, and release Cefari apps.",
