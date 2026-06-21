@@ -35,6 +35,7 @@ await build({
     description: "Cefari Deno-first developer CLI",
     license: "MIT OR Apache-2.0",
     type: "module",
+    packageManager: "pnpm",
     engines: {
       node: ">=20.19",
     },
