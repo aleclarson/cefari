@@ -1,0 +1,11 @@
+{
+  "imports": {
+    "cefari": "../src/index.ts",
+    "cefari/worker": "../src/worker.ts"
+  },
+  "tasks": {
+    "dev": "deno run -A ../src/cli.ts dev",
+    "build": "deno run -A ../src/cli.ts build",
+    "package": "deno run -A ../src/cli.ts package"
+  }
+}

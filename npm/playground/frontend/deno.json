@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "jsx": "react",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment"
+  },
+  "imports": {
+    "@deno/vite-plugin": "npm:@deno/vite-plugin@2.0.2",
+    "@preact/signals": "npm:@preact/signals@2.5.1",
+    "@preact/preset-vite": "npm:@preact/preset-vite@2.10.2",
+    "cefari/app": "../../src/app/mod.ts",
+    "preact": "npm:preact@10.28.0",
+    "preact/": "npm:preact@10.28.0/",
+    "vite": "npm:vite@8.0.16"
+  },
+  "tasks": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "deno check ../../src/app/mod.ts src/main.tsx",
+    "preview": "vite preview"
+  }
+}
