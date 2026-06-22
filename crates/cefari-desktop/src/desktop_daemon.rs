@@ -10,7 +10,7 @@ use std::{
 use anyhow::{Context, Result};
 use cefari_core::{DAEMON_LOG_SCOPE, LOG_PROPERTY_CONNECTION_ID, RuntimePaths};
 
-use crate::logging;
+use crate::{desktop_devtools, logging};
 
 pub const CEFARI_DAEMON_ENV: &str = "CEFARI_DAEMON";
 
@@ -58,6 +58,7 @@ pub struct DaemonProcessConfig {
     pub args: Vec<OsString>,
     pub working_directory: PathBuf,
     pub environment: Vec<(OsString, OsString)>,
+    pub dev_inspectable: bool,
 }
 
 pub trait DaemonSpawner: Send + Sync {
@@ -152,6 +153,7 @@ struct ActiveDaemonConnection {
     id: DaemonConnectionId,
     process: Box<dyn DaemonChildProcess>,
     stdin: Option<Box<dyn Write + Send>>,
+    _devtools_registration: Option<desktop_devtools::DevtoolsTargetRegistration>,
 }
 
 pub struct DaemonManager {
@@ -159,6 +161,7 @@ pub struct DaemonManager {
     log_router: Arc<logging::LogRouter>,
     spawner: Arc<dyn DaemonSpawner>,
     sink: Arc<dyn DaemonEventSink>,
+    devtools: Option<desktop_devtools::DevtoolsTargetRegistry>,
     next_id: u64,
     active: Option<ActiveDaemonConnection>,
 }
@@ -170,12 +173,14 @@ impl DaemonManager {
         log_router: Arc<logging::LogRouter>,
         spawner: Arc<dyn DaemonSpawner>,
         sink: Arc<dyn DaemonEventSink>,
+        devtools: Option<desktop_devtools::DevtoolsTargetRegistry>,
     ) -> Self {
         Self {
             config,
             log_router,
             spawner,
             sink,
+            devtools,
             next_id: 1,
             active: None,
         }
@@ -191,7 +196,22 @@ impl DaemonManager {
         }
 
         let id = DaemonConnectionId::next(&mut self.next_id);
-        let child = self.spawner.spawn_daemon(config)?;
+        let mut config = config.clone();
+        let devtools_endpoint = if config.dev_inspectable && self.devtools.is_some() {
+            Some(desktop_devtools::allocate_private_loopback_endpoint(
+                desktop_devtools::DevtoolsEndpointRole::PrivateDenoDaemon,
+            )?)
+        } else {
+            None
+        };
+        if let Some(endpoint) = devtools_endpoint {
+            insert_deno_inspect_arg(&mut config.args, endpoint);
+        }
+        let devtools_registration = match (self.devtools.as_ref(), devtools_endpoint) {
+            (Some(devtools), Some(endpoint)) => Some(devtools.register_deno_daemon(endpoint)?),
+            _ => None,
+        };
+        let child = self.spawner.spawn_daemon(&config)?;
         let stdout = child.stdout;
         let stderr = child.stderr;
         let process_id = child.process_id;
@@ -202,6 +222,7 @@ impl DaemonManager {
             id,
             process: child.process,
             stdin: Some(child.stdin),
+            _devtools_registration: devtools_registration,
         });
 
         Ok(id)
@@ -253,6 +274,19 @@ impl DaemonManager {
             return Ok(self.active.take().expect("active connection should exist"));
         }
         anyhow::bail!("daemon connection id is not active");
+    }
+}
+
+fn insert_deno_inspect_arg(args: &mut Vec<OsString>, endpoint: desktop_devtools::DevtoolsEndpoint) {
+    let inspect_arg = OsString::from(format!(
+        "--inspect={}:{}",
+        endpoint.host,
+        endpoint.port.get()
+    ));
+    if args.first().and_then(|arg| arg.to_str()) == Some("run") {
+        args.insert(1, inspect_arg);
+    } else {
+        args.insert(0, inspect_arg);
     }
 }
 
@@ -344,6 +378,7 @@ fn read_daemon_stdout(
 #[cfg(test)]
 mod tests {
     use std::{
+        ffi::OsString,
         io::{Cursor, Result as IoResult, Write},
         path::PathBuf,
         sync::{Arc, Mutex},
@@ -354,6 +389,7 @@ mod tests {
     use super::{
         DaemonChild, DaemonChildProcess, DaemonConnectionId, DaemonEvent, DaemonEventSink,
         DaemonManager, DaemonProcessConfig, DaemonSpawner, append_daemon_stderr_line,
+        insert_deno_inspect_arg,
     };
     use cefari_core::{AppIdentity, RuntimeLogConfig, RuntimePaths};
 
@@ -377,6 +413,7 @@ mod tests {
             test_log_router(),
             Arc::new(FakeSpawner::new(Vec::from("pong"))),
             Arc::new(sink.clone()),
+            None,
         );
 
         let id = manager.connect().expect("daemon should connect");
@@ -404,6 +441,7 @@ mod tests {
             test_log_router(),
             spawner,
             Arc::new(RecordingSink::default()),
+            None,
         );
 
         let id = manager.connect().expect("daemon should connect");
@@ -455,6 +493,7 @@ mod tests {
                 test_log_router(),
                 spawner,
                 Arc::new(RecordingSink::default()),
+                None,
             );
             manager.connect().expect("daemon should connect");
         }
@@ -473,12 +512,38 @@ mod tests {
             test_log_router(),
             spawner,
             Arc::new(RecordingSink::default()),
+            None,
         );
         let id = manager.connect().expect("daemon should connect");
 
         manager.close(id).expect("close should kill process");
 
         assert_eq!(*killed.lock().unwrap(), true);
+    }
+
+    #[test]
+    fn inserts_deno_inspect_arg_after_run_subcommand() {
+        let mut args = vec![
+            OsString::from("run"),
+            OsString::from("-A"),
+            OsString::from("daemon.ts"),
+        ];
+        let endpoint = crate::desktop_devtools::DevtoolsEndpoint::loopback(
+            crate::desktop_devtools::DevtoolsEndpointRole::PrivateDenoDaemon,
+            crate::desktop_devtools::DevtoolsPort::from_u16_for_test(9333),
+        );
+
+        insert_deno_inspect_arg(&mut args, endpoint);
+
+        assert_eq!(
+            args,
+            vec![
+                OsString::from("run"),
+                OsString::from("--inspect=127.0.0.1:9333"),
+                OsString::from("-A"),
+                OsString::from("daemon.ts"),
+            ]
+        );
     }
 
     fn test_manager(config: Option<DaemonProcessConfig>, stdout: Vec<u8>) -> DaemonManager {
@@ -488,6 +553,7 @@ mod tests {
             test_log_router(),
             Arc::new(FakeSpawner::new(stdout)),
             Arc::new(RecordingSink::default()),
+            None,
         )
     }
 
@@ -510,6 +576,7 @@ mod tests {
             args: Vec::new(),
             working_directory: PathBuf::from("/tmp"),
             environment: Vec::new(),
+            dev_inspectable: false,
         }
     }
 

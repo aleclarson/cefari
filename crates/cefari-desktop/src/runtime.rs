@@ -226,6 +226,7 @@ impl RuntimeOperations {
                 args: vec![OsString::from("run"), OsString::from("-A"), entry],
                 working_directory,
                 environment,
+                dev_inspectable: true,
             });
         }
 
@@ -234,6 +235,7 @@ impl RuntimeOperations {
             args: Vec::new(),
             working_directory: self.paths.data_dir.clone(),
             environment: daemon_environment(&self.paths, &self.config.daemon)?,
+            dev_inspectable: false,
         })
     }
 
@@ -606,13 +608,11 @@ mod tests {
                 ),
             ]
         );
-        assert_eq!(
-            runtime
-                .daemon_process_config()
-                .expect("daemon process config")
-                .args,
-            Vec::<OsString>::new()
-        );
+        let process_config = runtime
+            .daemon_process_config()
+            .expect("daemon process config");
+        assert_eq!(process_config.args, Vec::<OsString>::new());
+        assert!(!process_config.dev_inspectable);
     }
 
     #[test]

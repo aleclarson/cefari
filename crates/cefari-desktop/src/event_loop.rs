@@ -108,6 +108,10 @@ pub(crate) fn run_native_shell(
         event_proxy: event_loop.create_proxy(),
     });
     let daemon_spawner = Arc::new(desktop_daemon::SystemDaemonSpawner);
+    let daemon_devtools = guards
+        ._devtools_mux
+        .as_ref()
+        .map(crate::desktop_devtools::DevtoolsMux::registry);
     let log_router = guards._log_guards.router();
     let worker_manager = desktop_workers::DesktopWorkerManager::new(
         runtime_operations.worker_config().clone(),
@@ -138,6 +142,7 @@ pub(crate) fn run_native_shell(
             log_router,
             daemon_spawner,
             daemon_event_sink,
+            daemon_devtools,
         ),
     )
 }

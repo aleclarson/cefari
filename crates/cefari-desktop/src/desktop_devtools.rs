@@ -32,6 +32,11 @@ impl DevtoolsPort {
     pub(crate) fn get(self) -> u16 {
         self.0
     }
+
+    #[cfg(test)]
+    pub(crate) fn from_u16_for_test(port: u16) -> Self {
+        Self(port)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -109,6 +114,7 @@ pub(crate) fn allocate_private_loopback_endpoint(
 #[derive(Debug)]
 pub(crate) struct DevtoolsMux {
     endpoint: DevtoolsEndpoint,
+    registry: DevtoolsTargetRegistry,
     running: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -127,6 +133,9 @@ impl DevtoolsMux {
             .context("failed to configure DevTools mux listener")?;
         let running = Arc::new(AtomicBool::new(true));
         let state = Arc::new(MuxState::new(config));
+        let registry = DevtoolsTargetRegistry {
+            state: state.clone(),
+        };
         let thread_running = running.clone();
         let thread = thread::spawn(move || run_mux(listener, state, thread_running));
         info!(
@@ -136,9 +145,14 @@ impl DevtoolsMux {
         );
         Ok(Self {
             endpoint: config.public_endpoint,
+            registry,
             running,
             thread: Some(thread),
         })
+    }
+
+    pub(crate) fn registry(&self) -> DevtoolsTargetRegistry {
+        self.registry.clone()
     }
 }
 
@@ -156,6 +170,7 @@ impl Drop for DevtoolsMux {
 struct MuxState {
     config: DevtoolsSessionConfig,
     routes: Mutex<BTreeMap<String, BackendWsUrl>>,
+    registered_targets: Mutex<BTreeMap<String, RegisteredDevtoolsTarget>>,
 }
 
 impl MuxState {
@@ -163,6 +178,7 @@ impl MuxState {
         Self {
             config,
             routes: Mutex::new(BTreeMap::new()),
+            registered_targets: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -178,6 +194,30 @@ impl MuxState {
         Ok(())
     }
 
+    fn register_target(&self, target: RegisteredDevtoolsTarget) -> Result<()> {
+        self.registered_targets
+            .lock()
+            .map_err(|error| anyhow!("DevTools mux target lock poisoned: {error}"))?
+            .insert(target.id.clone(), target);
+        Ok(())
+    }
+
+    fn unregister_target(&self, id: &str) {
+        if let Ok(mut targets) = self.registered_targets.lock() {
+            targets.remove(id);
+        }
+        if let Ok(mut routes) = self.routes.lock() {
+            routes.remove(id);
+        }
+    }
+
+    fn registered_targets(&self) -> Vec<RegisteredDevtoolsTarget> {
+        self.registered_targets
+            .lock()
+            .map(|targets| targets.values().cloned().collect())
+            .unwrap_or_default()
+    }
+
     fn public_ws_url(&self, id: &str) -> String {
         format!(
             "ws://{}:{}/cef/{id}",
@@ -185,6 +225,56 @@ impl MuxState {
             self.config.public_endpoint.port.get()
         )
     }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DevtoolsTargetRegistry {
+    state: Arc<MuxState>,
+}
+
+impl DevtoolsTargetRegistry {
+    pub(crate) fn register_deno_daemon(
+        &self,
+        endpoint: DevtoolsEndpoint,
+    ) -> Result<DevtoolsTargetRegistration> {
+        let target = RegisteredDevtoolsTarget {
+            id: "cefari-daemon".to_owned(),
+            title: "Cefari Daemon".to_owned(),
+            target_type: "worker".to_owned(),
+            url: "cefari://daemon".to_owned(),
+            endpoint,
+        };
+        self.state.register_target(target.clone())?;
+        Ok(DevtoolsTargetRegistration {
+            registry: self.clone(),
+            id: target.id,
+        })
+    }
+
+    fn unregister(&self, id: &str) {
+        self.state.unregister_target(id);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct DevtoolsTargetRegistration {
+    registry: DevtoolsTargetRegistry,
+    id: String,
+}
+
+impl Drop for DevtoolsTargetRegistration {
+    fn drop(&mut self) {
+        self.registry.unregister(&self.id);
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RegisteredDevtoolsTarget {
+    id: String,
+    title: String,
+    target_type: String,
+    url: String,
+    endpoint: DevtoolsEndpoint,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -305,7 +395,36 @@ fn proxied_json_list(state: &MuxState) -> Result<String> {
             .map_or_else(|| index.to_string(), ToOwned::to_owned);
         rewrite_target_ws_url(state, &route_id, target)?;
     }
+    for registered in state.registered_targets() {
+        targets.push(registered_json_target(state, &registered)?);
+    }
     serde_json::to_string(&value).context("failed to serialize proxied /json/list")
+}
+
+fn registered_json_target(
+    state: &MuxState,
+    target: &RegisteredDevtoolsTarget,
+) -> Result<serde_json::Value> {
+    let mut value = backend_json_target(target).unwrap_or_else(|| {
+        serde_json::json!({
+            "id": target.id,
+            "title": target.title,
+            "type": target.target_type,
+            "url": target.url,
+        })
+    });
+    value["id"] = serde_json::Value::String(target.id.clone());
+    value["title"] = serde_json::Value::String(target.title.clone());
+    value["type"] = serde_json::Value::String(target.target_type.clone());
+    value["url"] = serde_json::Value::String(target.url.clone());
+    rewrite_target_ws_url(state, &target.id, &mut value)?;
+    Ok(value)
+}
+
+fn backend_json_target(target: &RegisteredDevtoolsTarget) -> Option<serde_json::Value> {
+    let body = http_get_body(target.endpoint, "/json/list").ok()?;
+    let value = serde_json::from_str::<serde_json::Value>(&body).ok()?;
+    value.as_array()?.first().cloned()
 }
 
 fn rewrite_target_ws_url(
@@ -454,11 +573,12 @@ mod tests {
     use std::{
         io::{Read, Write},
         net::TcpListener,
+        sync::Arc,
     };
 
     use super::{
         BackendWsUrl, DEVTOOLS_LOOPBACK_HOST, DevtoolsEndpoint, DevtoolsEndpointRole, DevtoolsPort,
-        MuxState, allocate_private_loopback_endpoint, proxied_json_list,
+        DevtoolsTargetRegistry, MuxState, allocate_private_loopback_endpoint, proxied_json_list,
     };
 
     #[test]
@@ -504,34 +624,13 @@ mod tests {
 
     #[test]
     fn rewrites_cef_json_list_websocket_urls_to_mux_routes() {
-        let cef_listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let cef_port = cef_listener.local_addr().unwrap().port();
-        std::thread::spawn(move || {
-            let (mut stream, _) = cef_listener.accept().unwrap();
-            let mut request = Vec::new();
-            let mut chunk = [0_u8; 128];
-            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
-                let read = stream.read(&mut chunk).unwrap();
-                if read == 0 {
-                    break;
-                }
-                request.extend_from_slice(&chunk[..read]);
-            }
-            let body = format!(
-                r#"[{{"id":"page-1","type":"page","webSocketDebuggerUrl":"ws://127.0.0.1:{cef_port}/devtools/page/page-1"}}]"#
-            );
-            write!(
-                stream,
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-                body.len(),
-                body
+        let (cef, cef_port) = spawn_json_backend(|port| {
+            format!(
+                r#"[{{"id":"page-1","type":"page","webSocketDebuggerUrl":"ws://127.0.0.1:{port}/devtools/page/page-1"}}]"#
             )
-            .unwrap();
         });
         let public =
             DevtoolsEndpoint::loopback(DevtoolsEndpointRole::PublicMux, DevtoolsPort(9222));
-        let cef =
-            DevtoolsEndpoint::loopback(DevtoolsEndpointRole::PrivateCef, DevtoolsPort(cef_port));
         let state = MuxState::new(super::DevtoolsSessionConfig {
             public_endpoint: public,
             cef_endpoint: cef,
@@ -548,5 +647,75 @@ mod tests {
                 path: "/devtools/page/page-1".to_owned(),
             })
         );
+    }
+
+    #[test]
+    fn registered_daemon_target_is_added_and_removed_from_json_list() {
+        let (cef, _) = spawn_json_backend(|_| "[]".to_owned());
+        let (daemon, daemon_port) = spawn_json_backend(|port| {
+            format!(
+                r#"[{{"id":"deno-daemon","type":"worker","webSocketDebuggerUrl":"ws://127.0.0.1:{port}/ws/deno-daemon"}}]"#
+            )
+        });
+        let public =
+            DevtoolsEndpoint::loopback(DevtoolsEndpointRole::PublicMux, DevtoolsPort(9222));
+        let state = Arc::new(MuxState::new(super::DevtoolsSessionConfig {
+            public_endpoint: public,
+            cef_endpoint: cef,
+        }));
+        let registry = DevtoolsTargetRegistry {
+            state: state.clone(),
+        };
+
+        let registration = registry.register_deno_daemon(daemon).unwrap();
+        let body = proxied_json_list(&state).unwrap();
+
+        assert!(body.contains(r#""id":"cefari-daemon""#));
+        assert!(body.contains(r#""title":"Cefari Daemon""#));
+        assert!(body.contains(r#""webSocketDebuggerUrl":"ws://127.0.0.1:9222/cef/cefari-daemon""#));
+        assert_eq!(
+            state.route("cefari-daemon"),
+            Some(BackendWsUrl {
+                host: "127.0.0.1".to_owned(),
+                port: daemon_port,
+                path: "/ws/deno-daemon".to_owned(),
+            })
+        );
+
+        drop(registration);
+
+        assert!(state.registered_targets().is_empty());
+        assert_eq!(state.route("cefari-daemon"), None);
+    }
+
+    fn spawn_json_backend(
+        body: impl FnOnce(u16) -> String + Send + 'static,
+    ) -> (DevtoolsEndpoint, u16) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let body = body(port);
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 128];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let read = stream.read(&mut chunk).unwrap();
+                if read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..read]);
+            }
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        });
+        (
+            DevtoolsEndpoint::loopback(DevtoolsEndpointRole::PrivateCef, DevtoolsPort(port)),
+            port,
+        )
     }
 }
