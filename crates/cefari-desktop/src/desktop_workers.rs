@@ -20,27 +20,27 @@ use cefari_core::{
 use serde::Deserialize;
 use tracing::{debug, error};
 
-use crate::logging;
+use crate::{desktop_devtools, logging};
 
-#[derive(Clone)]
 pub(crate) struct DesktopWorkerManager {
     config: WorkerConfig,
     paths: RuntimePaths,
     log_router: Arc<logging::LogRouter>,
     spawner: Arc<dyn WorkerProcessSpawner>,
     events: Arc<dyn WorkerEventSink>,
+    devtools: Option<desktop_devtools::DevtoolsTargetRegistry>,
     processes: BTreeMap<String, ManagedWorkerProcess>,
     pending: PendingWorkerRequests,
     next_id: u64,
     next_request_id: u64,
 }
 
-#[derive(Clone)]
 struct ManagedWorkerProcess {
     id: String,
     worker: String,
     child: SharedWorkerChild,
     status: WorkerStatus,
+    _devtools_registration: Option<desktop_devtools::DevtoolsTargetRegistration>,
 }
 
 type SharedWorkerChild = std::sync::Arc<std::sync::Mutex<Box<dyn WorkerChild>>>;
@@ -115,16 +115,19 @@ impl DesktopWorkerManager {
         paths: RuntimePaths,
         log_router: Arc<logging::LogRouter>,
         events: Arc<dyn WorkerEventSink>,
+        devtools: Option<desktop_devtools::DevtoolsTargetRegistry>,
     ) -> Self {
-        Self::with_spawner(
+        Self::with_spawner_and_devtools(
             config,
             paths,
             log_router,
             events,
             Arc::new(DenoWorkerProcessSpawner),
+            devtools,
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn with_spawner(
         config: WorkerConfig,
         paths: RuntimePaths,
@@ -132,12 +135,24 @@ impl DesktopWorkerManager {
         events: Arc<dyn WorkerEventSink>,
         spawner: Arc<dyn WorkerProcessSpawner>,
     ) -> Self {
+        Self::with_spawner_and_devtools(config, paths, log_router, events, spawner, None)
+    }
+
+    pub(crate) fn with_spawner_and_devtools(
+        config: WorkerConfig,
+        paths: RuntimePaths,
+        log_router: Arc<logging::LogRouter>,
+        events: Arc<dyn WorkerEventSink>,
+        spawner: Arc<dyn WorkerProcessSpawner>,
+        devtools: Option<desktop_devtools::DevtoolsTargetRegistry>,
+    ) -> Self {
         Self {
             config,
             paths,
             log_router,
             spawner,
             events,
+            devtools,
             processes: BTreeMap::new(),
             pending: Arc::new(Mutex::new(BTreeMap::new())),
             next_id: 0,
@@ -167,11 +182,40 @@ impl DesktopWorkerManager {
             })?
             .clone();
         let id = self.next_worker_id(&request.worker);
-        let spec = self
+        let mut spec = self
             .process_spec(&id, &request.worker, &entry, &request.input_json)
             .map_err(|error| CefariIpcError::InvalidCommand {
                 message: format!("worker.spawn: {error}"),
             })?;
+        let devtools_endpoint = if matches!(entry.target, WorkerTargetConfig::DenoSource(_))
+            && self.devtools.is_some()
+        {
+            Some(
+                desktop_devtools::allocate_private_loopback_endpoint(
+                    desktop_devtools::DevtoolsEndpointRole::PrivateDenoWorker,
+                )
+                .map_err(|error| CefariIpcError::Unsupported {
+                    command: "worker.spawn".to_owned(),
+                    reason: error.to_string(),
+                })?,
+            )
+        } else {
+            None
+        };
+        if let Some(endpoint) = devtools_endpoint {
+            insert_deno_inspect_arg(&mut spec.args, endpoint);
+        }
+        let devtools_registration = match (self.devtools.as_ref(), devtools_endpoint) {
+            (Some(devtools), Some(endpoint)) => Some(
+                devtools
+                    .register_deno_worker(&id, &request.worker, endpoint)
+                    .map_err(|error| CefariIpcError::Unsupported {
+                        command: "worker.spawn".to_owned(),
+                        reason: error.to_string(),
+                    })?,
+            ),
+            _ => None,
+        };
         let mut child = self
             .spawner
             .spawn(spec)
@@ -206,6 +250,7 @@ impl DesktopWorkerManager {
                 worker: request.worker.clone(),
                 child,
                 status: WorkerStatus::Running,
+                _devtools_registration: devtools_registration,
             },
         );
         Ok(WorkerResult::Spawned(WorkerSpawnResult {
@@ -332,6 +377,7 @@ impl DesktopWorkerManager {
                     reason: Some("terminated".to_owned()),
                 })),
             );
+            process._devtools_registration = None;
         }
         Ok(WorkerResult::Terminated(cefari_core::WorkerIdResult {
             id: id.to_owned(),
@@ -369,6 +415,9 @@ impl DesktopWorkerManager {
                     debug!(%error, id = %process.id, "failed to refresh worker process status");
                     process.status = WorkerStatus::Exited;
                 }
+            }
+            if matches!(process.status, WorkerStatus::Exited) {
+                process._devtools_registration = None;
             }
         }
     }
@@ -440,6 +489,15 @@ impl DesktopWorkerManager {
                 })
             }
         }
+    }
+}
+
+fn insert_deno_inspect_arg(args: &mut Vec<String>, endpoint: desktop_devtools::DevtoolsEndpoint) {
+    let inspect_arg = format!("--inspect={}:{}", endpoint.host, endpoint.port.get());
+    if args.first().is_some_and(|arg| arg == "run") {
+        args.insert(1, inspect_arg);
+    } else {
+        args.insert(0, inspect_arg);
     }
 }
 
@@ -987,6 +1045,35 @@ mod tests {
     }
 
     #[test]
+    fn adds_inspector_arg_for_deno_worker_when_devtools_are_available() {
+        let sink = Arc::new(RecordingSink::default());
+        let spawner = Arc::new(RecordingSpawner::default());
+        let devtools = test_devtools_mux();
+        let mut manager = DesktopWorkerManager::with_spawner_and_devtools(
+            worker_config(),
+            paths(),
+            test_log_router(),
+            sink,
+            spawner.clone(),
+            Some(devtools.registry()),
+        );
+
+        let result = manager
+            .dispatch(&WorkerCommand::Spawn(WorkerSpawnRequest {
+                worker: "thumbnailer".to_owned(),
+                input_json: r#"{"imageId":"abc"}"#.to_owned(),
+            }))
+            .unwrap();
+
+        assert!(matches!(result, WorkerResult::Spawned(_)));
+        let specs = spawner.specs.lock().unwrap();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].args[0], "run");
+        assert!(specs[0].args[1].starts_with("--inspect=127.0.0.1:"));
+        assert!(specs[0].args.contains(&"--no-prompt".to_owned()));
+    }
+
+    #[test]
     fn builds_direct_command_for_executable_worker() {
         let sink = Arc::new(RecordingSink::default());
         let spawner = Arc::new(RecordingSpawner::default());
@@ -1034,6 +1121,31 @@ mod tests {
             specs[0].log_database_path,
             paths().log_dir.join("cefari.sqlite")
         );
+    }
+
+    #[test]
+    fn leaves_executable_worker_without_inspector_arg() {
+        let sink = Arc::new(RecordingSink::default());
+        let spawner = Arc::new(RecordingSpawner::default());
+        let devtools = test_devtools_mux();
+        let mut manager = DesktopWorkerManager::with_spawner_and_devtools(
+            executable_worker_config("workers/thumbnailer/thumbnailer"),
+            paths(),
+            test_log_router(),
+            sink,
+            spawner.clone(),
+            Some(devtools.registry()),
+        );
+
+        manager
+            .dispatch(&WorkerCommand::Spawn(WorkerSpawnRequest {
+                worker: "thumbnailer".to_owned(),
+                input_json: r#"{"imageId":"abc"}"#.to_owned(),
+            }))
+            .unwrap();
+
+        let specs = spawner.specs.lock().unwrap();
+        assert!(specs[0].args.is_empty());
     }
 
     #[test]
@@ -1439,5 +1551,21 @@ mod tests {
             )
             .expect("router should open"),
         )
+    }
+
+    fn test_devtools_mux() -> crate::desktop_devtools::DevtoolsMux {
+        crate::desktop_devtools::DevtoolsMux::start(
+            crate::desktop_devtools::DevtoolsSessionConfig {
+                public_endpoint: crate::desktop_devtools::allocate_private_loopback_endpoint(
+                    crate::desktop_devtools::DevtoolsEndpointRole::PublicMux,
+                )
+                .unwrap(),
+                cef_endpoint: crate::desktop_devtools::allocate_private_loopback_endpoint(
+                    crate::desktop_devtools::DevtoolsEndpointRole::PrivateCef,
+                )
+                .unwrap(),
+            },
+        )
+        .unwrap()
     }
 }

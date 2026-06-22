@@ -251,6 +251,26 @@ impl DevtoolsTargetRegistry {
         })
     }
 
+    pub(crate) fn register_deno_worker(
+        &self,
+        id: &str,
+        worker: &str,
+        endpoint: DevtoolsEndpoint,
+    ) -> Result<DevtoolsTargetRegistration> {
+        let target = RegisteredDevtoolsTarget {
+            id: id.to_owned(),
+            title: format!("Cefari Worker: {worker} ({id})"),
+            target_type: "worker".to_owned(),
+            url: format!("cefari://worker/{worker}/{id}"),
+            endpoint,
+        };
+        self.state.register_target(target.clone())?;
+        Ok(DevtoolsTargetRegistration {
+            registry: self.clone(),
+            id: target.id,
+        })
+    }
+
     fn unregister(&self, id: &str) {
         self.state.unregister_target(id);
     }
@@ -686,6 +706,47 @@ mod tests {
 
         assert!(state.registered_targets().is_empty());
         assert_eq!(state.route("cefari-daemon"), None);
+    }
+
+    #[test]
+    fn registered_worker_target_is_added_and_removed_from_json_list() {
+        let (cef, _) = spawn_json_backend(|_| "[]".to_owned());
+        let (worker, worker_port) = spawn_json_backend(|port| {
+            format!(
+                r#"[{{"id":"deno-worker","type":"worker","webSocketDebuggerUrl":"ws://127.0.0.1:{port}/ws/deno-worker"}}]"#
+            )
+        });
+        let public =
+            DevtoolsEndpoint::loopback(DevtoolsEndpointRole::PublicMux, DevtoolsPort(9222));
+        let state = Arc::new(MuxState::new(super::DevtoolsSessionConfig {
+            public_endpoint: public,
+            cef_endpoint: cef,
+        }));
+        let registry = DevtoolsTargetRegistry {
+            state: state.clone(),
+        };
+
+        let registration = registry
+            .register_deno_worker("thumbnailer-1", "thumbnailer", worker)
+            .unwrap();
+        let body = proxied_json_list(&state).unwrap();
+
+        assert!(body.contains(r#""id":"thumbnailer-1""#));
+        assert!(body.contains(r#""title":"Cefari Worker: thumbnailer (thumbnailer-1)""#));
+        assert!(body.contains(r#""webSocketDebuggerUrl":"ws://127.0.0.1:9222/cef/thumbnailer-1""#));
+        assert_eq!(
+            state.route("thumbnailer-1"),
+            Some(BackendWsUrl {
+                host: "127.0.0.1".to_owned(),
+                port: worker_port,
+                path: "/ws/deno-worker".to_owned(),
+            })
+        );
+
+        drop(registration);
+
+        assert!(state.registered_targets().is_empty());
+        assert_eq!(state.route("thumbnailer-1"), None);
     }
 
     fn spawn_json_backend(

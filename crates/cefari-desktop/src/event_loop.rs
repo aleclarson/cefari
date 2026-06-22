@@ -108,7 +108,7 @@ pub(crate) fn run_native_shell(
         event_proxy: event_loop.create_proxy(),
     });
     let daemon_spawner = Arc::new(desktop_daemon::SystemDaemonSpawner);
-    let daemon_devtools = guards
+    let devtools_registry = guards
         ._devtools_mux
         .as_ref()
         .map(crate::desktop_devtools::DevtoolsMux::registry);
@@ -120,6 +120,7 @@ pub(crate) fn run_native_shell(
         Arc::new(TaoWorkerEventSink {
             event_proxy: event_loop.create_proxy(),
         }),
+        devtools_registry.clone(),
     );
 
     info!(window = ?window.id(), cefari_window = window::MAIN_WINDOW_ID, "cefari native shell started");
@@ -142,7 +143,7 @@ pub(crate) fn run_native_shell(
             log_router,
             daemon_spawner,
             daemon_event_sink,
-            daemon_devtools,
+            devtools_registry,
         ),
     )
 }
