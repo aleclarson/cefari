@@ -11,7 +11,7 @@ import type { ChildLike, ViteServerLike } from "../src/index.js";
 import { hostCefariBuildTarget, withPlatformForTest } from "../src/platform.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
-const configApi = pathToFileURL(resolve(testDir, "../src/index.js")).href;
+const configApi = pathToFileURL(resolve(testDir, "../src/config.ts")).href;
 
 class FakeChild extends EventEmitter implements ChildLike {
   killedWith: NodeJS.Signals | undefined;
@@ -89,6 +89,7 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
   const { root, runtime } = await projectWithDevConfig();
   const spawned: Array<{ command: string; args: string[]; options: SpawnOptions; child: FakeChild }> = [];
   const viteConfigs: unknown[] = [];
+  const stdout: string[] = [];
   let closed = false;
   const server: ViteServerLike = {
     resolvedUrls: {
@@ -118,7 +119,8 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
         CEFARI_DESKTOP_RUNTIME: runtime,
       },
       stdout: {
-        write() {
+        write(chunk) {
+          stdout.push(String(chunk));
           return true;
         },
       },
@@ -153,6 +155,16 @@ test("starts Vite and desktop with daemon stream dev inputs", async () => {
   });
   assert.equal(session.frontendUrl, "http://127.0.0.1:5555");
   assert.equal(session.devtoolsUrl, "http://127.0.0.1:9222");
+  assert.deepEqual(stdout, [
+    "frontend dev server: http://127.0.0.1:5555\n",
+    "unified chrome devtools: http://127.0.0.1:9222\n",
+    "chrome-devtools start --browserUrl http://127.0.0.1:9222\n",
+  ]);
+  assert.deepEqual(JSON.parse(await readFile(join(root, ".cefari/devtools.json"), "utf8")), {
+    port: 9222,
+    browserUrl: "http://127.0.0.1:9222",
+    unified: true,
+  });
   assert.match(
     await readFile(join(root, ".cefari/workers.d.ts"), "utf8"),
     /"thumbnailer": InferCefariWorker<typeof worker_0>/,

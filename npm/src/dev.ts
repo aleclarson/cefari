@@ -70,7 +70,7 @@ export async function startCefariDev(options: DevOptions = {}): Promise<DevSessi
   const desktopConfigFile = await writeDesktopConfig(config, join(root, ".cefari", "config"));
 
   stdout.write(`frontend dev server: ${frontendUrl}\n`);
-  stdout.write(`chrome devtools: ${devtoolsUrl}\n`);
+  stdout.write(`unified chrome devtools: ${devtoolsUrl}\n`);
   stdout.write(`chrome-devtools start --browserUrl ${devtoolsUrl}\n`);
 
   const desktop = spawnDesktop(config, frontendUrl, devtoolsPort, desktopConfigFile);
@@ -347,7 +347,7 @@ async function writeDevtoolsFile(
   await mkdir(devtoolsDir, { recursive: true });
   await writeFile(
     join(devtoolsDir, "devtools.json"),
-    `${JSON.stringify({ port, browserUrl }, null, 2)}\n`,
+    `${JSON.stringify({ port, browserUrl, unified: true }, null, 2)}\n`,
   );
 }
 

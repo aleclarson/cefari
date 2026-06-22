@@ -84,8 +84,10 @@ frontend APIs.
   - Workers receive input from trusted frontend IPC.
 - Dev mode uses the app's configured Vite port by default.
   - The CLI can override the Vite port for a run.
-  - The CLI can expose a Chrome DevTools Protocol port for the embedded CEF
-    browser.
+  - The CLI can expose a unified Chrome DevTools Protocol port for the embedded
+    CEF browser, configured Deno daemon, and Deno-source workers.
+  - The CLI writes `.cefari/devtools.json` with the selected DevTools port and
+    browser URL.
 - Cefari injects a small CSS contract for custom titlebars.
   - Apps can mark a region as draggable.
   - Apps can mark interactive descendants as non-draggable.

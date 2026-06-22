@@ -24,6 +24,28 @@ Dev mode writes desktop runtime config to `.cefari/config/cefari.json` so the
 native runtime can resolve configured workers while loading frontend code from
 the Vite dev server.
 
+## Unified DevTools
+
+`cefari dev` prints a unified Chrome DevTools URL:
+
+```text
+unified chrome devtools: http://127.0.0.1:9222
+chrome-devtools start --browserUrl http://127.0.0.1:9222
+```
+
+Open that URL, or run the printed `chrome-devtools` command, to attach DevTools
+to the CEF webview, the configured Deno daemon, and Deno-source workers from one
+DevTools frontend.
+
+Cefari also writes `.cefari/devtools.json` with the selected port, browser URL,
+and `unified: true` marker for scripts that need to discover the endpoint.
+
+Known limits:
+
+- Deno-source workers appear after frontend code spawns them.
+- Packaged executable workers are not inspected by the dev mux.
+- Deno inspector readiness can lag daemon or worker process startup briefly.
+
 ## Vite Dev Server
 
 Cefari calls Vite's `createServer` API directly:

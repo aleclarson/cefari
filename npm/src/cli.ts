@@ -243,7 +243,7 @@ const dev = command({
       type: optional(number),
       long: "devtools-port",
       description:
-        "Chrome DevTools Protocol port for the embedded CEF browser.",
+        "Unified Chrome DevTools Protocol port for the CEF browser, daemon, and Deno-source workers.",
     }),
     target: runtimeTarget,
   },
