@@ -23,7 +23,6 @@ use crate::{
     desktop_workers, external, runtime, shell_context::DesktopShellContext, window, window_state,
 };
 
-const CEFARI_DEV_MODE_ENV: &str = "CEFARI_DEV_MODE";
 const CEFARI_SMOKE_BACKGROUND_ENV: &str = "CEFARI_SMOKE_BACKGROUND";
 const CEFARI_SMOKE_CREATE_WINDOW_ENV: &str = "CEFARI_SMOKE_CREATE_WINDOW";
 const CEFARI_SMOKE_EXIT_AFTER_MS_ENV: &str = "CEFARI_SMOKE_EXIT_AFTER_MS";
@@ -791,7 +790,7 @@ fn smoke_create_window_command() -> CefariIpcCommand {
 }
 
 fn dev_mode_requested() -> bool {
-    std::env::var(CEFARI_DEV_MODE_ENV).is_ok_and(|value| value == "1")
+    crate::desktop_devtools::dev_mode_enabled()
 }
 
 #[cfg(target_os = "macos")]
