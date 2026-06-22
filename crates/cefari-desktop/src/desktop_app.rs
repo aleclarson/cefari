@@ -6,13 +6,14 @@ use single_instance::SingleInstance;
 use tracing::{error, info};
 
 use crate::{
-    desktop_cef, desktop_notifications, desktop_single_instance, desktop_ui, event_loop, logging,
-    runtime,
+    desktop_cef, desktop_devtools, desktop_notifications, desktop_single_instance, desktop_ui,
+    event_loop, logging, runtime,
 };
 
 pub(crate) struct RuntimeGuards {
     pub(crate) _instance: SingleInstance,
     pub(crate) _log_guards: logging::LogGuards,
+    pub(crate) _devtools_mux: Option<desktop_devtools::DevtoolsMux>,
     pub(crate) desktop_notifier: Option<desktop_notifications::DesktopNotifier>,
     pub(crate) cef_runtime: desktop_cef::CefRuntime,
 }
@@ -34,15 +35,24 @@ pub(crate) fn run() -> Result<()> {
             instance,
             startup_deep_links,
         } => {
-            let cef_runtime = desktop_cef::initialize(&paths, runtime_operations.browser_config())?;
-            (instance, startup_deep_links, cef_runtime)
+            let devtools_config = desktop_devtools::DevtoolsSessionConfig::from_environment()?;
+            let devtools_mux = devtools_config
+                .map(desktop_devtools::DevtoolsMux::start)
+                .transpose()?;
+            let cef_devtools_endpoint = devtools_config.map(|config| config.cef_endpoint);
+            let cef_runtime = desktop_cef::initialize(
+                &paths,
+                runtime_operations.browser_config(),
+                cef_devtools_endpoint,
+            )?;
+            (instance, startup_deep_links, cef_runtime, devtools_mux)
         }
         desktop_single_instance::InstanceStartup::Forwarded => {
             info!("forwarded deep link arguments to existing Cefari instance");
             return Ok(());
         }
     };
-    let (instance, startup_deep_links, cef_runtime) = instance;
+    let (instance, startup_deep_links, cef_runtime, devtools_mux) = instance;
     let background_smoke = event_loop::smoke_background_requested();
     let desktop_notifier = if background_smoke {
         None
@@ -66,6 +76,7 @@ pub(crate) fn run() -> Result<()> {
     let guards = RuntimeGuards {
         _instance: instance,
         _log_guards: log_guards,
+        _devtools_mux: devtools_mux,
         desktop_notifier,
         cef_runtime,
     };

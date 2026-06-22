@@ -55,7 +55,10 @@ mod imp {
     pub use runtime::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime, MessagePumpScheduler};
     use state::{SharedAppSchemeState, SharedBrowserState, SharedMessagePumpState};
 
-    fn cef_settings(runtime_paths: &CefRuntimePathConfig) -> cef::Settings {
+    fn cef_settings(
+        runtime_paths: &CefRuntimePathConfig,
+        devtools_endpoint: Option<crate::desktop_devtools::DevtoolsEndpoint>,
+    ) -> cef::Settings {
         let mut settings = cef::Settings {
             no_sandbox: 1,
             external_message_pump: 1,
@@ -80,10 +83,10 @@ mod imp {
         if let Some(framework_dir_path) = &runtime_paths.framework_dir_path {
             settings.framework_dir_path = cef_string_from_path(framework_dir_path);
         }
-        if let Some(config) = crate::desktop_devtools::DevtoolsSessionConfig::from_environment() {
-            settings.remote_debugging_port = i32::from(config.public_endpoint.port.get());
+        if let Some(endpoint) = devtools_endpoint {
+            settings.remote_debugging_port = i32::from(endpoint.port.get());
             info!(
-                port = config.public_endpoint.port.get(),
+                port = endpoint.port.get(),
                 "enabled CEF Chrome DevTools Protocol remote debugging"
             );
         }
@@ -937,8 +940,10 @@ mod imp {
     pub fn initialize(
         paths: &cefari_core::RuntimePaths,
         browser_config: &cefari_core::BrowserConfig,
+        devtools_endpoint: Option<crate::desktop_devtools::DevtoolsEndpoint>,
     ) -> Result<CefRuntime> {
-        CefRuntime::initialize(paths, browser_config).context("failed to initialize CEF")
+        CefRuntime::initialize(paths, browser_config, devtools_endpoint)
+            .context("failed to initialize CEF")
     }
 
     fn native_window_handle(window: &Window) -> Result<cef::sys::cef_window_handle_t> {
@@ -1070,8 +1075,9 @@ pub use imp::{BridgeIpcSender, CefBridgeIpcRequest, CefRuntime, MessagePumpSched
 pub fn initialize(
     paths: &cefari_core::RuntimePaths,
     browser_config: &cefari_core::BrowserConfig,
+    devtools_endpoint: Option<crate::desktop_devtools::DevtoolsEndpoint>,
 ) -> anyhow::Result<CefRuntime> {
-    let runtime = imp::initialize(paths, browser_config)?;
+    let runtime = imp::initialize(paths, browser_config, devtools_endpoint)?;
     tracing::info!("CEF runtime prepared");
     Ok(runtime)
 }

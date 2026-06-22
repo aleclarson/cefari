@@ -133,6 +133,7 @@ impl CefRuntime {
     pub fn initialize(
         paths: &cefari_core::RuntimePaths,
         browser_config: &BrowserConfig,
+        devtools_endpoint: Option<crate::desktop_devtools::DevtoolsEndpoint>,
     ) -> Result<Self> {
         let args = cef::args::Args::new();
         let runtime_paths = resolve_cef_runtime_paths(paths);
@@ -155,7 +156,7 @@ impl CefRuntime {
             std::process::exit(subprocess_exit);
         }
 
-        let settings = cef_settings(&runtime_paths);
+        let settings = cef_settings(&runtime_paths, devtools_endpoint);
         log_cef_runtime_paths(&runtime_paths);
 
         let initialized = cef::initialize(
